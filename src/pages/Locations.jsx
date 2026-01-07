@@ -66,6 +66,8 @@ export default function Locations() {
       return;
     }
     
+    if (!confirm(`Add new location: ${locationCode}?`)) return;
+    
     const qrCode = `LOC-${locationCode}-${Date.now()}`;
     
     setSaving(true);
@@ -136,6 +138,8 @@ export default function Locations() {
       return;
     }
     
+    if (!confirm(`Update location from ${editingLocation.locationCode || 'Unknown'} to ${newLocationCode}?`)) return;
+    
     setSaving(true);
     try {
       await DB.updateLocation(editingLocation.id, {
@@ -147,6 +151,7 @@ export default function Locations() {
       });
       setEditingLocation(null);
       await loadData();
+      alert('Location updated successfully!');
     } catch (error) {
       console.error('Error updating location:', error);
       alert('Error updating location: ' + error.message);

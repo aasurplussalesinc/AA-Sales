@@ -4,9 +4,12 @@ import { DB } from '../db';
 
 export default function Items() {
   const [items, setItems] = useState([]);
+  const [originalItems, setOriginalItems] = useState([]);
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
 
   // Add Item modal state
@@ -42,7 +45,9 @@ export default function Items() {
     ]);
     itemsData.sort((a, b) => (a.partNumber || '').localeCompare(b.partNumber || ''));
     setItems(itemsData);
+    setOriginalItems(JSON.parse(JSON.stringify(itemsData))); // Deep copy
     setLocations(locsData);
+    setHasChanges(false);
     setLoading(false);
   };
 
@@ -142,6 +147,10 @@ export default function Items() {
       alert('Please enter at least a name or SKU');
       return;
     }
+
+    const confirmMsg = `Add new item?\n\nSKU: ${newItem.partNumber || '(none)'}\nName: ${newItem.name || '(none)'}\nCategory: ${newItem.category || '(none)'}\nStock: ${newItem.stock}\nPrice: $${newItem.price}\nLocation: ${newItem.location || '(none)'}`;
+    
+    if (!confirm(confirmMsg)) return;
 
     await DB.createItem({
       partNumber: newItem.partNumber,
@@ -332,6 +341,54 @@ export default function Items() {
     setItems(items.map(item => 
       item.id === id ? { ...item, [field]: value } : item
     ));
+    setHasChanges(true);
+  };
+
+  const saveAllChanges = async () => {
+    if (!confirm('Save all changes to items?')) return;
+    
+    setSaving(true);
+    try {
+      // Find items that changed
+      for (const item of items) {
+        const original = originalItems.find(o => o.id === item.id);
+        if (original) {
+          const changed = 
+            item.partNumber !== original.partNumber ||
+            item.name !== original.name ||
+            item.category !== original.category ||
+            item.stock !== original.stock ||
+            item.price !== original.price ||
+            item.location !== original.location;
+          
+          if (changed) {
+            await DB.updateItem(item.id, {
+              partNumber: item.partNumber,
+              name: item.name,
+              category: item.category,
+              stock: parseInt(item.stock) || 0,
+              price: parseFloat(item.price) || 0,
+              location: item.location
+            });
+          }
+        }
+      }
+      
+      setOriginalItems(JSON.parse(JSON.stringify(items)));
+      setHasChanges(false);
+      alert('Changes saved successfully!');
+    } catch (error) {
+      console.error('Error saving:', error);
+      alert('Error saving changes: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const discardChanges = () => {
+    if (!confirm('Discard all unsaved changes?')) return;
+    setItems(JSON.parse(JSON.stringify(originalItems)));
+    setHasChanges(false);
   };
 
   const deleteItem = async (id) => {
@@ -514,6 +571,27 @@ export default function Items() {
           accept=".csv"
           style={{ display: 'none' }}
         />
+
+        {hasChanges && (
+          <>
+            <button 
+              className="btn"
+              onClick={saveAllChanges}
+              disabled={saving}
+              style={{ background: '#4CAF50', color: 'white' }}
+            >
+              {saving ? '⏳ Saving...' : '💾 Save Changes'}
+            </button>
+            <button 
+              className="btn"
+              onClick={discardChanges}
+              disabled={saving}
+              style={{ background: '#f44336', color: 'white' }}
+            >
+              ↩️ Discard
+            </button>
+          </>
+        )}
 
         <button 
           className="btn btn-primary"

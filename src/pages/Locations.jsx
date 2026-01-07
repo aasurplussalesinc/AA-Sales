@@ -26,10 +26,19 @@ export default function Locations() {
     ]);
     
     locs.sort((a, b) => {
-      if (a.warehouse !== b.warehouse) return a.warehouse.localeCompare(b.warehouse);
-      if (a.rack !== b.rack) return a.rack.localeCompare(b.rack);
-      if (a.letter !== b.letter) return a.letter.localeCompare(b.letter);
-      return a.shelf.localeCompare(b.shelf);
+      const aWarehouse = a.warehouse || '';
+      const bWarehouse = b.warehouse || '';
+      const aRack = a.rack || '';
+      const bRack = b.rack || '';
+      const aLetter = a.letter || '';
+      const bLetter = b.letter || '';
+      const aShelf = a.shelf || '';
+      const bShelf = b.shelf || '';
+      
+      if (aWarehouse !== bWarehouse) return aWarehouse.localeCompare(bWarehouse);
+      if (aRack !== bRack) return aRack.localeCompare(bRack);
+      if (aLetter !== bLetter) return aLetter.localeCompare(bLetter);
+      return aShelf.localeCompare(bShelf);
     });
     
     setLocations(locs);

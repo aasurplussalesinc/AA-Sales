@@ -7,6 +7,7 @@ export default function Locations() {
   const [newLocation, setNewLocation] = useState({ warehouse: 'W1', rack: '1', letter: 'A', shelf: '1' });
   const [items, setItems] = useState([]);
   const [viewingLocation, setViewingLocation] = useState(null);
+  const [editingLocation, setEditingLocation] = useState(null);
   const [saving, setSaving] = useState(false);
 
   // Dropdown options
@@ -109,6 +110,49 @@ export default function Locations() {
 
   const viewLocation = (loc) => {
     setViewingLocation(loc);
+  };
+
+  const openEditLocation = (loc) => {
+    setEditingLocation({
+      ...loc,
+      warehouse: loc.warehouse || 'W1',
+      rack: loc.rack || '1',
+      letter: loc.letter || 'A',
+      shelf: loc.shelf || '1'
+    });
+  };
+
+  const saveEditLocation = async () => {
+    if (!editingLocation) return;
+    
+    const newLocationCode = `${editingLocation.warehouse}-R${editingLocation.rack}-${editingLocation.letter}-${editingLocation.shelf}`;
+    
+    // Check for duplicate (excluding current location)
+    const exists = locations.find(loc => 
+      loc.id !== editingLocation.id && loc.locationCode === newLocationCode
+    );
+    if (exists) {
+      alert(`Location ${newLocationCode} already exists!`);
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      await DB.updateLocation(editingLocation.id, {
+        warehouse: editingLocation.warehouse,
+        rack: editingLocation.rack,
+        letter: editingLocation.letter,
+        shelf: editingLocation.shelf,
+        locationCode: newLocationCode
+      });
+      setEditingLocation(null);
+      await loadData();
+    } catch (error) {
+      console.error('Error updating location:', error);
+      alert('Error updating location: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const deleteLocation = async (loc) => {
@@ -307,14 +351,19 @@ export default function Locations() {
             </thead>
             <tbody>
               {locations.map(loc => (
-                <tr key={loc.id}>
+                <tr 
+                  key={loc.id} 
+                  onClick={() => viewLocation(loc)}
+                  style={{ cursor: 'pointer' }}
+                  title="Click to view items"
+                >
                   <td><strong>{formatLocation(loc)}</strong></td>
-                  <td>{loc.warehouse}</td>
-                  <td>{loc.rack}</td>
-                  <td>{loc.letter}</td>
-                  <td>{loc.shelf}</td>
+                  <td>{loc.warehouse || '-'}</td>
+                  <td>{loc.rack || '-'}</td>
+                  <td>{loc.letter || '-'}</td>
+                  <td>{loc.shelf || '-'}</td>
                   <td>{getCurrentQty(loc)}</td>
-                  <td>
+                  <td onClick={e => e.stopPropagation()}>
                     <div className="action-buttons">
                       <button 
                         className="btn btn-primary btn-sm"
@@ -328,6 +377,13 @@ export default function Locations() {
                         onClick={() => viewLocation(loc)}
                       >
                         View
+                      </button>
+                      <button 
+                        className="btn btn-sm"
+                        onClick={() => openEditLocation(loc)}
+                        style={{ background: '#ff9800', color: 'white' }}
+                      >
+                        Edit
                       </button>
                       <button 
                         className="btn btn-danger btn-sm"
@@ -393,6 +449,102 @@ export default function Locations() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-secondary" onClick={() => setViewingLocation(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Location Modal */}
+      {editingLocation && (
+        <div className="modal-overlay" onClick={() => setEditingLocation(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+            <div className="modal-header">
+              <h3>Edit Location</h3>
+              <button className="modal-close" onClick={() => setEditingLocation(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ marginBottom: 15, color: '#666' }}>
+                Current: <strong>{editingLocation.locationCode || 'Unknown'}</strong>
+              </p>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Warehouse</label>
+                  <select
+                    className="form-input"
+                    value={editingLocation.warehouse}
+                    onChange={e => setEditingLocation({...editingLocation, warehouse: e.target.value})}
+                    style={{ width: '100%' }}
+                  >
+                    {warehouses.map(w => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Rack</label>
+                  <select
+                    className="form-input"
+                    value={editingLocation.rack}
+                    onChange={e => setEditingLocation({...editingLocation, rack: e.target.value})}
+                    style={{ width: '100%' }}
+                  >
+                    {racks.map(r => (
+                      <option key={r} value={r}>Rack {r}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Letter</label>
+                  <select
+                    className="form-input"
+                    value={editingLocation.letter}
+                    onChange={e => setEditingLocation({...editingLocation, letter: e.target.value})}
+                    style={{ width: '100%' }}
+                  >
+                    {letters.map(l => (
+                      <option key={l} value={l}>{l}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Shelf</label>
+                  <select
+                    className="form-input"
+                    value={editingLocation.shelf}
+                    onChange={e => setEditingLocation({...editingLocation, shelf: e.target.value})}
+                    style={{ width: '100%' }}
+                  >
+                    {shelves.map(s => (
+                      <option key={s} value={s}>Shelf {s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 15, padding: 10, background: '#e8f5e9', borderRadius: 4, textAlign: 'center' }}>
+                <strong>New Location Code: </strong>
+                <span style={{ fontSize: 18, color: '#2d5f3f' }}>
+                  {editingLocation.warehouse}-R{editingLocation.rack}-{editingLocation.letter}-{editingLocation.shelf}
+                </span>
+              </div>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', gap: 10 }}>
+              <button 
+                className="btn btn-primary" 
+                onClick={saveEditLocation}
+                disabled={saving}
+                style={{ flex: 1 }}
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+              <button 
+                className="btn btn-secondary" 
+                onClick={() => setEditingLocation(null)}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

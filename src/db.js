@@ -218,6 +218,18 @@ export const DB = {
     return { id: d.id, ...d.data() };
   },
 
+  async updateLocation(locationId, updates) {
+    const ref = doc(db, 'locations', locationId);
+    await updateDoc(ref, {
+      ...updates,
+      updatedAt: Date.now()
+    });
+    await this.logActivity('LOCATION_UPDATED', { 
+      locationId, 
+      locationCode: updates.locationCode 
+    });
+  },
+
   async deleteLocation(locationId) {
     const ref = doc(db, 'locations', locationId);
     await deleteDoc(ref);

@@ -7,6 +7,7 @@ export default function Locations() {
   const [newLocation, setNewLocation] = useState({ warehouse: 'W1', rack: '1', letter: 'A', shelf: '1' });
   const [items, setItems] = useState([]);
   const [viewingLocation, setViewingLocation] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   // Dropdown options
   const warehouses = ['W1', 'W2', 'W3', 'W4'];
@@ -47,17 +48,35 @@ export default function Locations() {
     }
 
     const locationCode = `${newLocation.warehouse}-R${newLocation.rack}-${newLocation.letter}-${newLocation.shelf}`;
+    
+    // Check for duplicate
+    const exists = locations.find(loc => loc.locationCode === locationCode);
+    if (exists) {
+      alert(`Location ${locationCode} already exists!`);
+      return;
+    }
+    
     const qrCode = `LOC-${locationCode}-${Date.now()}`;
     
-    await DB.createLocation({
-      ...newLocation,
-      locationCode,
-      qrCode,
-      inventory: {}
-    });
+    setSaving(true);
+    try {
+      await DB.createLocation({
+        ...newLocation,
+        locationCode,
+        qrCode,
+        inventory: {}
+      });
 
-    setNewLocation({ warehouse: 'W1', rack: '1', letter: 'A', shelf: '1' });
-    loadData();
+      // Reset form and reload
+      setNewLocation({ warehouse: 'W1', rack: '1', letter: 'A', shelf: '1' });
+      await loadData();
+      alert(`Location ${locationCode} created successfully!`);
+    } catch (error) {
+      console.error('Error creating location:', error);
+      alert('Error creating location: ' + error.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const getCurrentQty = (loc) => {
@@ -250,8 +269,8 @@ export default function Locations() {
               <option key={s} value={s}>Shelf {s}</option>
             ))}
           </select>
-          <button className="btn btn-primary" onClick={addLocation}>
-            + Add Location
+          <button className="btn btn-primary" onClick={addLocation} disabled={saving}>
+            {saving ? 'Adding...' : '+ Add Location'}
           </button>
         </div>
         <div style={{marginTop: 10, padding: 10, background: '#f0f0f0', borderRadius: 4, textAlign: 'center'}}>

@@ -32,7 +32,7 @@ function NavBar() {
       <div className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span>📦</span>
-          <h1>Military Surplus Warehouse</h1>
+          <h1>AA Surplus Sales Inc.</h1>
         </div>
         {user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>

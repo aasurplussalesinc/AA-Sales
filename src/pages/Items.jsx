@@ -1122,60 +1122,104 @@ export default function Items() {
         </div>
       )}
 
-      {/* Quantity Adjustment Modal */}
+      {/* Quantity Adjustment Popup */}
       {adjustingItem && (
-        <div className="modal-overlay" onClick={() => setAdjustingItem(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
-            <div className="modal-header">
-              <h3>{adjustingItem.adjustType === 'add' ? '➕ Add' : '➖ Remove'} Quantity</h3>
-              <button className="modal-close" onClick={() => setAdjustingItem(null)}>×</button>
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}
+          onClick={() => setAdjustingItem(null)}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              background: 'white',
+              borderRadius: 12,
+              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+              width: 340,
+              overflow: 'hidden'
+            }}
+          >
+            {/* Header */}
+            <div style={{ 
+              background: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336',
+              color: 'white',
+              padding: '12px 15px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>
+                {adjustingItem.adjustType === 'add' ? '➕ Add' : '➖ Remove'} Quantity
+              </h3>
+              <button 
+                onClick={() => setAdjustingItem(null)}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: 'white', 
+                  fontSize: 20, 
+                  cursor: 'pointer' 
+                }}
+              >
+                ×
+              </button>
             </div>
-            <div className="modal-body">
-              <div style={{ textAlign: 'center', marginBottom: 20 }}>
-                <h4 style={{ margin: '0 0 5px 0' }}>{adjustingItem.name || 'Unnamed Item'}</h4>
-                <p style={{ color: '#666', margin: 0 }}>{adjustingItem.partNumber || 'No SKU'}</p>
+            
+            {/* Body */}
+            <div style={{ padding: 15 }}>
+              <div style={{ textAlign: 'center', marginBottom: 15 }}>
+                <div style={{ fontWeight: 'bold', fontSize: 14 }}>{adjustingItem.name || 'Unnamed Item'}</div>
+                <div style={{ color: '#666', fontSize: 12 }}>{adjustingItem.partNumber || 'No SKU'}</div>
               </div>
               
               <div style={{ 
                 display: 'flex', 
                 alignItems: 'center', 
                 justifyContent: 'center',
-                gap: 15,
-                marginBottom: 20
+                gap: 10,
+                marginBottom: 15
               }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 12, color: '#666', marginBottom: 5 }}>Current</div>
-                  <div style={{ fontSize: 28, fontWeight: 'bold' }}>{adjustingItem.stock || 0}</div>
+                  <div style={{ fontSize: 10, color: '#666' }}>Current</div>
+                  <div style={{ fontSize: 22, fontWeight: 'bold' }}>{adjustingItem.stock || 0}</div>
                 </div>
                 
-                <div style={{ fontSize: 24, color: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336' }}>
+                <div style={{ fontSize: 20, color: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336' }}>
                   {adjustingItem.adjustType === 'add' ? '+' : '−'}
                 </div>
                 
-                <div>
-                  <input
-                    type="number"
-                    value={adjustingItem.adjustQty}
-                    onChange={e => setAdjustingItem({ ...adjustingItem, adjustQty: e.target.value })}
-                    min="1"
-                    style={{ 
-                      width: 80, 
-                      fontSize: 24, 
-                      textAlign: 'center',
-                      padding: 10,
-                      border: '2px solid #ddd',
-                      borderRadius: 8
-                    }}
-                    autoFocus
-                  />
-                </div>
+                <input
+                  type="number"
+                  value={adjustingItem.adjustQty}
+                  onChange={e => setAdjustingItem({ ...adjustingItem, adjustQty: e.target.value })}
+                  min="1"
+                  style={{ 
+                    width: 60, 
+                    fontSize: 20, 
+                    textAlign: 'center',
+                    padding: 8,
+                    border: '2px solid #ddd',
+                    borderRadius: 6
+                  }}
+                  autoFocus
+                />
                 
-                <div style={{ fontSize: 24, color: '#666' }}>=</div>
+                <div style={{ fontSize: 20, color: '#666' }}>=</div>
                 
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 12, color: '#666', marginBottom: 5 }}>New</div>
+                  <div style={{ fontSize: 10, color: '#666' }}>New</div>
                   <div style={{ 
-                    fontSize: 28, 
+                    fontSize: 22, 
                     fontWeight: 'bold',
                     color: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336'
                   }}>
@@ -1188,17 +1232,18 @@ export default function Items() {
               </div>
 
               {/* Quick buttons */}
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 15 }}>
                 {[1, 5, 10, 25, 50].map(num => (
                   <button
                     key={num}
                     onClick={() => setAdjustingItem({ ...adjustingItem, adjustQty: num })}
                     style={{
-                      padding: '8px 12px',
+                      padding: '6px 10px',
                       border: adjustingItem.adjustQty == num ? '2px solid #4a5d23' : '1px solid #ddd',
-                      borderRadius: 6,
+                      borderRadius: 4,
                       background: adjustingItem.adjustQty == num ? '#e8f5e9' : 'white',
                       cursor: 'pointer',
+                      fontSize: 13,
                       fontWeight: adjustingItem.adjustQty == num ? 'bold' : 'normal'
                     }}
                   >
@@ -1206,25 +1251,38 @@ export default function Items() {
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="modal-footer" style={{ display: 'flex', gap: 10 }}>
-              <button 
-                className="btn" 
-                onClick={() => setAdjustingItem(null)}
-                style={{ flex: 1 }}
-              >
-                Cancel
-              </button>
-              <button 
-                className="btn btn-primary" 
-                onClick={applyAdjustment}
-                style={{ 
-                  flex: 1,
-                  background: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336'
-                }}
-              >
-                {adjustingItem.adjustType === 'add' ? '➕ Add' : '➖ Remove'}
-              </button>
+              
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button 
+                  onClick={() => setAdjustingItem(null)}
+                  style={{ 
+                    flex: 1,
+                    padding: '10px',
+                    border: '1px solid #ddd',
+                    borderRadius: 6,
+                    background: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={applyAdjustment}
+                  style={{ 
+                    flex: 1,
+                    padding: '10px',
+                    border: 'none',
+                    borderRadius: 6,
+                    background: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  {adjustingItem.adjustType === 'add' ? 'Add' : 'Remove'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

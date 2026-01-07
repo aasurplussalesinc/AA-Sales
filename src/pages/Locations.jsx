@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { DB } from '../db';
 
@@ -9,6 +9,8 @@ export default function Locations() {
   const [viewingLocation, setViewingLocation] = useState(null);
   const [editingLocation, setEditingLocation] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Dropdown options
   const warehouses = ['W1', 'W2', 'W3', 'W4'];
@@ -173,6 +175,130 @@ export default function Locations() {
     loadData();
   };
 
+  const handleImportCSV = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      // Skip header row
+      const dataLines = lines.slice(1);
+      
+      let added = 0;
+      let skipped = 0;
+      
+      for (const line of dataLines) {
+        // Parse CSV (handle quoted values)
+        const values = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+        const cleanValues = values.map(v => v.replace(/^"|"$/g, '').trim());
+        
+        // Expected format: Warehouse, Rack, Letter, Shelf (or LocationCode)
+        // Try to detect format
+        if (cleanValues.length >= 4) {
+          // Format: Warehouse, Rack, Letter, Shelf
+          const [warehouse, rack, letter, shelf] = cleanValues;
+          const locationCode = `${warehouse}-R${rack}-${letter}-${shelf}`;
+          
+          // Check if exists
+          const exists = locations.find(loc => loc.locationCode === locationCode);
+          if (exists) {
+            skipped++;
+            continue;
+          }
+          
+          const qrCode = `LOC-${locationCode}-${Date.now()}`;
+          await DB.createLocation({
+            warehouse,
+            rack,
+            letter,
+            shelf,
+            locationCode,
+            qrCode,
+            inventory: {}
+          });
+          added++;
+        } else if (cleanValues.length >= 1) {
+          // Format: LocationCode (e.g., W1-R1-A-1)
+          const locationCode = cleanValues[0];
+          const match = locationCode.match(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/);
+          
+          if (match) {
+            const [, warehouse, rack, letter, shelf] = match;
+            
+            // Check if exists
+            const exists = locations.find(loc => loc.locationCode === locationCode);
+            if (exists) {
+              skipped++;
+              continue;
+            }
+            
+            const qrCode = `LOC-${locationCode}-${Date.now()}`;
+            await DB.createLocation({
+              warehouse,
+              rack,
+              letter,
+              shelf,
+              locationCode,
+              qrCode,
+              inventory: {}
+            });
+            added++;
+          } else {
+            skipped++;
+          }
+        }
+      }
+      
+      await loadData();
+      alert(`Import complete!\n\nAdded: ${added} locations\nSkipped (duplicates or invalid): ${skipped}`);
+    } catch (error) {
+      console.error('Import error:', error);
+      alert('Import failed: ' + error.message);
+    } finally {
+      setImporting(false);
+      e.target.value = '';
+    }
+  };
+
+  const exportLocationsCSV = () => {
+    const headers = ['LocationCode', 'Warehouse', 'Rack', 'Letter', 'Shelf', 'ItemCount'];
+    const rows = locations.map(loc => [
+      loc.locationCode || '',
+      loc.warehouse || '',
+      loc.rack || '',
+      loc.letter || '',
+      loc.shelf || '',
+      getCurrentQty(loc)
+    ]);
+    
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `locations-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadTemplate = () => {
+    const template = `Warehouse,Rack,Letter,Shelf
+W1,1,A,1
+W1,1,A,2
+W1,1,B,1
+W2,2,C,3`;
+    const blob = new Blob([template], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'locations-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const printLocationQRCodes = async (location) => {
     try {
       // Get all items in this location
@@ -288,6 +414,38 @@ export default function Locations() {
 
   return (
     <div className="page-content">
+      {/* Import/Export buttons */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 15, flexWrap: 'wrap' }}>
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleImportCSV}
+          accept=".csv"
+          style={{ display: 'none' }}
+        />
+        <button 
+          className="btn"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={importing}
+          style={{ background: '#17a2b8', color: 'white' }}
+        >
+          {importing ? '⏳ Importing...' : '📤 Import CSV'}
+        </button>
+        <button 
+          className="btn btn-primary"
+          onClick={exportLocationsCSV}
+        >
+          📥 Export CSV
+        </button>
+        <button 
+          className="btn"
+          onClick={downloadTemplate}
+          style={{ background: '#6c757d', color: 'white' }}
+        >
+          📋 Download Template
+        </button>
+      </div>
+
       <div style={{background: 'white', padding: 20, borderRadius: 8, marginBottom: 20}}>
         <h3 style={{marginBottom: 15}}>Add New Location</h3>
         <div className="form-row">

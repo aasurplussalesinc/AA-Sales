@@ -10,6 +10,7 @@ export default function Items() {
   const [importing, setImporting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [adjustingItem, setAdjustingItem] = useState(null);
   const fileInputRef = useRef(null);
 
   // Add Item modal state
@@ -389,6 +390,43 @@ export default function Items() {
     if (!confirm('Discard all unsaved changes?')) return;
     setItems(JSON.parse(JSON.stringify(originalItems)));
     setHasChanges(false);
+  };
+
+  const applyAdjustment = async () => {
+    if (!adjustingItem) return;
+    
+    const qty = parseInt(adjustingItem.adjustQty) || 0;
+    if (qty <= 0) {
+      alert('Enter a quantity greater than 0');
+      return;
+    }
+    
+    const currentStock = parseInt(adjustingItem.stock) || 0;
+    const newStock = adjustingItem.adjustType === 'add' 
+      ? currentStock + qty 
+      : Math.max(0, currentStock - qty);
+    
+    const action = adjustingItem.adjustType === 'add' ? 'Add' : 'Remove';
+    if (!confirm(`${action} ${qty} to ${adjustingItem.name || adjustingItem.partNumber}?\n\nCurrent: ${currentStock}\nNew: ${newStock}`)) {
+      return;
+    }
+    
+    // Update directly in Firebase (not just local state)
+    try {
+      await DB.updateItem(adjustingItem.id, { stock: newStock });
+      await DB.logMovement({
+        itemId: adjustingItem.id,
+        itemName: adjustingItem.name,
+        quantity: qty,
+        type: adjustingItem.adjustType === 'add' ? 'ADD' : 'ADJUST',
+        notes: `Quick ${adjustingItem.adjustType}: ${qty}`,
+        timestamp: Date.now()
+      });
+      setAdjustingItem(null);
+      await loadData();
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
   };
 
   const deleteItem = async (id) => {
@@ -892,12 +930,48 @@ export default function Items() {
                   />
                 </td>
                 <td>
-                  <input
-                    type="number"
-                    value={item.stock || 0}
-                    onChange={e => updateItem(item.id, 'stock', e.target.value)}
-                    style={{ width: '80px' }}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <input
+                      type="number"
+                      value={item.stock || 0}
+                      onChange={e => updateItem(item.id, 'stock', e.target.value)}
+                      style={{ width: '70px' }}
+                    />
+                    <button
+                      onClick={() => setAdjustingItem({ ...item, adjustQty: 1, adjustType: 'add' })}
+                      style={{
+                        background: '#4CAF50',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 4,
+                        width: 26,
+                        height: 26,
+                        cursor: 'pointer',
+                        fontSize: 16,
+                        fontWeight: 'bold'
+                      }}
+                      title="Add quantity"
+                    >
+                      +
+                    </button>
+                    <button
+                      onClick={() => setAdjustingItem({ ...item, adjustQty: 1, adjustType: 'subtract' })}
+                      style={{
+                        background: '#f44336',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 4,
+                        width: 26,
+                        height: 26,
+                        cursor: 'pointer',
+                        fontSize: 16,
+                        fontWeight: 'bold'
+                      }}
+                      title="Subtract quantity"
+                    >
+                      −
+                    </button>
+                  </div>
                 </td>
                 <td>
                   <input
@@ -1043,6 +1117,114 @@ export default function Items() {
             <div className="modal-footer">
               <button className="btn" onClick={() => setShowAddItem(false)}>Cancel</button>
               <button className="btn btn-primary" onClick={addNewItem}>Add Item</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quantity Adjustment Modal */}
+      {adjustingItem && (
+        <div className="modal-overlay" onClick={() => setAdjustingItem(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <div className="modal-header">
+              <h3>{adjustingItem.adjustType === 'add' ? '➕ Add' : '➖ Remove'} Quantity</h3>
+              <button className="modal-close" onClick={() => setAdjustingItem(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <h4 style={{ margin: '0 0 5px 0' }}>{adjustingItem.name || 'Unnamed Item'}</h4>
+                <p style={{ color: '#666', margin: 0 }}>{adjustingItem.partNumber || 'No SKU'}</p>
+              </div>
+              
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                gap: 15,
+                marginBottom: 20
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 12, color: '#666', marginBottom: 5 }}>Current</div>
+                  <div style={{ fontSize: 28, fontWeight: 'bold' }}>{adjustingItem.stock || 0}</div>
+                </div>
+                
+                <div style={{ fontSize: 24, color: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336' }}>
+                  {adjustingItem.adjustType === 'add' ? '+' : '−'}
+                </div>
+                
+                <div>
+                  <input
+                    type="number"
+                    value={adjustingItem.adjustQty}
+                    onChange={e => setAdjustingItem({ ...adjustingItem, adjustQty: e.target.value })}
+                    min="1"
+                    style={{ 
+                      width: 80, 
+                      fontSize: 24, 
+                      textAlign: 'center',
+                      padding: 10,
+                      border: '2px solid #ddd',
+                      borderRadius: 8
+                    }}
+                    autoFocus
+                  />
+                </div>
+                
+                <div style={{ fontSize: 24, color: '#666' }}>=</div>
+                
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 12, color: '#666', marginBottom: 5 }}>New</div>
+                  <div style={{ 
+                    fontSize: 28, 
+                    fontWeight: 'bold',
+                    color: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336'
+                  }}>
+                    {adjustingItem.adjustType === 'add' 
+                      ? (parseInt(adjustingItem.stock) || 0) + (parseInt(adjustingItem.adjustQty) || 0)
+                      : Math.max(0, (parseInt(adjustingItem.stock) || 0) - (parseInt(adjustingItem.adjustQty) || 0))
+                    }
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick buttons */}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 20 }}>
+                {[1, 5, 10, 25, 50].map(num => (
+                  <button
+                    key={num}
+                    onClick={() => setAdjustingItem({ ...adjustingItem, adjustQty: num })}
+                    style={{
+                      padding: '8px 12px',
+                      border: adjustingItem.adjustQty == num ? '2px solid #4a5d23' : '1px solid #ddd',
+                      borderRadius: 6,
+                      background: adjustingItem.adjustQty == num ? '#e8f5e9' : 'white',
+                      cursor: 'pointer',
+                      fontWeight: adjustingItem.adjustQty == num ? 'bold' : 'normal'
+                    }}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="modal-footer" style={{ display: 'flex', gap: 10 }}>
+              <button 
+                className="btn" 
+                onClick={() => setAdjustingItem(null)}
+                style={{ flex: 1 }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={applyAdjustment}
+                style={{ 
+                  flex: 1,
+                  background: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336'
+                }}
+              >
+                {adjustingItem.adjustType === 'add' ? '➕ Add' : '➖ Remove'}
+              </button>
             </div>
           </div>
         </div>

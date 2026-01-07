@@ -570,48 +570,123 @@ W2,2,C,3`;
       </div>
 
       {/* View Location Modal */}
+      {/* View Location Popup */}
       {viewingLocation && (
-        <div className="modal-overlay" onClick={() => setViewingLocation(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 600 }}>
-            <div className="modal-header">
-              <h2>Location: {formatLocation(viewingLocation)}</h2>
-              <button className="modal-close" onClick={() => setViewingLocation(null)}>×</button>
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}
+          onClick={() => setViewingLocation(null)}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              background: 'white',
+              borderRadius: 12,
+              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+              width: '90%',
+              maxWidth: 500,
+              maxHeight: '80vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* Header */}
+            <div style={{ 
+              background: '#4a5d23',
+              color: 'white',
+              padding: '12px 15px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>
+                📍 {formatLocation(viewingLocation)}
+              </h3>
+              <button 
+                onClick={() => setViewingLocation(null)}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: 'white', 
+                  fontSize: 20, 
+                  cursor: 'pointer' 
+                }}
+              >
+                ×
+              </button>
             </div>
-            <div className="modal-body">
-              <div style={{ marginBottom: 15 }}>
-                <strong>Warehouse:</strong> {viewingLocation.warehouse} | 
-                <strong> Rack:</strong> {viewingLocation.rack} | 
-                <strong> Letter:</strong> {viewingLocation.letter} | 
-                <strong> Shelf:</strong> {viewingLocation.shelf}
+            
+            {/* Body */}
+            <div style={{ padding: 15, overflowY: 'auto', flex: 1 }}>
+              <div style={{ 
+                marginBottom: 15, 
+                padding: 10, 
+                background: '#f5f5f5', 
+                borderRadius: 6,
+                fontSize: 13
+              }}>
+                <strong>Warehouse:</strong> {viewingLocation.warehouse || '-'} | 
+                <strong> Rack:</strong> {viewingLocation.rack || '-'} | 
+                <strong> Letter:</strong> {viewingLocation.letter || '-'} | 
+                <strong> Shelf:</strong> {viewingLocation.shelf || '-'}
               </div>
               
-              <h3 style={{ marginBottom: 10 }}>Items in this Location ({getCurrentQty(viewingLocation)} total)</h3>
+              <h4 style={{ margin: '0 0 10px 0', fontSize: 14 }}>
+                Items in Location ({getCurrentQty(viewingLocation)} total)
+              </h4>
               
               {getLocationItems(viewingLocation).length > 0 ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
                     <tr style={{ background: '#f5f5f5' }}>
-                      <th style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid #ddd' }}>SKU</th>
-                      <th style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Item Name</th>
-                      <th style={{ padding: 10, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Qty</th>
+                      <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #ddd' }}>SKU</th>
+                      <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Item Name</th>
+                      <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Qty</th>
                     </tr>
                   </thead>
                   <tbody>
                     {getLocationItems(viewingLocation).map(item => (
                       <tr key={item.id}>
-                        <td style={{ padding: 10, borderBottom: '1px solid #eee' }}>{item.partNumber || '-'}</td>
-                        <td style={{ padding: 10, borderBottom: '1px solid #eee' }}>{item.name}</td>
-                        <td style={{ padding: 10, borderBottom: '1px solid #eee', textAlign: 'right' }}>{item.quantity}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{item.partNumber || '-'}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{item.name}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <p style={{ color: '#666', fontStyle: 'italic' }}>No items in this location</p>
+                <p style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
+                  No items in this location
+                </p>
               )}
             </div>
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setViewingLocation(null)}>Close</button>
+            
+            {/* Footer */}
+            <div style={{ padding: 15, borderTop: '1px solid #eee' }}>
+              <button 
+                onClick={() => setViewingLocation(null)}
+                style={{ 
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: 6,
+                  background: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

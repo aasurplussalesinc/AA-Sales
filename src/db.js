@@ -274,6 +274,20 @@ export const DB = {
     return items.find(item => item.partNumber === partNumber);
   },
 
+  async updateItem(itemId, updates) {
+    try {
+      const ref = doc(db, 'items', itemId);
+      await updateDoc(ref, {
+        ...updates,
+        updatedAt: Date.now()
+      });
+      await this.logActivity('ITEM_UPDATED', { itemId, updates });
+    } catch (error) {
+      console.error('Error updating item:', error);
+      throw error;
+    }
+  },
+
   async updateItemStock(itemId, newStock) {
     try {
       const ref = doc(db, 'items', itemId);

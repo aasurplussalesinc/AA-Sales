@@ -1,0 +1,830 @@
+import { useState, useEffect } from 'react';
+import { DB } from '../db';
+import { COMPANY_LOGO } from '../companyLogo';
+
+export default function PurchaseOrders() {
+  const [orders, setOrders] = useState([]);
+  const [items, setItems] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [editingOrderId, setEditingOrderId] = useState(null);
+  const [searchItem, setSearchItem] = useState('');
+  const [searchCustomer, setSearchCustomer] = useState('');
+
+  // New PO form
+  const [newPO, setNewPO] = useState({
+    customerId: '',
+    customerName: '',
+    customerEmail: '',
+    customerPhone: '',
+    customerAddress: '',
+    dueDate: '',
+    notes: '',
+    items: [],
+    subtotal: 0,
+    tax: 0,
+    shipping: 0,
+    total: 0
+  });
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    const [ordersData, itemsData, customersData] = await Promise.all([
+      DB.getPurchaseOrders(),
+      DB.getItems(),
+      DB.getCustomers()
+    ]);
+    setOrders(ordersData);
+    setItems(itemsData);
+    setCustomers(customersData);
+    setLoading(false);
+  };
+
+  const filteredItems = items.filter(item =>
+    searchItem && (
+      item.name?.toLowerCase().includes(searchItem.toLowerCase()) ||
+      item.partNumber?.toLowerCase().includes(searchItem.toLowerCase())
+    )
+  );
+
+  const filteredCustomers = customers.filter(c =>
+    searchCustomer && (
+      c.company?.toLowerCase().includes(searchCustomer.toLowerCase()) ||
+      c.customerName?.toLowerCase().includes(searchCustomer.toLowerCase())
+    )
+  );
+
+  const selectCustomerForPO = (customer) => {
+    setNewPO({
+      ...newPO,
+      customerId: customer.id,
+      customerName: customer.company || customer.customerName,
+      customerEmail: customer.email || '',
+      customerPhone: customer.phone || '',
+      customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', ')
+    });
+    setSearchCustomer('');
+  };
+
+  const addItemToPO = (item) => {
+    if (newPO.items.find(i => i.itemId === item.id)) return;
+
+    const unitPrice = parseFloat(item.price) || 0;
+    const newItem = {
+      itemId: item.id,
+      itemName: item.name,
+      partNumber: item.partNumber,
+      location: item.location || '',
+      quantity: 1,
+      unitPrice: unitPrice,
+      lineTotal: unitPrice
+    };
+
+    const updatedItems = [...newPO.items, newItem];
+    updatePOTotals(updatedItems);
+    setSearchItem('');
+  };
+
+  const updatePOItem = (itemId, field, value) => {
+    const updatedItems = newPO.items.map(item => {
+      if (item.itemId === itemId) {
+        const updated = { ...item, [field]: value };
+        if (field === 'quantity' || field === 'unitPrice') {
+          updated.lineTotal = (parseFloat(updated.quantity) || 0) * (parseFloat(updated.unitPrice) || 0);
+        }
+        return updated;
+      }
+      return item;
+    });
+    updatePOTotals(updatedItems);
+  };
+
+  const removeItemFromPO = (itemId) => {
+    const updatedItems = newPO.items.filter(i => i.itemId !== itemId);
+    updatePOTotals(updatedItems);
+  };
+
+  const updatePOTotals = (updatedItems) => {
+    const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
+    const tax = parseFloat(newPO.tax) || 0;
+    const shipping = parseFloat(newPO.shipping) || 0;
+    const total = subtotal + tax + shipping;
+
+    setNewPO({
+      ...newPO,
+      items: updatedItems,
+      subtotal,
+      total
+    });
+  };
+
+  const updateTaxShipping = (field, value) => {
+    const val = parseFloat(value) || 0;
+    const subtotal = newPO.subtotal;
+    const tax = field === 'tax' ? val : (parseFloat(newPO.tax) || 0);
+    const shipping = field === 'shipping' ? val : (parseFloat(newPO.shipping) || 0);
+
+    setNewPO({
+      ...newPO,
+      [field]: val,
+      total: subtotal + tax + shipping
+    });
+  };
+
+  const createPurchaseOrder = async () => {
+    if (!newPO.customerName) {
+      alert('Enter customer name');
+      return;
+    }
+    if (newPO.items.length === 0) {
+      alert('Add at least one item');
+      return;
+    }
+
+    if (editMode && editingOrderId) {
+      // Update existing order
+      await DB.updatePurchaseOrder(editingOrderId, newPO);
+    } else {
+      // Create new order
+      await DB.createPurchaseOrder(newPO);
+    }
+    
+    resetForm();
+    setShowCreate(false);
+    setEditMode(false);
+    setEditingOrderId(null);
+    loadData();
+  };
+
+  const openEditOrder = (order) => {
+    setNewPO({
+      customerId: order.customerId || '',
+      customerName: order.customerName || '',
+      customerEmail: order.customerEmail || '',
+      customerPhone: order.customerPhone || '',
+      customerAddress: order.customerAddress || '',
+      dueDate: order.dueDate || '',
+      notes: order.notes || '',
+      items: order.items || [],
+      subtotal: order.subtotal || 0,
+      tax: order.tax || 0,
+      shipping: order.shipping || 0,
+      total: order.total || 0
+    });
+    setEditingOrderId(order.id);
+    setEditMode(true);
+    setShowCreate(true);
+    setSelectedOrder(null);
+  };
+
+  const resetForm = () => {
+    setNewPO({
+      customerId: '',
+      customerName: '',
+      customerEmail: '',
+      customerPhone: '',
+      customerAddress: '',
+      dueDate: '',
+      notes: '',
+      items: [],
+      subtotal: 0,
+      tax: 0,
+      shipping: 0,
+      total: 0
+    });
+  };
+
+  const confirmAndCreatePickList = async (order) => {
+    if (!confirm(`Confirm PO ${order.poNumber} and create pick list?`)) return;
+    
+    try {
+      await DB.confirmPurchaseOrder(order.id);
+      alert('Purchase Order confirmed! Pick list created.');
+      loadData();
+      setSelectedOrder(null);
+    } catch (error) {
+      alert('Error: ' + error.message);
+    }
+  };
+
+  const markShipped = async (order) => {
+    await DB.markPOShipped(order.id);
+    loadData();
+    setSelectedOrder(null);
+  };
+
+  const markPaid = async (order) => {
+    await DB.markPOPaid(order.id);
+    loadData();
+    setSelectedOrder(null);
+  };
+
+  const deleteOrder = async (order) => {
+    if (!confirm(`Delete order ${order.poNumber}?\n\nThis cannot be undone.`)) return;
+    
+    await DB.deletePurchaseOrder(order.id);
+    loadData();
+    setSelectedOrder(null);
+  };
+
+  const printPO = (order) => {
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Purchase Order - ${order.poNumber}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #4a5d23; padding-bottom: 20px; }
+            .company-info { display: flex; flex-direction: column; align-items: flex-start; }
+            .company-logo { max-width: 250px; height: auto; margin-bottom: 5px; }
+            .company-location { font-size: 14px; color: #333; margin-top: 5px; }
+            .po-info { text-align: right; }
+            .po-number { font-size: 24px; font-weight: bold; color: #4a5d23; }
+            .po-meta { font-size: 14px; color: #666; margin-top: 5px; }
+            .customer-info { margin-bottom: 30px; padding: 15px; background: #f5f5f5; border-radius: 8px; border-left: 4px solid #4a5d23; }
+            .customer-info h3 { margin: 0 0 10px 0; font-size: 14px; color: #666; text-transform: uppercase; }
+            .customer-info p { margin: 3px 0; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th { background: #4a5d23; color: white; padding: 12px; text-align: left; }
+            td { padding: 10px; border-bottom: 1px solid #ddd; }
+            .text-right { text-align: right; }
+            .totals { width: 300px; margin-left: auto; }
+            .totals td { padding: 8px; }
+            .totals .total-row { font-weight: bold; font-size: 18px; background: #f0f0f0; }
+            .notes { margin-top: 30px; padding: 15px; background: #fffde7; border-radius: 8px; }
+            .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #ddd; padding-top: 20px; }
+            .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+            @media print { body { padding: 20px; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="company-info">
+              <img src="${COMPANY_LOGO}" alt="AA Surplus Sales Inc." class="company-logo" />
+              <div class="company-location">Ronkonkoma, NY • 716-496-2451</div>
+            </div>
+            <div class="po-info">
+              <div class="po-number">${order.poNumber}</div>
+              <div class="po-meta">Date: ${new Date(order.createdAt).toLocaleDateString()}</div>
+              <div class="po-meta">Status: ${order.status?.toUpperCase()}</div>
+              ${order.dueDate ? `<div class="po-meta">Due: ${new Date(order.dueDate).toLocaleDateString()}</div>` : ''}
+            </div>
+          </div>
+
+          <div class="customer-info">
+            <h3>Bill To:</h3>
+            <p><strong>${order.customerName}</strong></p>
+            ${order.customerAddress ? `<p>${order.customerAddress}</p>` : ''}
+            ${order.customerPhone ? `<p>Phone: ${order.customerPhone}</p>` : ''}
+            ${order.customerEmail ? `<p>Email: ${order.customerEmail}</p>` : ''}
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Description</th>
+                <th class="text-right">Qty</th>
+                <th class="text-right">Unit Price</th>
+                <th class="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${order.items.map(item => `
+                <tr>
+                  <td>${item.partNumber || '-'}</td>
+                  <td>${item.itemName}</td>
+                  <td class="text-right">${item.quantity}</td>
+                  <td class="text-right">$${(item.unitPrice || 0).toFixed(2)}</td>
+                  <td class="text-right">$${(item.lineTotal || 0).toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <table class="totals">
+            <tr>
+              <td>Subtotal:</td>
+              <td class="text-right">$${(order.subtotal || 0).toFixed(2)}</td>
+            </tr>
+            ${order.tax ? `<tr><td>Tax:</td><td class="text-right">$${order.tax.toFixed(2)}</td></tr>` : ''}
+            ${order.shipping ? `<tr><td>Shipping:</td><td class="text-right">$${order.shipping.toFixed(2)}</td></tr>` : ''}
+            <tr class="total-row">
+              <td>TOTAL:</td>
+              <td class="text-right">$${(order.total || 0).toFixed(2)}</td>
+            </tr>
+          </table>
+
+          ${order.notes ? `<div class="notes"><strong>Notes:</strong> ${order.notes}</div>` : ''}
+
+          <div class="footer">
+            <p>Thank you for your business!</p>
+            <p>AA Surplus Sales Inc. • Genuine U.S. Military Goods • Est. 1973</p>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    setTimeout(() => printWindow.print(), 300);
+  };
+
+  const getStatusColor = (status) => {
+    const colors = {
+      draft: '#9e9e9e',
+      confirmed: '#2196F3',
+      picking: '#ff9800',
+      shipped: '#9c27b0',
+      paid: '#4CAF50'
+    };
+    return colors[status] || '#9e9e9e';
+  };
+
+  const formatDate = (timestamp) => new Date(timestamp).toLocaleDateString();
+  const formatCurrency = (val) => `$${(val || 0).toFixed(2)}`;
+
+  if (loading) {
+    return <div className="page-content"><div className="loading">Loading...</div></div>;
+  }
+
+  return (
+    <div className="page-content">
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h2>Purchase Orders</h2>
+        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+          + New Purchase Order
+        </button>
+      </div>
+
+      {/* Create/Edit PO Modal */}
+      {showCreate && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 1000, padding: 20
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 12, padding: 30,
+            maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto'
+          }}>
+            <h3 style={{ marginBottom: 20 }}>{editMode ? 'Edit Purchase Order' : 'Create Purchase Order'}</h3>
+
+            {/* Customer Search */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Select Customer</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Search customers by name or company..."
+                value={searchCustomer}
+                onChange={e => setSearchCustomer(e.target.value)}
+                style={{ width: '100%' }}
+              />
+              {filteredCustomers.length > 0 && (
+                <div style={{ border: '1px solid #ddd', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
+                  {filteredCustomers.slice(0, 10).map(cust => (
+                    <div
+                      key={cust.id}
+                      onClick={() => selectCustomerForPO(cust)}
+                      style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}
+                    >
+                      <strong>{cust.company || cust.customerName}</strong>
+                      {cust.company && cust.customerName && (
+                        <span style={{ color: '#666', marginLeft: 10 }}>{cust.customerName}</span>
+                      )}
+                      {cust.city && <span style={{ color: '#999', marginLeft: 10 }}>{cust.city}, {cust.state}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Customer Info (auto-filled or manual) */}
+            <div style={{ 
+              padding: 15,
+              background: newPO.customerId ? '#e8f5e9' : '#f9f9f9',
+              borderRadius: 8,
+              marginBottom: 20
+            }}>
+              {newPO.customerId && (
+                <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ color: '#2d5f3f', fontWeight: 600 }}>✓ Customer Selected</span>
+                  <button 
+                    onClick={() => setNewPO({ ...newPO, customerId: '', customerName: '', customerEmail: '', customerPhone: '', customerAddress: '' })}
+                    style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 12 }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: 15
+              }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Customer Name *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Customer or company name"
+                    value={newPO.customerName}
+                    onChange={e => setNewPO({ ...newPO, customerName: e.target.value })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Phone</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Phone number"
+                    value={newPO.customerPhone}
+                    onChange={e => setNewPO({ ...newPO, customerPhone: e.target.value })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Email</label>
+                  <input
+                    type="email"
+                    className="form-input"
+                    placeholder="Email address"
+                    value={newPO.customerEmail}
+                    onChange={e => setNewPO({ ...newPO, customerEmail: e.target.value })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Due Date</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={newPO.dueDate}
+                    onChange={e => setNewPO({ ...newPO, dueDate: e.target.value })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Address</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Shipping/billing address"
+                    value={newPO.customerAddress}
+                    onChange={e => setNewPO({ ...newPO, customerAddress: e.target.value })}
+                    style={{ width: '100%' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Add Items */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Add Items</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Search by name or SKU..."
+                value={searchItem}
+                onChange={e => setSearchItem(e.target.value)}
+                style={{ width: '100%' }}
+              />
+              {filteredItems.length > 0 && (
+                <div style={{ border: '1px solid #ddd', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
+                  {filteredItems.slice(0, 10).map(item => (
+                    <div
+                      key={item.id}
+                      onClick={() => addItemToPO(item)}
+                      style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}
+                    >
+                      <strong>{item.name}</strong>
+                      <span style={{ color: '#666', marginLeft: 10 }}>{item.partNumber}</span>
+                      <span style={{ color: '#2d5f3f', marginLeft: 10 }}>Stock: {item.stock || 0}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Line Items */}
+            {newPO.items.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f5f5f5' }}>
+                      <th style={{ padding: 10, textAlign: 'left' }}>Item</th>
+                      <th style={{ padding: 10, width: 80 }}>Qty</th>
+                      <th style={{ padding: 10, width: 100 }}>Unit Price</th>
+                      <th style={{ padding: 10, width: 100 }}>Line Total</th>
+                      <th style={{ padding: 10, width: 50 }}></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {newPO.items.map(item => (
+                      <tr key={item.itemId} style={{ borderBottom: '1px solid #eee' }}>
+                        <td style={{ padding: 10 }}>
+                          <strong>{item.itemName}</strong>
+                          <div style={{ fontSize: 12, color: '#666' }}>{item.partNumber}</div>
+                        </td>
+                        <td style={{ padding: 10 }}>
+                          <input
+                            type="number"
+                            value={item.quantity}
+                            onChange={e => updatePOItem(item.itemId, 'quantity', parseInt(e.target.value) || 1)}
+                            style={{ width: '100%', padding: 5, textAlign: 'center' }}
+                            min="1"
+                          />
+                        </td>
+                        <td style={{ padding: 10 }}>
+                          <input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={e => updatePOItem(item.itemId, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            style={{ width: '100%', padding: 5, textAlign: 'right' }}
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                          />
+                        </td>
+                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 600 }}>
+                          ${item.lineTotal.toFixed(2)}
+                        </td>
+                        <td style={{ padding: 10 }}>
+                          <button
+                            onClick={() => removeItemFromPO(item.itemId)}
+                            style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer' }}
+                          >
+                            ✕
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {/* Totals */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 15 }}>
+                  <div style={{ width: 250 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+                      <span>Subtotal:</span>
+                      <span>${newPO.subtotal.toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}>
+                      <span>Tax:</span>
+                      <input
+                        type="number"
+                        value={newPO.tax}
+                        onChange={e => updateTaxShipping('tax', e.target.value)}
+                        style={{ width: 80, padding: 5, textAlign: 'right' }}
+                        step="0.01"
+                        min="0"
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}>
+                      <span>Shipping:</span>
+                      <input
+                        type="number"
+                        value={newPO.shipping}
+                        onChange={e => updateTaxShipping('shipping', e.target.value)}
+                        style={{ width: 80, padding: 5, textAlign: 'right' }}
+                        step="0.01"
+                        min="0"
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #333', fontWeight: 'bold', fontSize: 18 }}>
+                      <span>Total:</span>
+                      <span>${newPO.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Notes */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Notes</label>
+              <textarea
+                className="form-input"
+                placeholder="Order notes, special instructions..."
+                value={newPO.notes}
+                onChange={e => setNewPO({ ...newPO, notes: e.target.value })}
+                style={{ width: '100%', minHeight: 60 }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-primary" onClick={createPurchaseOrder} style={{ flex: 1 }}>
+                {editMode ? 'Save Changes' : 'Create Purchase Order'}
+              </button>
+              <button className="btn" onClick={() => { setShowCreate(false); setEditMode(false); setEditingOrderId(null); resetForm(); }} style={{ flex: 1, background: '#6c757d', color: 'white' }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View PO Modal */}
+      {selectedOrder && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 1000, padding: 20
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 12, padding: 30,
+            maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <h3 style={{ margin: 0 }}>{selectedOrder.poNumber}</h3>
+                <p style={{ color: '#666', margin: '5px 0 0 0' }}>{selectedOrder.customerName}</p>
+              </div>
+              <span style={{
+                padding: '6px 16px', borderRadius: 20, fontSize: 14, fontWeight: 600,
+                background: getStatusColor(selectedOrder.status), color: 'white'
+              }}>
+                {selectedOrder.status?.toUpperCase()}
+              </span>
+            </div>
+
+            {/* Customer Info */}
+            <div style={{ background: '#f9f9f9', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+              <p style={{ margin: '3px 0' }}><strong>Customer:</strong> {selectedOrder.customerName}</p>
+              {selectedOrder.customerPhone && <p style={{ margin: '3px 0' }}>Phone: {selectedOrder.customerPhone}</p>}
+              {selectedOrder.customerEmail && <p style={{ margin: '3px 0' }}>Email: {selectedOrder.customerEmail}</p>}
+              {selectedOrder.customerAddress && <p style={{ margin: '3px 0' }}>Address: {selectedOrder.customerAddress}</p>}
+            </div>
+
+            {/* Items */}
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
+              <thead>
+                <tr style={{ background: '#f5f5f5' }}>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Item</th>
+                  <th style={{ padding: 10, textAlign: 'right' }}>Qty</th>
+                  <th style={{ padding: 10, textAlign: 'right' }}>Price</th>
+                  <th style={{ padding: 10, textAlign: 'right' }}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedOrder.items?.map((item, idx) => (
+                  <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: 10 }}>
+                      {item.itemName}
+                      <div style={{ fontSize: 12, color: '#666' }}>{item.partNumber}</div>
+                    </td>
+                    <td style={{ padding: 10, textAlign: 'right' }}>{item.quantity}</td>
+                    <td style={{ padding: 10, textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>
+                    <td style={{ padding: 10, textAlign: 'right', fontWeight: 600 }}>{formatCurrency(item.lineTotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Totals */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
+              <div style={{ width: 200 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+                  <span>Subtotal:</span>
+                  <span>{formatCurrency(selectedOrder.subtotal)}</span>
+                </div>
+                {selectedOrder.tax > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+                    <span>Tax:</span>
+                    <span>{formatCurrency(selectedOrder.tax)}</span>
+                  </div>
+                )}
+                {selectedOrder.shipping > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+                    <span>Shipping:</span>
+                    <span>{formatCurrency(selectedOrder.shipping)}</span>
+                  </div>
+                )}
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #333', fontWeight: 'bold', fontSize: 18 }}>
+                  <span>Total:</span>
+                  <span>{formatCurrency(selectedOrder.total)}</span>
+                </div>
+              </div>
+            </div>
+
+            {selectedOrder.notes && (
+              <div style={{ background: '#fffde7', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+                <strong>Notes:</strong> {selectedOrder.notes}
+              </div>
+            )}
+
+            {selectedOrder.pickListId && (
+              <div style={{ background: '#e3f2fd', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+                <strong>Pick List Created:</strong> View in Pick Lists tab
+              </div>
+            )}
+
+            {/* Actions based on status */}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button className="btn" onClick={() => openEditOrder(selectedOrder)} style={{ background: '#ff9800', color: 'white' }}>
+                ✏️ Edit
+              </button>
+              
+              <button className="btn" onClick={() => printPO(selectedOrder)} style={{ background: '#17a2b8', color: 'white' }}>
+                🖨️ Print PO
+              </button>
+              
+              {selectedOrder.status === 'draft' && (
+                <button className="btn btn-primary" onClick={() => confirmAndCreatePickList(selectedOrder)}>
+                  ✓ Confirm & Create Pick List
+                </button>
+              )}
+              
+              {(selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking') && (
+                <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>
+                  📦 Mark Shipped
+                </button>
+              )}
+              
+              {selectedOrder.status === 'shipped' && (
+                <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#4CAF50', color: 'white' }}>
+                  💰 Mark Paid
+                </button>
+              )}
+              
+              <button className="btn" onClick={() => setSelectedOrder(null)} style={{ background: '#6c757d', color: 'white', marginLeft: 'auto' }}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Orders Table */}
+      <div className="data-table">
+        <table>
+          <thead>
+            <tr>
+              <th>PO Number</th>
+              <th>Customer</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Status</th>
+              <th>Date</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {orders.map(order => (
+              <tr key={order.id}>
+                <td><strong>{order.poNumber}</strong></td>
+                <td>{order.customerName}</td>
+                <td>{order.items?.length || 0} items</td>
+                <td style={{ fontWeight: 600 }}>{formatCurrency(order.total)}</td>
+                <td>
+                  <span style={{
+                    padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600,
+                    background: getStatusColor(order.status), color: 'white'
+                  }}>
+                    {order.status}
+                  </span>
+                </td>
+                <td style={{ fontSize: 13 }}>{formatDate(order.createdAt)}</td>
+                <td>
+                  <div className="action-buttons">
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => setSelectedOrder(order)}
+                    >
+                      View
+                    </button>
+                    <button
+                      className="btn btn-danger btn-sm"
+                      onClick={() => deleteOrder(order)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {orders.length === 0 && (
+              <tr>
+                <td colSpan="7">
+                  <div className="empty-state">
+                    <p>No purchase orders yet</p>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

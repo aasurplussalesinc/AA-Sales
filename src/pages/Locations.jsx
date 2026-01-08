@@ -206,12 +206,24 @@ export default function Locations() {
     
     if (!confirm(`Delete ${selectedLocations.length} selected location(s)?`)) return;
     
-    for (const id of selectedLocations) {
-      await DB.deleteLocation(id);
+    try {
+      let deleted = 0;
+      for (const id of selectedLocations) {
+        try {
+          await DB.deleteLocation(id);
+          deleted++;
+        } catch (err) {
+          console.error('Error deleting location:', id, err);
+        }
+      }
+      
+      alert(`Successfully deleted ${deleted} location(s)`);
+      setSelectedLocations([]);
+      await loadData();
+    } catch (error) {
+      console.error('Bulk delete error:', error);
+      alert('Error deleting locations: ' + error.message);
     }
-    
-    setSelectedLocations([]);
-    loadData();
   };
 
   const handleImportCSV = async (e) => {

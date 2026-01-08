@@ -12,6 +12,10 @@ export default function Items() {
   const [saving, setSaving] = useState(false);
   const [adjustingItem, setAdjustingItem] = useState(null);
   const fileInputRef = useRef(null);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
 
   // Add Item modal state
   const [showAddItem, setShowAddItem] = useState(false);
@@ -115,6 +119,17 @@ export default function Items() {
         return (a.partNumber || '').localeCompare(b.partNumber || '');
     }
   });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(sortedItems.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedItems = sortedItems.slice(startIndex, endIndex);
+  
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, items.length]);
 
   // Format date
   const formatDate = (timestamp) => {
@@ -870,11 +885,94 @@ export default function Items() {
         </div>
       )}
 
-      {/* Results count */}
-      <p style={{ marginBottom: 10, color: '#666' }}>
-        Showing {sortedItems.length} of {items.length} items
-        {hasActiveFilters && ' (filtered)'}
-      </p>
+      {/* Pagination controls */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: 15,
+        flexWrap: 'wrap',
+        gap: 10
+      }}>
+        <p style={{ color: '#666', margin: 0 }}>
+          Showing {startIndex + 1}-{Math.min(endIndex, sortedItems.length)} of {sortedItems.length} items
+          {hasActiveFilters && ' (filtered)'}
+        </p>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Items per page selector */}
+          <select 
+            value={itemsPerPage} 
+            onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
+            style={{ padding: '6px 10px', borderRadius: 4, border: '1px solid #ddd' }}
+          >
+            <option value={25}>25 per page</option>
+            <option value={50}>50 per page</option>
+            <option value={100}>100 per page</option>
+          </select>
+          
+          {/* Page navigation */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: 4,
+                background: currentPage === 1 ? '#f5f5f5' : 'white',
+                cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
+              }}
+            >
+              ««
+            </button>
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: 4,
+                background: currentPage === 1 ? '#f5f5f5' : 'white',
+                cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
+              }}
+            >
+              ‹ Prev
+            </button>
+            
+            <span style={{ padding: '0 10px', fontWeight: 'bold' }}>
+              {currentPage} / {totalPages || 1}
+            </span>
+            
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: 4,
+                background: currentPage >= totalPages ? '#f5f5f5' : 'white',
+                cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer'
+              }}
+            >
+              Next ›
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage >= totalPages}
+              style={{
+                padding: '6px 10px',
+                border: '1px solid #ddd',
+                borderRadius: 4,
+                background: currentPage >= totalPages ? '#f5f5f5' : 'white',
+                cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer'
+              }}
+            >
+              »»
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Data table */}
       <div className="data-table">
@@ -884,8 +982,8 @@ export default function Items() {
               <th style={{ width: 40 }}>
                 <input
                   type="checkbox"
-                  checked={selectedItems.length === sortedItems.length && sortedItems.length > 0}
-                  onChange={(e) => e.target.checked ? selectAllFiltered() : clearSelection()}
+                  checked={selectedItems.length === paginatedItems.length && paginatedItems.length > 0}
+                  onChange={(e) => e.target.checked ? setSelectedItems(paginatedItems.map(i => i.id)) : clearSelection()}
                 />
               </th>
               <th>SKU</th>
@@ -899,7 +997,7 @@ export default function Items() {
             </tr>
           </thead>
           <tbody>
-            {sortedItems.map(item => (
+            {paginatedItems.map(item => (
               <tr key={item.id} style={{ background: selectedItems.includes(item.id) ? '#e3f2fd' : 'transparent' }}>
                 <td>
                   <input

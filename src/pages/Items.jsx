@@ -1082,14 +1082,14 @@ export default function Items() {
                   onChange={(e) => e.target.checked ? setSelectedItems(paginatedItems.map(i => i.id)) : clearSelection()}
                 />
               </th>
-              <th>SKU</th>
-              <th>Item Name</th>
-              <th>Category</th>
-              <th>Quantity</th>
-              <th>Price</th>
-              <th>Location</th>
-              <th>Date Added</th>
-              <th>Actions</th>
+              <th style={{ width: 80 }}>SKU</th>
+              <th style={{ minWidth: 250 }}>Item Name</th>
+              <th style={{ width: 100 }}>Category</th>
+              <th style={{ width: 130 }}>Quantity</th>
+              <th style={{ width: 70 }}>Price</th>
+              <th style={{ width: 100 }}>Location</th>
+              <th style={{ width: 100 }}>Date Added</th>
+              <th style={{ width: 120 }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1107,6 +1107,7 @@ export default function Items() {
                     type="text"
                     value={item.partNumber || ''}
                     onChange={e => updateItem(item.id, 'partNumber', e.target.value)}
+                    style={{ width: '70px' }}
                   />
                 </td>
                 <td>
@@ -1115,6 +1116,7 @@ export default function Items() {
                     value={item.name || ''}
                     onChange={e => updateItem(item.id, 'name', e.target.value)}
                     className="item-name-input"
+                    style={{ width: '100%', minWidth: '200px' }}
                   />
                 </td>
                 <td>
@@ -1122,6 +1124,7 @@ export default function Items() {
                     type="text"
                     value={item.category || ''}
                     onChange={e => updateItem(item.id, 'category', e.target.value)}
+                    style={{ width: '90px' }}
                   />
                 </td>
                 <td>
@@ -1130,7 +1133,7 @@ export default function Items() {
                       type="number"
                       value={item.stock || 0}
                       onChange={e => updateItem(item.id, 'stock', e.target.value)}
-                      style={{ width: '70px' }}
+                      style={{ width: '60px' }}
                     />
                     <button
                       onClick={() => setAdjustingItem({ ...item, adjustQty: 1, adjustType: 'add' })}
@@ -1139,10 +1142,10 @@ export default function Items() {
                         color: 'white',
                         border: 'none',
                         borderRadius: 4,
-                        width: 26,
-                        height: 26,
+                        width: 24,
+                        height: 24,
                         cursor: 'pointer',
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: 'bold'
                       }}
                       title="Add quantity"
@@ -1156,10 +1159,10 @@ export default function Items() {
                         color: 'white',
                         border: 'none',
                         borderRadius: 4,
-                        width: 26,
-                        height: 26,
+                        width: 24,
+                        height: 24,
                         cursor: 'pointer',
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: 'bold'
                       }}
                       title="Subtract quantity"
@@ -1173,7 +1176,7 @@ export default function Items() {
                     type="number"
                     value={item.price || 0}
                     onChange={e => updateItem(item.id, 'price', parseFloat(e.target.value) || 0)}
-                    style={{ width: '90px' }}
+                    style={{ width: '60px' }}
                     step="0.01"
                     min="0"
                   />
@@ -1183,9 +1186,10 @@ export default function Items() {
                     type="text"
                     value={item.location || ''}
                     onChange={e => updateItem(item.id, 'location', e.target.value)}
+                    style={{ width: '90px' }}
                   />
                 </td>
-                <td style={{ whiteSpace: 'nowrap', color: '#666', fontSize: 13 }}>
+                <td style={{ whiteSpace: 'nowrap', color: '#666', fontSize: 12 }}>
                   {formatDate(item.createdAt)}
                 </td>
                 <td>

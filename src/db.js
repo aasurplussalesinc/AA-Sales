@@ -1,4 +1,4 @@
-import { collection, addDoc, getDocs, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, getDoc, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc } from 'firebase/firestore';
 import { db, auth } from './firebase';
 
 // Offline queue for when internet is down
@@ -236,6 +236,70 @@ export const DB = {
     await this.logActivity('LOCATION_DELETED', { locationId });
   },
   
+  async addInventoryToLocation(locationId, itemId, quantity) {
+    try {
+      const ref = doc(db, 'locations', locationId);
+      const snapshot = await getDoc(ref);
+      
+      if (!snapshot.exists()) {
+        throw new Error('Location not found');
+      }
+      
+      const locationData = snapshot.data();
+      const currentInventory = locationData.inventory || {};
+      const currentQty = currentInventory[itemId] || 0;
+      
+      await updateDoc(ref, {
+        inventory: {
+          ...currentInventory,
+          [itemId]: currentQty + quantity
+        },
+        updatedAt: Date.now()
+      });
+      
+      await this.logActivity('INVENTORY_ADDED_TO_LOCATION', {
+        locationId,
+        itemId,
+        quantity,
+        newTotal: currentQty + quantity
+      });
+    } catch (error) {
+      console.error('Error adding inventory to location:', error);
+      throw error;
+    }
+  },
+  
+  async setInventoryAtLocation(locationId, itemId, quantity) {
+    try {
+      const ref = doc(db, 'locations', locationId);
+      const snapshot = await getDoc(ref);
+      
+      if (!snapshot.exists()) {
+        throw new Error('Location not found');
+      }
+      
+      const locationData = snapshot.data();
+      const currentInventory = locationData.inventory || {};
+      
+      await updateDoc(ref, {
+        inventory: {
+          ...currentInventory,
+          [itemId]: quantity
+        },
+        updatedAt: Date.now()
+      });
+      
+      await this.logActivity('INVENTORY_SET_AT_LOCATION', {
+        locationId,
+        itemId,
+        quantity
+      });
+    } catch (error) {
+      console.error('Error setting inventory at location:', error);
+      throw error;
+    }
+  },
+
   // ITEMS
   async getItems() {
     const snapshot = await getDocs(collection(db, 'items'));

@@ -16,6 +16,9 @@ export default function Items() {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
+  
+  // Item locations popup state
+  const [viewingItemLocations, setViewingItemLocations] = useState(null);
 
   // Add Item modal state
   const [showAddItem, setShowAddItem] = useState(false);
@@ -157,6 +160,26 @@ export default function Items() {
   // Check if any filters are active
   const hasActiveFilters = Object.entries(filters).some(([k, v]) => k !== 'sortBy' && v !== '');
 
+  // Get all locations where an item is stored
+  const getItemLocations = (itemId) => {
+    const itemLocations = [];
+    for (const loc of locations) {
+      if (loc.inventory && loc.inventory[itemId] && loc.inventory[itemId] > 0) {
+        itemLocations.push({
+          location: loc,
+          locationCode: loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`,
+          quantity: loc.inventory[itemId]
+        });
+      }
+    }
+    return itemLocations;
+  };
+
+  // Get total quantity across all locations for an item
+  const getTotalInLocations = (itemId) => {
+    return getItemLocations(itemId).reduce((sum, loc) => sum + loc.quantity, 0);
+  };
+
   // Add new item
   const addNewItem = async () => {
     if (!newItem.name && !newItem.partNumber) {
@@ -272,27 +295,58 @@ export default function Items() {
           return;
         }
 
-        // Parse data rows
-        const newItems = [];
+        // Parse data rows and group by SKU for multi-location support
+        const itemsBySku = new Map();
+        const locationInventory = []; // Track location assignments
+        
         for (let i = 1; i < lines.length; i++) {
           const values = parseCSVLine(lines[i]);
           if (values.length === 0) continue;
 
-          const item = {
-            partNumber: columnIndices.sku !== undefined ? values[columnIndices.sku]?.trim() : '',
-            name: columnIndices.name !== undefined ? values[columnIndices.name]?.trim() : '',
-            category: columnIndices.category !== undefined ? values[columnIndices.category]?.trim() : '',
-            stock: columnIndices.stock !== undefined ? parseInt(values[columnIndices.stock]) || 0 : 0,
-            price: columnIndices.price !== undefined ? parseFloat(values[columnIndices.price]?.replace(/[^0-9.-]/g, '')) || 0 : 0,
-            location: columnIndices.location !== undefined ? values[columnIndices.location]?.trim() : '',
-            createdAt: Date.now()
-          };
+          const sku = columnIndices.sku !== undefined ? values[columnIndices.sku]?.trim() : '';
+          const name = columnIndices.name !== undefined ? values[columnIndices.name]?.trim() : '';
+          const category = columnIndices.category !== undefined ? values[columnIndices.category]?.trim() : '';
+          const qty = columnIndices.stock !== undefined ? parseInt(values[columnIndices.stock]) || 0 : 0;
+          const price = columnIndices.price !== undefined ? parseFloat(values[columnIndices.price]?.replace(/[^0-9.-]/g, '')) || 0 : 0;
+          const location = columnIndices.location !== undefined ? values[columnIndices.location]?.trim() : '';
 
           // Skip empty rows
-          if (item.name || item.partNumber) {
-            newItems.push(item);
+          if (!name && !sku) continue;
+
+          const key = sku || name; // Use SKU as key, fallback to name
+          
+          if (!itemsBySku.has(key)) {
+            // First time seeing this item
+            itemsBySku.set(key, {
+              partNumber: sku,
+              name: name,
+              category: category,
+              stock: qty, // Will be summed if multiple locations
+              price: price,
+              location: location, // Primary location (first one seen)
+              createdAt: Date.now()
+            });
+          } else {
+            // Duplicate SKU - add to stock total
+            const existing = itemsBySku.get(key);
+            existing.stock += qty;
+            // Keep first non-empty values for other fields
+            if (!existing.name && name) existing.name = name;
+            if (!existing.category && category) existing.category = category;
+            if (!existing.price && price) existing.price = price;
+          }
+          
+          // Track location assignment if location is specified
+          if (location && qty > 0) {
+            locationInventory.push({
+              sku: key,
+              location: location,
+              quantity: qty
+            });
           }
         }
+
+        const newItems = Array.from(itemsBySku.values());
 
         if (newItems.length === 0) {
           alert('No valid items found in CSV');
@@ -300,15 +354,57 @@ export default function Items() {
           return;
         }
 
-        // Confirm replace all
-        if (!confirm(`This will REPLACE ALL existing inventory with ${newItems.length} items from the CSV.\n\nAre you sure?`)) {
+        // Show summary with multi-location info
+        const hasMultiLocation = locationInventory.length > newItems.length;
+        let confirmMsg = `This will REPLACE ALL existing inventory with ${newItems.length} unique items from the CSV.`;
+        if (hasMultiLocation) {
+          confirmMsg += `\n\n📍 Multi-location detected: ${locationInventory.length} location assignments will be created.`;
+        }
+        confirmMsg += '\n\nAre you sure?';
+        
+        if (!confirm(confirmMsg)) {
           setImporting(false);
           return;
         }
 
-        // Import to database
+        // Import items to database
         const result = await DB.importItems(newItems);
-        alert(`Import complete!\n\n✓ ${result.deleted} old items removed\n✓ ${result.added} new items imported`);
+        
+        // Now assign inventory to locations
+        let locationAssignments = 0;
+        if (locationInventory.length > 0) {
+          // Get fresh items list to get IDs
+          const freshItems = await DB.getItems();
+          
+          for (const inv of locationInventory) {
+            // Find the item by SKU or name
+            const item = freshItems.find(i => 
+              (i.partNumber && i.partNumber === inv.sku) || 
+              (i.name && i.name === inv.sku)
+            );
+            
+            if (item) {
+              // Find the location
+              const loc = locations.find(l => 
+                l.locationCode === inv.location ||
+                `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}` === inv.location
+              );
+              
+              if (loc) {
+                // Add inventory to location
+                await DB.addInventoryToLocation(loc.id, item.id, inv.quantity);
+                locationAssignments++;
+              }
+            }
+          }
+        }
+        
+        let successMsg = `Import complete!\n\n✓ ${result.deleted} old items removed\n✓ ${result.added} new items imported`;
+        if (locationAssignments > 0) {
+          successMsg += `\n✓ ${locationAssignments} location assignments created`;
+        }
+        alert(successMsg);
+        
         loadData(); // Refresh the list
       } catch (error) {
         console.error('Import error:', error);
@@ -1095,6 +1191,14 @@ export default function Items() {
                 <td>
                   <div className="action-buttons">
                     <button
+                      className="btn btn-sm"
+                      onClick={() => setViewingItemLocations(item)}
+                      title="View Locations"
+                      style={{ background: '#17a2b8', color: 'white' }}
+                    >
+                      📍
+                    </button>
+                    <button
                       className="btn btn-primary btn-sm"
                       onClick={() => printQR(item)}
                       title="Print QR"
@@ -1382,6 +1486,155 @@ export default function Items() {
                   {adjustingItem.adjustType === 'add' ? 'Add' : 'Remove'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Item Locations Popup */}
+      {viewingItemLocations && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999
+          }}
+          onClick={() => setViewingItemLocations(null)}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              background: 'white',
+              borderRadius: 12,
+              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+              width: '90%',
+              maxWidth: 450,
+              maxHeight: '80vh',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
+          >
+            {/* Header */}
+            <div style={{ 
+              background: '#17a2b8',
+              color: 'white',
+              padding: '12px 15px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <h3 style={{ margin: 0, fontSize: 16 }}>
+                📍 Item Locations
+              </h3>
+              <button 
+                onClick={() => setViewingItemLocations(null)}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  color: 'white', 
+                  fontSize: 20, 
+                  cursor: 'pointer' 
+                }}
+              >
+                ×
+              </button>
+            </div>
+            
+            {/* Body */}
+            <div style={{ padding: 15, overflowY: 'auto', flex: 1 }}>
+              <div style={{ textAlign: 'center', marginBottom: 15 }}>
+                <div style={{ fontWeight: 'bold', fontSize: 16 }}>
+                  {viewingItemLocations.name || 'Unnamed Item'}
+                </div>
+                <div style={{ color: '#666', fontSize: 13 }}>
+                  SKU: {viewingItemLocations.partNumber || 'N/A'}
+                </div>
+              </div>
+              
+              {getItemLocations(viewingItemLocations.id).length > 0 ? (
+                <>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+                    <thead>
+                      <tr style={{ background: '#f5f5f5' }}>
+                        <th style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Location</th>
+                        <th style={{ padding: 10, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getItemLocations(viewingItemLocations.id).map((loc, idx) => (
+                        <tr key={idx}>
+                          <td style={{ padding: 10, borderBottom: '1px solid #eee' }}>
+                            {loc.locationCode}
+                          </td>
+                          <td style={{ padding: 10, borderBottom: '1px solid #eee', textAlign: 'right', fontWeight: 'bold' }}>
+                            {loc.quantity}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr style={{ background: '#e8f5e9' }}>
+                        <td style={{ padding: 10, fontWeight: 'bold' }}>Total in Locations</td>
+                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 'bold', fontSize: 16, color: '#2d5f3f' }}>
+                          {getTotalInLocations(viewingItemLocations.id)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                  
+                  {/* Show discrepancy if item stock doesn't match location totals */}
+                  {viewingItemLocations.stock !== getTotalInLocations(viewingItemLocations.id) && (
+                    <div style={{ 
+                      marginTop: 15, 
+                      padding: 10, 
+                      background: '#fff3cd', 
+                      borderRadius: 6,
+                      fontSize: 13
+                    }}>
+                      ⚠️ <strong>Note:</strong> Item stock ({viewingItemLocations.stock || 0}) differs from location total ({getTotalInLocations(viewingItemLocations.id)})
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: 30, 
+                  color: '#666',
+                  background: '#f5f5f5',
+                  borderRadius: 8
+                }}>
+                  <div style={{ fontSize: 40, marginBottom: 10 }}>📦</div>
+                  <p style={{ margin: 0 }}>This item is not assigned to any locations yet.</p>
+                  <p style={{ margin: '10px 0 0 0', fontSize: 13 }}>
+                    Use the Scanner or Movements tab to add inventory to a location.
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            {/* Footer */}
+            <div style={{ padding: 15, borderTop: '1px solid #eee' }}>
+              <button 
+                onClick={() => setViewingItemLocations(null)}
+                style={{ 
+                  width: '100%',
+                  padding: '10px',
+                  border: '1px solid #ddd',
+                  borderRadius: 6,
+                  background: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

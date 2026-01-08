@@ -199,7 +199,11 @@ export default function Locations() {
         // Try to detect format
         if (cleanValues.length >= 4) {
           // Format: Warehouse, Rack, Letter, Shelf
-          const [warehouse, rack, letter, shelf] = cleanValues;
+          let [warehouse, rack, letter, shelf] = cleanValues;
+          
+          // Strip "R" prefix from rack if present (e.g., "R1" -> "1")
+          rack = rack.replace(/^R/i, '');
+          
           const locationCode = `${warehouse}-R${rack}-${letter}-${shelf}`;
           
           // Check if exists

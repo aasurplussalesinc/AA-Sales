@@ -192,4 +192,56 @@ body {
   .stats-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+  
+  /* Mobile table improvements */
+  .data-table {
+    position: relative;
+  }
+  
+  .data-table::after {
+    content: '→ Scroll for more';
+    position: absolute;
+    top: 50%;
+    right: 5px;
+    transform: translateY(-50%);
+    background: rgba(45, 95, 63, 0.9);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    pointer-events: none;
+    opacity: 0.8;
+    animation: fadeOut 3s forwards;
+  }
+  
+  @keyframes fadeOut {
+    0% { opacity: 0.8; }
+    70% { opacity: 0.8; }
+    100% { opacity: 0; }
+  }
+  
+  .data-table table {
+    min-width: 700px;
+  }
+  
+  .data-table th,
+  .data-table td {
+    padding: 8px 6px;
+    font-size: 13px;
+  }
+  
+  .data-table input,
+  .data-table select {
+    padding: 4px 6px;
+    font-size: 13px;
+  }
+  
+  .action-buttons {
+    flex-wrap: wrap;
+  }
+  
+  .btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
 }

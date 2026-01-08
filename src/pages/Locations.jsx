@@ -10,6 +10,7 @@ export default function Locations() {
   const [editingLocation, setEditingLocation] = useState(null);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [selectedLocations, setSelectedLocations] = useState([]);
   const fileInputRef = useRef(null);
 
   // Dropdown options
@@ -172,6 +173,44 @@ export default function Locations() {
     if (!confirm(`Delete location ${formatLocation(loc)}?`)) return;
     
     await DB.deleteLocation(loc.id);
+    loadData();
+  };
+
+  // Selection functions
+  const toggleSelectLocation = (id) => {
+    setSelectedLocations(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
+  const selectAllLocations = () => {
+    setSelectedLocations(locations.map(loc => loc.id));
+  };
+
+  const clearSelection = () => {
+    setSelectedLocations([]);
+  };
+
+  const deleteSelectedLocations = async () => {
+    if (selectedLocations.length === 0) return;
+    
+    // Check if any selected locations have inventory
+    const locationsWithInventory = locations.filter(loc => 
+      selectedLocations.includes(loc.id) && getCurrentQty(loc) > 0
+    );
+    
+    if (locationsWithInventory.length > 0) {
+      alert(`Cannot delete ${locationsWithInventory.length} location(s) that still have inventory. Remove items first.`);
+      return;
+    }
+    
+    if (!confirm(`Delete ${selectedLocations.length} selected location(s)?`)) return;
+    
+    for (const id of selectedLocations) {
+      await DB.deleteLocation(id);
+    }
+    
+    setSelectedLocations([]);
     loadData();
   };
 
@@ -502,11 +541,41 @@ W2,2,C,3`;
       </div>
 
       <div style={{background: 'white', padding: 20, borderRadius: 8}}>
-        <h3 style={{marginBottom: 15}}>Total Locations: {locations.length}</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 10 }}>
+          <h3 style={{ margin: 0 }}>Total Locations: {locations.length}</h3>
+          
+          {/* Bulk actions */}
+          {selectedLocations.length > 0 && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <span style={{ color: '#666' }}>{selectedLocations.length} selected</span>
+              <button 
+                className="btn btn-danger btn-sm"
+                onClick={deleteSelectedLocations}
+              >
+                🗑️ Delete Selected
+              </button>
+              <button 
+                className="btn btn-sm"
+                onClick={clearSelection}
+                style={{ background: '#6c757d', color: 'white' }}
+              >
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+        
         <div className="data-table">
           <table>
             <thead>
               <tr>
+                <th style={{ width: 40 }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedLocations.length === locations.length && locations.length > 0}
+                    onChange={(e) => e.target.checked ? selectAllLocations() : clearSelection()}
+                  />
+                </th>
                 <th>Location</th>
                 <th>Warehouse</th>
                 <th>Rack</th>
@@ -520,16 +589,25 @@ W2,2,C,3`;
               {locations.map(loc => (
                 <tr 
                   key={loc.id} 
-                  onClick={() => viewLocation(loc)}
-                  style={{ cursor: 'pointer' }}
+                  style={{ 
+                    cursor: 'pointer',
+                    background: selectedLocations.includes(loc.id) ? '#e3f2fd' : 'transparent'
+                  }}
                   title="Click to view items"
                 >
-                  <td><strong>{formatLocation(loc)}</strong></td>
-                  <td>{loc.warehouse || '-'}</td>
-                  <td>{loc.rack || '-'}</td>
-                  <td>{loc.letter || '-'}</td>
-                  <td>{loc.shelf || '-'}</td>
-                  <td>{getCurrentQty(loc)}</td>
+                  <td onClick={e => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedLocations.includes(loc.id)}
+                      onChange={() => toggleSelectLocation(loc.id)}
+                    />
+                  </td>
+                  <td onClick={() => viewLocation(loc)}><strong>{formatLocation(loc)}</strong></td>
+                  <td onClick={() => viewLocation(loc)}>{loc.warehouse || '-'}</td>
+                  <td onClick={() => viewLocation(loc)}>{loc.rack || '-'}</td>
+                  <td onClick={() => viewLocation(loc)}>{loc.letter || '-'}</td>
+                  <td onClick={() => viewLocation(loc)}>{loc.shelf || '-'}</td>
+                  <td onClick={() => viewLocation(loc)}>{getCurrentQty(loc)}</td>
                   <td onClick={e => e.stopPropagation()}>
                     <div className="action-buttons">
                       <button 

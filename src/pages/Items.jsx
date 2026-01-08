@@ -920,6 +920,7 @@ export default function Items() {
                     type="text"
                     value={item.name || ''}
                     onChange={e => updateItem(item.id, 'name', e.target.value)}
+                    className="item-name-input"
                   />
                 </td>
                 <td>

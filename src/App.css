@@ -236,6 +236,11 @@ body {
     font-size: 13px;
   }
   
+  /* Make Item Name column wider on mobile */
+  .item-name-input {
+    min-width: 200px !important;
+  }
+  
   .action-buttons {
     flex-wrap: wrap;
   }

@@ -1086,7 +1086,7 @@ export default function Items() {
               <th style={{ minWidth: 250 }}>Item Name</th>
               <th style={{ width: 100 }}>Category</th>
               <th style={{ width: 130 }}>Quantity</th>
-              <th style={{ width: 70 }}>Price</th>
+              <th style={{ width: 80 }}>Price</th>
               <th style={{ width: 100 }}>Location</th>
               <th style={{ width: 100 }}>Date Added</th>
               <th style={{ width: 120 }}>Actions</th>
@@ -1176,7 +1176,7 @@ export default function Items() {
                     type="number"
                     value={item.price || 0}
                     onChange={e => updateItem(item.id, 'price', parseFloat(e.target.value) || 0)}
-                    style={{ width: '60px' }}
+                    style={{ width: '75px' }}
                     step="0.01"
                     min="0"
                   />

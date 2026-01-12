@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import QRCode from 'qrcode';
-import { DB } from '../db';
+import { OrgDB as DB } from '../orgDb';
 
 export default function CreateLocation() {
   const navigate = useNavigate();

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DB } from '../db';
+import { OrgDB as DB } from '../orgDb';
 
 export default function Movements() {
   const [movements, setMovements] = useState([]);

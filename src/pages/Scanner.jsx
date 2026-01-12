@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
-import { DB } from '../db';
+import { OrgDB as DB } from '../orgDb';
 import AddInventory from '../components/AddInventory';
 import PickInventory from '../components/PickInventory';
 import MoveLocation from '../components/MoveLocation';

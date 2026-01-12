@@ -1,7 +1,8 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './AuthContext';
-import ProtectedRoute from './ProtectedRoute';
-import Login from './pages/Login';
+import { AuthProvider, useAuth } from './OrgAuthContext';
+import OrgLogin from './pages/OrgLogin';
+import SubscriptionRequired from './pages/SubscriptionRequired';
+import OrgSettings from './pages/OrgSettings';
 import Dashboard from './pages/Dashboard';
 import Items from './pages/Items';
 import Locations from './pages/Locations';
@@ -17,7 +18,7 @@ import './App.css';
 
 function NavBar() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout, organization, subscriptionStatus, organizations, switchOrganization } = useAuth();
   
   const isActive = (path) => location.pathname === path;
 
@@ -32,10 +33,50 @@ function NavBar() {
       <div className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span>📦</span>
-          <h1>AA Surplus Sales Inc.</h1>
+          <h1>{organization?.name || 'Warehouse Manager'}</h1>
         </div>
         {user && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 15, flexWrap: 'wrap' }}>
+            {/* Organization switcher */}
+            {organizations.length > 1 && (
+              <select
+                value={organization?.id || ''}
+                onChange={(e) => {
+                  const org = organizations.find(o => o.id === e.target.value);
+                  if (org) switchOrganization(org);
+                }}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  border: 'none',
+                  color: 'white',
+                  padding: '6px 10px',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: 13
+                }}
+              >
+                {organizations.map(org => (
+                  <option key={org.id} value={org.id} style={{ color: 'black' }}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            
+            {/* Trial/subscription badge */}
+            {subscriptionStatus && subscriptionStatus.plan === 'trial' && (
+              <span style={{
+                background: '#ffc107',
+                color: '#000',
+                padding: '4px 8px',
+                borderRadius: 4,
+                fontSize: 11,
+                fontWeight: 600
+              }}>
+                Trial: {subscriptionStatus.trialDaysRemaining} days left
+              </span>
+            )}
+            
             <span style={{ fontSize: 14, opacity: 0.9 }}>
               👤 {user.email}
             </span>
@@ -90,6 +131,9 @@ function NavBar() {
         <Link to="/activity" className={`nav-tab ${isActive('/activity') ? 'active' : ''}`}>
           📜 Activity
         </Link>
+        <Link to="/settings" className={`nav-tab ${isActive('/settings') ? 'active' : ''}`}>
+          ⚙️ Settings
+        </Link>
       </div>
     </>
   );
@@ -104,15 +148,59 @@ function AppLayout({ children }) {
   );
 }
 
+// Protected route that also checks organization and subscription
+function ProtectedRoute({ children }) {
+  const { user, organization, subscriptionStatus, loading } = useAuth();
+  
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        background: '#f5f5f5'
+      }}>
+        <p>Loading...</p>
+      </div>
+    );
+  }
+  
+  // Not logged in
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // No organization selected (needs to create or select one)
+  if (!organization) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  // Subscription expired (not owner)
+  if (subscriptionStatus && !subscriptionStatus.isActive) {
+    return <Navigate to="/subscription-required" replace />;
+  }
+  
+  return children;
+}
+
 function AppRoutes() {
-  const { user } = useAuth();
+  const { user, organization, subscriptionStatus } = useAuth();
 
   return (
     <Routes>
-      {/* Public route */}
+      {/* Public routes */}
       <Route 
         path="/login" 
-        element={user ? <Navigate to="/" replace /> : <Login />} 
+        element={user && organization ? <Navigate to="/" replace /> : <OrgLogin />} 
+      />
+      
+      <Route 
+        path="/subscription-required" 
+        element={
+          !user ? <Navigate to="/login" replace /> : 
+          (subscriptionStatus?.isActive ? <Navigate to="/" replace /> : <SubscriptionRequired />)
+        } 
       />
       
       {/* Protected routes */}
@@ -169,6 +257,11 @@ function AppRoutes() {
       <Route path="/reports" element={
         <ProtectedRoute>
           <AppLayout><Reports /></AppLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/settings" element={
+        <ProtectedRoute>
+          <AppLayout><OrgSettings /></AppLayout>
         </ProtectedRoute>
       } />
       

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { DB } from '../db';
+import { OrgDB as DB } from '../orgDb';
 import { COMPANY_LOGO } from '../companyLogo';
 
 export default function PurchaseOrders() {

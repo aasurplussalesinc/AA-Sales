@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
-import { DB } from '../db';
+import { OrgDB as DB } from '../orgDb';
 
 export default function ImportData() {
   const [importing, setImporting] = useState(false);

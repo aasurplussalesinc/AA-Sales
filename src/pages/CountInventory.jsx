@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { DB } from '../db';
+import { OrgDB as DB } from '../orgDb';
 
 export default function CountInventory() {
   const { id } = useParams();

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
-import { DB } from '../db';
+import { OrgDB as DB } from '../orgDb';
 
 export default function Locations() {
   const [locations, setLocations] = useState([]);

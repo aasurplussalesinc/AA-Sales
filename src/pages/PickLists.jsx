@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/library';
-import { DB } from '../db';
+import { OrgDB as DB } from '../orgDb';
 
 export default function PickLists() {
   const [pickLists, setPickLists] = useState([]);

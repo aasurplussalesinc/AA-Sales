@@ -147,17 +147,25 @@ export const OrgDB = {
   },
   
   async getUserOrganizations(userId) {
+    if (!userId) {
+      console.error('getUserOrganizations called with no userId');
+      return [];
+    }
+    
     try {
+      // Simple query first - just by userId
       const q = query(
         collection(db, 'orgMembers'),
-        where('userId', '==', userId),
-        where('status', '==', 'active')
+        where('userId', '==', userId)
       );
       const snapshot = await getDocs(q);
       
       const orgs = [];
       for (const docSnap of snapshot.docs) {
         const member = docSnap.data();
+        // Filter for active status in code instead of compound query
+        if (member.status !== 'active') continue;
+        
         const org = await this.getOrganizationById(member.orgId);
         if (org) {
           orgs.push({ ...org, userRole: member.role });

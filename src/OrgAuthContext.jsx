@@ -25,11 +25,55 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log('Auth state changed:', firebaseUser?.email);
       setUser(firebaseUser);
       
-      if (firebaseUser) {
+      if (firebaseUser && firebaseUser.uid) {
         // Load user's organizations
-        await loadUserOrganizations(firebaseUser.uid);
+        try {
+          const orgs = await OrgDB.getUserOrganizations(firebaseUser.uid);
+          console.log('Loaded orgs:', orgs.length);
+          setOrganizations(orgs);
+          
+          // Auto-select first org if only one, or previously selected
+          const savedOrgId = localStorage.getItem('selectedOrgId');
+          
+          let orgToSelect = null;
+          if (orgs.length === 1) {
+            orgToSelect = orgs[0];
+          } else if (savedOrgId) {
+            orgToSelect = orgs.find(o => o.id === savedOrgId);
+          }
+          
+          if (orgToSelect) {
+            // Select organization inline to avoid state timing issues
+            const membership = await OrgDB.getUserOrgMembership(firebaseUser.uid, orgToSelect.id);
+            const role = membership?.role || orgToSelect.userRole || 'staff';
+            
+            setOrganization(orgToSelect);
+            setUserRole(role);
+            
+            // Check subscription status
+            const isActive = OrgDB.isSubscriptionActive(orgToSelect);
+            const trialDays = OrgDB.getTrialDaysRemaining(orgToSelect);
+            
+            setSubscriptionStatus({
+              isActive,
+              plan: orgToSelect.plan,
+              trialDaysRemaining: trialDays,
+              status: orgToSelect.status
+            });
+            
+            // Set in OrgDB for queries
+            OrgDB.setCurrentOrg(orgToSelect.id, orgToSelect, role);
+            
+            // Save selection
+            localStorage.setItem('selectedOrgId', orgToSelect.id);
+            console.log('Selected org:', orgToSelect.name);
+          }
+        } catch (error) {
+          console.error('Error loading organizations:', error);
+        }
       } else {
         // Clear everything on logout
         setOrganization(null);
@@ -54,11 +98,11 @@ export function AuthProvider({ children }) {
       const savedOrgId = localStorage.getItem('selectedOrgId');
       
       if (orgs.length === 1) {
-        await selectOrganization(orgs[0]);
+        await selectOrganization(orgs[0], userId);
       } else if (savedOrgId) {
         const savedOrg = orgs.find(o => o.id === savedOrgId);
         if (savedOrg) {
-          await selectOrganization(savedOrg);
+          await selectOrganization(savedOrg, userId);
         }
       }
     } catch (error) {
@@ -66,8 +110,14 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const selectOrganization = async (org) => {
-    const membership = await OrgDB.getUserOrgMembership(user.uid, org.id);
+  const selectOrganization = async (org, userId = null) => {
+    const uid = userId || user?.uid;
+    if (!uid) {
+      console.error('No user ID available for selectOrganization');
+      return;
+    }
+    
+    const membership = await OrgDB.getUserOrgMembership(uid, org.id);
     const role = membership?.role || org.userRole || 'staff';
     
     setOrganization(org);

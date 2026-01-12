@@ -212,7 +212,121 @@ export const OrgDB = {
     await updateDoc(ref, { role: newRole, updatedAt: Date.now() });
   },
   
-  // ==================== INVITATIONS ====================
+  // ==================== INVITE CODES ====================
+  
+  generateInviteCode() {
+    // Generate code like: AA-7X3K-M2PQ
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No confusing chars (0,O,1,I)
+    let code = '';
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    code += '-';
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  },
+  
+  async createInviteCode(orgId, role = 'staff', maxUses = 1) {
+    const user = auth.currentUser;
+    const org = await this.getOrganizationById(orgId);
+    
+    const inviteCode = {
+      code: this.generateInviteCode(),
+      orgId: orgId,
+      orgName: org?.name || 'Unknown',
+      role: role,
+      maxUses: maxUses, // How many times this code can be used
+      uses: 0,
+      status: 'active', // active, exhausted, expired, revoked
+      createdBy: user?.email || 'System',
+      expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
+      createdAt: Date.now()
+    };
+    
+    await setDoc(doc(db, 'inviteCodes', inviteCode.code), inviteCode);
+    return inviteCode;
+  },
+  
+  async getInviteCodesByOrg(orgId) {
+    try {
+      const q = query(
+        collection(db, 'inviteCodes'),
+        where('orgId', '==', orgId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Error getting invite codes:', error);
+      return [];
+    }
+  },
+  
+  async validateInviteCode(code) {
+    try {
+      const upperCode = code.toUpperCase().trim();
+      const docRef = doc(db, 'inviteCodes', upperCode);
+      const docSnap = await getDoc(docRef);
+      
+      if (!docSnap.exists()) return { valid: false, error: 'Invalid invite code' };
+      
+      const inviteCode = docSnap.data();
+      
+      // Check if expired
+      if (inviteCode.expiresAt < Date.now()) {
+        return { valid: false, error: 'Invite code has expired' };
+      }
+      
+      // Check if exhausted
+      if (inviteCode.uses >= inviteCode.maxUses) {
+        return { valid: false, error: 'Invite code has been used' };
+      }
+      
+      // Check if revoked
+      if (inviteCode.status === 'revoked') {
+        return { valid: false, error: 'Invite code has been revoked' };
+      }
+      
+      return { valid: true, inviteCode };
+    } catch (error) {
+      console.error('Error validating invite code:', error);
+      return { valid: false, error: 'Error validating code' };
+    }
+  },
+  
+  async useInviteCode(code, userId, userEmail) {
+    const upperCode = code.toUpperCase().trim();
+    const validation = await this.validateInviteCode(upperCode);
+    
+    if (!validation.valid) {
+      throw new Error(validation.error);
+    }
+    
+    const inviteCode = validation.inviteCode;
+    
+    // Add user to organization
+    await this.addUserToOrganization(userId, inviteCode.orgId, inviteCode.role, userEmail);
+    
+    // Increment uses
+    const ref = doc(db, 'inviteCodes', upperCode);
+    const newUses = inviteCode.uses + 1;
+    await updateDoc(ref, { 
+      uses: newUses,
+      status: newUses >= inviteCode.maxUses ? 'exhausted' : 'active',
+      updatedAt: Date.now()
+    });
+    
+    return inviteCode.orgId;
+  },
+  
+  async revokeInviteCode(code) {
+    const upperCode = code.toUpperCase().trim();
+    const ref = doc(db, 'inviteCodes', upperCode);
+    await updateDoc(ref, { status: 'revoked', updatedAt: Date.now() });
+  },
+  
+  // ==================== LEGACY INVITATIONS (keeping for compatibility) ====================
   
   async createInvitation(orgId, email, role = 'staff') {
     const user = auth.currentUser;
@@ -225,17 +339,13 @@ export const OrgDB = {
       role: role,
       status: 'pending', // pending, accepted, expired
       invitedBy: user?.email || 'System',
-      token: this.generateInviteToken(),
+      token: this.generateInviteCode(),
       expiresAt: Date.now() + (7 * 24 * 60 * 60 * 1000), // 7 days
       createdAt: Date.now()
     };
     
     const ref = await addDoc(collection(db, 'invitations'), invitation);
     return { id: ref.id, ...invitation };
-  },
-  
-  generateInviteToken() {
-    return Math.random().toString(36).substring(2) + Date.now().toString(36);
   },
   
   async getInvitationByToken(token) {

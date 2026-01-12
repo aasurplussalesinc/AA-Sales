@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { useAuth } from '../OrgAuthContext';
+import { OrgDB } from '../orgDb';
 
 export default function Login() {
-  const [mode, setMode] = useState('login'); // login, signup, reset, select-org
+  const [mode, setMode] = useState('login'); // login, signup, signup-join, reset, select-org
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login, signup, resetPassword, organizations, selectOrganization } = useAuth();
+  const { login, signup, signupWithInviteCode, resetPassword, organizations, selectOrganization } = useAuth();
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -60,6 +62,51 @@ export default function Login() {
     
     try {
       await signup(email, password, companyName.trim());
+      // Auth context will handle org selection
+    } catch (err) {
+      console.error('Signup error:', err);
+      if (err.code === 'auth/email-already-in-use') {
+        setError('An account with this email already exists');
+      } else if (err.code === 'auth/weak-password') {
+        setError('Password is too weak');
+      } else {
+        setError(err.message || 'Failed to create account');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignupWithCode = async (e) => {
+    e.preventDefault();
+    setError('');
+    
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+    
+    if (!inviteCode.trim()) {
+      setError('Invite code is required');
+      return;
+    }
+    
+    // Validate invite code first
+    const validation = await OrgDB.validateInviteCode(inviteCode.trim());
+    if (!validation.valid) {
+      setError(validation.error);
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      await signupWithInviteCode(email, password, inviteCode.trim());
       // Auth context will handle org selection
     } catch (err) {
       console.error('Signup error:', err);
@@ -181,6 +228,9 @@ export default function Login() {
               <button onClick={() => setMode('signup')} style={styles.link}>
                 Create new account
               </button>
+              <button onClick={() => setMode('signup-join')} style={styles.link}>
+                Have an invite code?
+              </button>
             </div>
           </>
         )}
@@ -252,12 +302,89 @@ export default function Login() {
               <button onClick={() => setMode('login')} style={styles.link}>
                 Already have an account? Sign in
               </button>
+              <button onClick={() => setMode('signup-join')} style={styles.link}>
+                Have an invite code? Join existing company
+              </button>
             </div>
             
             <p style={styles.terms}>
               By signing up, you agree to our Terms of Service and Privacy Policy.
               No credit card required for trial.
             </p>
+          </>
+        )}
+        
+        {mode === 'signup-join' && (
+          <>
+            <h2 style={styles.title}>Join Your Team</h2>
+            <p style={styles.subtitle}>Enter your invite code to join an existing organization</p>
+            
+            {error && <div style={styles.error}>{error}</div>}
+            
+            <form onSubmit={handleSignupWithCode}>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Invite Code</label>
+                <input
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                  style={{...styles.input, fontFamily: 'monospace', fontSize: 18, letterSpacing: 2, textAlign: 'center'}}
+                  placeholder="XXXX-XXXX"
+                  required
+                  disabled={loading}
+                />
+              </div>
+              
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={styles.input}
+                  required
+                  disabled={loading}
+                />
+              </div>
+              
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={styles.input}
+                  placeholder="At least 6 characters"
+                  required
+                  disabled={loading}
+                />
+              </div>
+              
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  style={styles.input}
+                  required
+                  disabled={loading}
+                />
+              </div>
+              
+              <button type="submit" style={styles.button} disabled={loading}>
+                {loading ? 'Joining...' : 'Join Organization'}
+              </button>
+            </form>
+            
+            <div style={styles.links}>
+              <button onClick={() => setMode('login')} style={styles.link}>
+                Already have an account? Sign in
+              </button>
+              <button onClick={() => setMode('signup')} style={styles.link}>
+                Create new company instead
+              </button>
+            </div>
           </>
         )}
         

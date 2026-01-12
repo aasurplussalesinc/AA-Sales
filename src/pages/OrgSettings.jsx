@@ -3,12 +3,13 @@ import { useAuth } from '../OrgAuthContext';
 import { OrgDB } from '../orgDb';
 
 export default function OrgSettings() {
-  const { organization, userRole, subscriptionStatus, refreshOrganization, inviteUser, isOwnerOrg } = useAuth();
+  const { organization, userRole, subscriptionStatus, refreshOrganization, isOwnerOrg } = useAuth();
   const [members, setMembers] = useState([]);
+  const [inviteCodes, setInviteCodes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState('staff');
-  const [inviting, setInviting] = useState(false);
+  const [inviteMaxUses, setInviteMaxUses] = useState(1);
+  const [creating, setCreating] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   
@@ -27,8 +28,12 @@ export default function OrgSettings() {
     if (!organization) return;
     
     try {
-      const memberList = await OrgDB.getOrganizationMembers(organization.id);
+      const [memberList, codeList] = await Promise.all([
+        OrgDB.getOrganizationMembers(organization.id),
+        OrgDB.getInviteCodesByOrg(organization.id)
+      ]);
       setMembers(memberList);
+      setInviteCodes(codeList.sort((a, b) => b.createdAt - a.createdAt));
       
       setOrgName(organization.name || '');
       setOrgEmail(organization.email || '');
@@ -41,25 +46,33 @@ export default function OrgSettings() {
     }
   };
 
-  const handleInvite = async (e) => {
+  const handleCreateInviteCode = async (e) => {
     e.preventDefault();
-    if (!inviteEmail.trim()) return;
     
-    setInviting(true);
+    setCreating(true);
     setError('');
     setMessage('');
     
     try {
-      const invitation = await inviteUser(inviteEmail.trim(), inviteRole);
-      setMessage(`Invitation sent to ${inviteEmail}!`);
-      setInviteEmail('');
-      
-      // In a real app, you'd send an email here with the invite link
-      console.log('Invite token:', invitation.token);
+      const inviteCode = await OrgDB.createInviteCode(organization.id, inviteRole, inviteMaxUses);
+      setMessage(`Invite code created: ${inviteCode.code}`);
+      loadData();
     } catch (err) {
-      setError(err.message || 'Failed to send invitation');
+      setError(err.message || 'Failed to create invite code');
     } finally {
-      setInviting(false);
+      setCreating(false);
+    }
+  };
+
+  const handleRevokeCode = async (code) => {
+    if (!confirm(`Revoke invite code ${code}?`)) return;
+    
+    try {
+      await OrgDB.revokeInviteCode(code);
+      setMessage('Invite code revoked');
+      loadData();
+    } catch (err) {
+      setError('Failed to revoke code');
     }
   };
 
@@ -308,21 +321,12 @@ export default function OrgSettings() {
         </table>
       </div>
 
-      {/* Invite User */}
+      {/* Invite Codes */}
       {isAdmin && (
         <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
-          <h3 style={{ marginBottom: 15 }}>Invite Team Member</h3>
+          <h3 style={{ marginBottom: 15 }}>Invite Codes</h3>
           
-          <form onSubmit={handleInvite} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="Email address"
-              className="form-input"
-              style={{ flex: 1, minWidth: 200 }}
-              required
-            />
+          <form onSubmit={handleCreateInviteCode} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
             <select
               value={inviteRole}
               onChange={(e) => setInviteRole(e.target.value)}
@@ -332,14 +336,85 @@ export default function OrgSettings() {
               <option value="manager">Manager</option>
               <option value="admin">Admin</option>
             </select>
-            <button type="submit" className="btn btn-primary" disabled={inviting}>
-              {inviting ? 'Sending...' : '📧 Send Invite'}
+            <select
+              value={inviteMaxUses}
+              onChange={(e) => setInviteMaxUses(parseInt(e.target.value))}
+              className="form-input"
+            >
+              <option value={1}>Single use</option>
+              <option value={5}>5 uses</option>
+              <option value={10}>10 uses</option>
+              <option value={100}>Unlimited (100)</option>
+            </select>
+            <button type="submit" className="btn btn-primary" disabled={creating}>
+              {creating ? 'Creating...' : '🎟️ Generate Code'}
             </button>
           </form>
           
-          <p style={{ marginTop: 10, fontSize: 13, color: '#666' }}>
-            The invited user will receive an email with instructions to join your organization.
+          <p style={{ fontSize: 13, color: '#666', marginBottom: 15 }}>
+            Share the invite code with employees. They enter it when signing up to join your organization.
           </p>
+          
+          {/* Active Invite Codes */}
+          {inviteCodes.length > 0 && (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f5f5f5' }}>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Code</th>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Role</th>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Uses</th>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Status</th>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Expires</th>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inviteCodes.map(code => (
+                  <tr key={code.code} style={{ borderBottom: '1px solid #eee' }}>
+                    <td style={{ padding: 10 }}>
+                      <code style={{ 
+                        background: '#f0f0f0', 
+                        padding: '4px 8px', 
+                        borderRadius: 4,
+                        fontSize: 14,
+                        fontWeight: 600
+                      }}>
+                        {code.code}
+                      </code>
+                    </td>
+                    <td style={{ padding: 10 }}>{code.role}</td>
+                    <td style={{ padding: 10 }}>{code.uses} / {code.maxUses}</td>
+                    <td style={{ padding: 10 }}>
+                      <span style={{
+                        padding: '3px 8px',
+                        borderRadius: 4,
+                        fontSize: 11,
+                        background: code.status === 'active' ? '#d4edda' : 
+                                   code.status === 'exhausted' ? '#fff3cd' : '#f8d7da',
+                        color: code.status === 'active' ? '#155724' : 
+                               code.status === 'exhausted' ? '#856404' : '#721c24'
+                      }}>
+                        {code.status}
+                      </span>
+                    </td>
+                    <td style={{ padding: 10, fontSize: 12, color: '#666' }}>
+                      {new Date(code.expiresAt).toLocaleDateString()}
+                    </td>
+                    <td style={{ padding: 10 }}>
+                      {code.status === 'active' && (
+                        <button
+                          className="btn btn-danger btn-sm"
+                          onClick={() => handleRevokeCode(code.code)}
+                        >
+                          Revoke
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 

@@ -142,6 +142,19 @@ export function AuthProvider({ children }) {
     return result;
   };
 
+  const signupWithInviteCode = async (email, password, inviteCode) => {
+    // Create user account
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    
+    // Use invite code to join organization
+    await OrgDB.useInviteCode(inviteCode, result.user.uid, email);
+    
+    // Load the org
+    await loadUserOrganizations(result.user.uid);
+    
+    return result;
+  };
+
   const logout = async () => {
     localStorage.removeItem('selectedOrgId');
     OrgDB.clearCurrentOrg();
@@ -183,6 +196,7 @@ export function AuthProvider({ children }) {
     loading,
     login,
     signup,
+    signupWithInviteCode,
     logout,
     resetPassword,
     switchOrganization,

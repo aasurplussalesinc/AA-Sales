@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../OrgAuthContext';
 
 export default function Login() {
-  const [mode, setMode] = useState('login'); // login, signup, reset, select-org
+  const [mode, setMode] = useState('login'); // login, signup, reset, select-org, create-org
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -11,7 +11,14 @@ export default function Login() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   
-  const { login, signup, resetPassword, organizations, selectOrganization } = useAuth();
+  const { login, signup, resetPassword, organizations, selectOrganization, user, createOrganizationForCurrentUser } = useAuth();
+
+  // If user is logged in but has no organizations, show create-org screen
+  useEffect(() => {
+    if (user && organizations.length === 0) {
+      setMode('create-org');
+    }
+  }, [user, organizations]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -20,16 +27,40 @@ export default function Login() {
     
     try {
       await login(email, password);
-      // Auth context will handle org selection
+      // Auth context will handle org selection or show create-org
     } catch (err) {
       console.error('Login error:', err);
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
         setError('Invalid email or password');
       } else if (err.code === 'auth/invalid-email') {
         setError('Invalid email address');
+      } else if (err.code === 'auth/invalid-credential') {
+        setError('Invalid email or password');
       } else {
         setError('Failed to sign in. Please try again.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCreateOrgForExistingUser = async (e) => {
+    e.preventDefault();
+    setError('');
+    
+    if (!companyName.trim()) {
+      setError('Company name is required');
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      await createOrganizationForCurrentUser(companyName.trim());
+      // Auth context will handle org selection
+    } catch (err) {
+      console.error('Create org error:', err);
+      setError(err.message || 'Failed to create organization');
     } finally {
       setLoading(false);
     }
@@ -100,6 +131,43 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  // Create organization screen for existing users with no org
+  if (mode === 'create-org') {
+    return (
+      <div style={styles.container}>
+        <div style={styles.card}>
+          <h1 style={styles.logo}>📦 Warehouse Manager</h1>
+          <h2 style={styles.title}>Create Your Organization</h2>
+          <p style={styles.subtitle}>Welcome! Set up your company to get started.</p>
+          
+          {error && <div style={styles.error}>{error}</div>}
+          
+          <form onSubmit={handleCreateOrgForExistingUser}>
+            <div style={styles.inputGroup}>
+              <label style={styles.label}>Company Name</label>
+              <input
+                type="text"
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                style={styles.input}
+                placeholder="AA Surplus Sales"
+                required
+                disabled={loading}
+              />
+              <p style={{ fontSize: 12, color: '#666', marginTop: 5 }}>
+                Tip: Use "AA Surplus Sales" for owner access
+              </p>
+            </div>
+            
+            <button type="submit" style={styles.button} disabled={loading}>
+              {loading ? 'Creating...' : 'Create Organization'}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   // Organization selection screen (shown when user has multiple orgs)
   if (mode === 'select-org' || (organizations.length > 1 && mode === 'login')) {

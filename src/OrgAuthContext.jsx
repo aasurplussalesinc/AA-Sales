@@ -113,6 +113,19 @@ export function AuthProvider({ children }) {
     return result;
   };
 
+  // Create organization for existing user (no new Firebase account needed)
+  const createOrganizationForCurrentUser = async (companyName) => {
+    if (!user) throw new Error('Must be logged in');
+    
+    const orgId = await OrgDB.createOrganization({
+      name: companyName,
+      email: user.email
+    });
+    
+    await loadUserOrganizations(user.uid);
+    return orgId;
+  };
+
   const signup = async (email, password, companyName) => {
     // Create user account
     const result = await createUserWithEmailAndPassword(auth, email, password);
@@ -177,7 +190,8 @@ export function AuthProvider({ children }) {
     inviteUser,
     isOwnerOrg,
     selectOrganization,
-    loadUserOrganizations
+    loadUserOrganizations,
+    createOrganizationForCurrentUser
   };
 
   return (

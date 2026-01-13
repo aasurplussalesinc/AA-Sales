@@ -13,6 +13,7 @@ export default function Customers() {
   const [showCreate, setShowCreate] = useState(false);
   const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState('company'); // company, customerName, location
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);
   const fileInputRef = useRef(null);
@@ -271,12 +272,27 @@ export default function Customers() {
     document.body.removeChild(link);
   };
 
-  const filteredCustomers = customers.filter(c =>
-    !search ||
-    c.company?.toLowerCase().includes(search.toLowerCase()) ||
-    c.customerName?.toLowerCase().includes(search.toLowerCase()) ||
-    c.email?.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredCustomers = customers
+    .filter(c =>
+      !search ||
+      c.company?.toLowerCase().includes(search.toLowerCase()) ||
+      c.customerName?.toLowerCase().includes(search.toLowerCase()) ||
+      c.email?.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'customerName':
+          return (a.customerName || '').localeCompare(b.customerName || '');
+        case 'location':
+          // Sort by state, then city
+          const aLocation = `${a.state || ''} ${a.city || ''}`.trim();
+          const bLocation = `${b.state || ''} ${b.city || ''}`.trim();
+          return aLocation.localeCompare(bLocation);
+        case 'company':
+        default:
+          return (a.company || '').localeCompare(b.company || '');
+      }
+    });
 
   const getStatusColor = (status) => {
     const colors = {
@@ -1079,16 +1095,34 @@ export default function Customers() {
         </div>
       </div>
 
-      {/* Search */}
-      <div style={{ marginBottom: 20 }}>
+      {/* Search and Sort */}
+      <div style={{ marginBottom: 20, display: 'flex', gap: 15, alignItems: 'center', flexWrap: 'wrap' }}>
         <input
           type="text"
           className="form-input"
           placeholder="Search customers..."
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={{ maxWidth: 400, width: '100%' }}
+          style={{ maxWidth: 400, width: '100%', flex: 1 }}
         />
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <label style={{ fontWeight: 500, fontSize: 14 }}>Sort by:</label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            style={{
+              padding: '8px 12px',
+              borderRadius: 6,
+              border: '1px solid #ddd',
+              fontSize: 14
+            }}
+          >
+            <option value="company">Company (A-Z)</option>
+            <option value="customerName">Customer Name (A-Z)</option>
+            <option value="location">Location (State/City)</option>
+          </select>
+        </div>
       </div>
 
       {/* Create Customer Modal */}

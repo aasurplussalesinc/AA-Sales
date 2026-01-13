@@ -11,6 +11,7 @@ export default function Locations() {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [selectedLocations, setSelectedLocations] = useState([]);
+  const [sortBy, setSortBy] = useState('warehouse'); // warehouse, rack, letter, shelf
   const fileInputRef = useRef(null);
 
   // Dropdown options
@@ -29,25 +30,45 @@ export default function Locations() {
       DB.getItems()
     ]);
     
-    locs.sort((a, b) => {
-      const aWarehouse = a.warehouse || '';
-      const bWarehouse = b.warehouse || '';
-      const aRack = a.rack || '';
-      const bRack = b.rack || '';
-      const aLetter = a.letter || '';
-      const bLetter = b.letter || '';
-      const aShelf = a.shelf || '';
-      const bShelf = b.shelf || '';
-      
-      if (aWarehouse !== bWarehouse) return aWarehouse.localeCompare(bWarehouse);
-      if (aRack !== bRack) return aRack.localeCompare(bRack);
-      if (aLetter !== bLetter) return aLetter.localeCompare(bLetter);
-      return aShelf.localeCompare(bShelf);
-    });
-    
     setLocations(locs);
     setItems(itms);
   };
+
+  // Sort locations based on sortBy
+  const sortedLocations = [...locations].sort((a, b) => {
+    const aWarehouse = a.warehouse || '';
+    const bWarehouse = b.warehouse || '';
+    const aRack = a.rack || '';
+    const bRack = b.rack || '';
+    const aLetter = a.letter || '';
+    const bLetter = b.letter || '';
+    const aShelf = a.shelf || '';
+    const bShelf = b.shelf || '';
+    
+    switch (sortBy) {
+      case 'rack':
+        if (aRack !== bRack) return aRack.localeCompare(bRack);
+        if (aWarehouse !== bWarehouse) return aWarehouse.localeCompare(bWarehouse);
+        if (aLetter !== bLetter) return aLetter.localeCompare(bLetter);
+        return aShelf.localeCompare(bShelf);
+      case 'letter':
+        if (aLetter !== bLetter) return aLetter.localeCompare(bLetter);
+        if (aWarehouse !== bWarehouse) return aWarehouse.localeCompare(bWarehouse);
+        if (aRack !== bRack) return aRack.localeCompare(bRack);
+        return aShelf.localeCompare(bShelf);
+      case 'shelf':
+        if (aShelf !== bShelf) return aShelf.localeCompare(bShelf);
+        if (aWarehouse !== bWarehouse) return aWarehouse.localeCompare(bWarehouse);
+        if (aRack !== bRack) return aRack.localeCompare(bRack);
+        return aLetter.localeCompare(bLetter);
+      case 'warehouse':
+      default:
+        if (aWarehouse !== bWarehouse) return aWarehouse.localeCompare(bWarehouse);
+        if (aRack !== bRack) return aRack.localeCompare(bRack);
+        if (aLetter !== bLetter) return aLetter.localeCompare(bLetter);
+        return aShelf.localeCompare(bShelf);
+    }
+  });
 
   // Format location code for display
   const formatLocation = (loc) => {
@@ -556,6 +577,26 @@ W2,2,C,3`;
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 10 }}>
           <h3 style={{ margin: 0 }}>Total Locations: {locations.length}</h3>
           
+          {/* Sort dropdown */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <label style={{ fontWeight: 500, fontSize: 14 }}>Sort by:</label>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 6,
+                border: '1px solid #ddd',
+                fontSize: 14
+              }}
+            >
+              <option value="warehouse">Warehouse (W)</option>
+              <option value="rack">Rack (R)</option>
+              <option value="letter">Letter (A-Z)</option>
+              <option value="shelf">Shelf (#)</option>
+            </select>
+          </div>
+          
           {/* Bulk actions */}
           {selectedLocations.length > 0 && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
@@ -584,7 +625,7 @@ W2,2,C,3`;
                 <th style={{ width: 40 }}>
                   <input
                     type="checkbox"
-                    checked={selectedLocations.length === locations.length && locations.length > 0}
+                    checked={selectedLocations.length === sortedLocations.length && sortedLocations.length > 0}
                     onChange={(e) => e.target.checked ? selectAllLocations() : clearSelection()}
                   />
                 </th>
@@ -598,7 +639,7 @@ W2,2,C,3`;
               </tr>
             </thead>
             <tbody>
-              {locations.map(loc => (
+              {sortedLocations.map(loc => (
                 <tr 
                   key={loc.id} 
                   style={{ 
@@ -655,7 +696,7 @@ W2,2,C,3`;
             </tbody>
           </table>
 
-          {locations.length === 0 && (
+          {sortedLocations.length === 0 && (
             <div className="empty-state">
               <p>No locations added yet. Create your first location above.</p>
             </div>

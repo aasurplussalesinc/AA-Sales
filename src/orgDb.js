@@ -932,17 +932,38 @@ export const OrgDB = {
     });
   },
 
-  async getMovements(limitCount = 100) {
+  async getMovements(limitCount = 500) {
     if (!currentOrgId) return [];
     
-    const q = query(
-      collection(db, 'movements'),
-      where('orgId', '==', currentOrgId),
-      orderBy('timestamp', 'desc'),
-      limit(limitCount)
-    );
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    try {
+      // Try with ordering first
+      const q = query(
+        collection(db, 'movements'),
+        where('orgId', '==', currentOrgId),
+        orderBy('timestamp', 'desc'),
+        limit(limitCount)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      // If index doesn't exist, try without ordering
+      console.warn('Movements query failed, trying without order:', error.message);
+      try {
+        const q = query(
+          collection(db, 'movements'),
+          where('orgId', '==', currentOrgId),
+          limit(limitCount)
+        );
+        const snapshot = await getDocs(q);
+        const movements = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // Sort in memory
+        movements.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        return movements;
+      } catch (err) {
+        console.error('Error getting movements:', err);
+        return [];
+      }
+    }
   },
   
   // ==================== COUNTS (ORG-SCOPED) ====================
@@ -973,82 +994,101 @@ export const OrgDB = {
   // ==================== DASHBOARD STATS ====================
   
   async getDashboardStats() {
-    const [items, locations, movements] = await Promise.all([
-      this.getItems(),
-      this.getLocations(),
-      this.getMovements()
-    ]);
-    
-    const now = Date.now();
-    const last30Days = now - (30 * 24 * 60 * 60 * 1000);
-    const last7Days = now - (7 * 24 * 60 * 60 * 1000);
-    
-    const recentMovements = movements.filter(m => m.timestamp >= last30Days);
-    const weekMovements = movements.filter(m => m.timestamp >= last7Days);
-    
-    // Low stock items (using item's own threshold, or default 10)
-    const lowStockItems = items.filter(i => {
-      const stock = i.stock || 0;
-      const threshold = i.lowStockThreshold || 10;
-      return stock <= threshold && stock > 0;
-    });
-    
-    // Items needing reorder (above low stock but at/below reorder point)
-    const reorderItems = items.filter(i => {
-      const stock = i.stock || 0;
-      const threshold = i.lowStockThreshold || 10;
-      const reorderPoint = i.reorderPoint || 0;
-      return stock > threshold && stock <= reorderPoint && reorderPoint > 0;
-    });
-    
-    // Top picked items (last 30 days)
-    const pickedItems = {};
-    recentMovements.filter(m => m.type === 'PICK').forEach(m => {
-      if (!pickedItems[m.itemId]) {
-        pickedItems[m.itemId] = { 
-          itemId: m.itemId, 
-          itemName: m.itemName, 
-          totalPicked: 0 
-        };
+    try {
+      const [items, locations, movements] = await Promise.all([
+        this.getItems(),
+        this.getLocations(),
+        this.getMovements()
+      ]);
+      
+      const now = Date.now();
+      const last30Days = now - (30 * 24 * 60 * 60 * 1000);
+      const last7Days = now - (7 * 24 * 60 * 60 * 1000);
+      
+      const recentMovements = (movements || []).filter(m => m.timestamp >= last30Days);
+      const weekMovements = (movements || []).filter(m => m.timestamp >= last7Days);
+      
+      // Low stock items (using item's own threshold, or default 10)
+      const lowStockItems = (items || []).filter(i => {
+        const stock = i.stock || 0;
+        const threshold = i.lowStockThreshold || 10;
+        return stock <= threshold && stock > 0;
+      });
+      
+      // Items needing reorder (above low stock but at/below reorder point)
+      const reorderItems = (items || []).filter(i => {
+        const stock = i.stock || 0;
+        const threshold = i.lowStockThreshold || 10;
+        const reorderPoint = i.reorderPoint || 0;
+        return stock > threshold && stock <= reorderPoint && reorderPoint > 0;
+      });
+      
+      // Top picked items (last 30 days)
+      const pickedItems = {};
+      recentMovements.filter(m => m.type === 'PICK').forEach(m => {
+        if (!pickedItems[m.itemId]) {
+          pickedItems[m.itemId] = { 
+            itemId: m.itemId, 
+            itemName: m.itemName, 
+            totalPicked: 0 
+          };
+        }
+        pickedItems[m.itemId].totalPicked += m.quantity || 0;
+      });
+      
+      const topPicked = Object.values(pickedItems)
+        .sort((a, b) => b.totalPicked - a.totalPicked)
+        .slice(0, 10);
+      
+      // Movement trends by day (last 7 days)
+      const dailyMovements = {};
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(now - (i * 24 * 60 * 60 * 1000));
+        const dateKey = date.toISOString().slice(0, 10);
+        dailyMovements[dateKey] = { date: dateKey, picks: 0, adds: 0, moves: 0 };
       }
-      pickedItems[m.itemId].totalPicked += m.quantity || 0;
-    });
-    
-    const topPicked = Object.values(pickedItems)
-      .sort((a, b) => b.totalPicked - a.totalPicked)
-      .slice(0, 10);
-    
-    // Movement trends by day (last 7 days)
-    const dailyMovements = {};
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date(now - (i * 24 * 60 * 60 * 1000));
-      const dateKey = date.toISOString().slice(0, 10);
-      dailyMovements[dateKey] = { date: dateKey, picks: 0, adds: 0, moves: 0 };
+      
+      weekMovements.forEach(m => {
+        const dateKey = new Date(m.timestamp).toISOString().slice(0, 10);
+        if (dailyMovements[dateKey]) {
+          if (m.type === 'PICK') dailyMovements[dateKey].picks++;
+          else if (m.type === 'ADD' || m.type === 'RECEIVE') dailyMovements[dateKey].adds++;
+          else if (m.type === 'MOVE') dailyMovements[dateKey].moves++;
+        }
+      });
+      
+      return {
+        totalItems: (items || []).length,
+        totalLocations: (locations || []).length,
+        totalStock: (items || []).reduce((sum, i) => sum + (i.stock || 0), 0),
+        lowStockItems: lowStockItems.length,
+        lowStockItemsList: lowStockItems.slice(0, 10),
+        reorderItems: reorderItems.length,
+        reorderItemsList: reorderItems.slice(0, 10),
+        outOfStockItems: (items || []).filter(i => (i.stock || 0) === 0).length,
+        movementsLast30Days: recentMovements.length,
+        movementsLast7Days: weekMovements.length,
+        topPickedItems: topPicked,
+        dailyMovements: Object.values(dailyMovements)
+      };
+    } catch (error) {
+      console.error('Error getting dashboard stats:', error);
+      // Return default empty stats
+      return {
+        totalItems: 0,
+        totalLocations: 0,
+        totalStock: 0,
+        lowStockItems: 0,
+        lowStockItemsList: [],
+        reorderItems: 0,
+        reorderItemsList: [],
+        outOfStockItems: 0,
+        movementsLast30Days: 0,
+        movementsLast7Days: 0,
+        topPickedItems: [],
+        dailyMovements: []
+      };
     }
-    
-    weekMovements.forEach(m => {
-      const dateKey = new Date(m.timestamp).toISOString().slice(0, 10);
-      if (dailyMovements[dateKey]) {
-        if (m.type === 'PICK') dailyMovements[dateKey].picks++;
-        else if (m.type === 'ADD' || m.type === 'RECEIVE') dailyMovements[dateKey].adds++;
-        else if (m.type === 'MOVE') dailyMovements[dateKey].moves++;
-      }
-    });
-    
-    return {
-      totalItems: items.length,
-      totalLocations: locations.length,
-      totalStock: items.reduce((sum, i) => sum + (i.stock || 0), 0),
-      lowStockItems: lowStockItems.length,
-      lowStockItemsList: lowStockItems.slice(0, 10), // Top 10 for display
-      reorderItems: reorderItems.length,
-      reorderItemsList: reorderItems.slice(0, 10),
-      outOfStockItems: items.filter(i => (i.stock || 0) === 0).length,
-      movementsLast30Days: recentMovements.length,
-      movementsLast7Days: weekMovements.length,
-      topPickedItems: topPicked,
-      dailyMovements: Object.values(dailyMovements)
-    };
   }
 };
 

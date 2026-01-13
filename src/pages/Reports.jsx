@@ -2,8 +2,12 @@ import { useState, useEffect } from 'react';
 import { OrgDB as DB } from '../orgDb';
 
 export default function Reports() {
-  const [activeTab, setActiveTab] = useState('deadstock');
+  const [activeTab, setActiveTab] = useState('summary');
   const [loading, setLoading] = useState(false);
+  
+  // Summary data
+  const [items, setItems] = useState([]);
+  const [locations, setLocations] = useState([]);
   
   // Dead Stock
   const [deadStockDays, setDeadStockDays] = useState(90);
@@ -24,13 +28,68 @@ export default function Reports() {
   const [movements, setMovements] = useState([]);
 
   useEffect(() => {
-    loadMovements();
+    loadAllData();
   }, []);
 
-  const loadMovements = async () => {
-    const data = await DB.getMovements();
-    setMovements(data);
+  const loadAllData = async () => {
+    setLoading(true);
+    const [itemsData, locsData, movementsData] = await Promise.all([
+      DB.getItems(),
+      DB.getLocations(),
+      DB.getMovements()
+    ]);
+    setItems(itemsData);
+    setLocations(locsData);
+    setMovements(movementsData);
+    setLoading(false);
   };
+
+  // Calculate summary stats
+  const summaryStats = {
+    totalItems: items.length,
+    totalStock: items.reduce((sum, i) => sum + (i.stock || 0), 0),
+    totalValue: items.reduce((sum, i) => sum + ((i.stock || 0) * (i.price || 0)), 0),
+    avgItemValue: items.length > 0 ? items.reduce((sum, i) => sum + (i.price || 0), 0) / items.length : 0,
+    outOfStock: items.filter(i => (i.stock || 0) === 0).length,
+    lowStock: items.filter(i => {
+      const stock = i.stock || 0;
+      const threshold = i.lowStockThreshold || 10;
+      return stock > 0 && stock <= threshold;
+    }).length,
+    needsReorder: items.filter(i => {
+      const stock = i.stock || 0;
+      const reorderPoint = i.reorderPoint || 0;
+      return stock <= reorderPoint && reorderPoint > 0;
+    }).length,
+    categories: [...new Set(items.map(i => i.category).filter(Boolean))].length,
+    totalLocations: locations.length
+  };
+
+  // Value by category
+  const valueByCategory = items.reduce((acc, item) => {
+    const cat = item.category || 'Uncategorized';
+    if (!acc[cat]) acc[cat] = { category: cat, items: 0, stock: 0, value: 0 };
+    acc[cat].items++;
+    acc[cat].stock += item.stock || 0;
+    acc[cat].value += (item.stock || 0) * (item.price || 0);
+    return acc;
+  }, {});
+  const categoryData = Object.values(valueByCategory).sort((a, b) => b.value - a.value);
+
+  // Top items by value
+  const topValueItems = [...items]
+    .map(i => ({ ...i, totalValue: (i.stock || 0) * (i.price || 0) }))
+    .sort((a, b) => b.totalValue - a.totalValue)
+    .slice(0, 15);
+
+  // Low stock items
+  const lowStockItems = items
+    .filter(i => {
+      const stock = i.stock || 0;
+      const threshold = i.lowStockThreshold || 10;
+      return stock <= threshold;
+    })
+    .sort((a, b) => (a.stock || 0) - (b.stock || 0));
 
   const loadDeadStock = async () => {
     setLoading(true);
@@ -146,9 +205,12 @@ export default function Reports() {
   };
 
   const tabs = [
+    { id: 'summary', label: '📊 Summary' },
+    { id: 'value', label: '💰 Inventory Value' },
+    { id: 'lowstock', label: '⚠️ Low Stock' },
     { id: 'deadstock', label: '💀 Dead Stock' },
-    { id: 'turnover', label: '📈 Inventory Turnover' },
-    { id: 'custom', label: '📋 Custom Report' }
+    { id: 'turnover', label: '📈 Turnover' },
+    { id: 'custom', label: '📋 Custom' }
   ];
 
   return (
@@ -156,7 +218,7 @@ export default function Reports() {
       <h2 style={{ marginBottom: 20 }}>Reports</h2>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 5, marginBottom: 20, borderBottom: '2px solid #eee', paddingBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 5, marginBottom: 20, borderBottom: '2px solid #eee', paddingBottom: 10, flexWrap: 'wrap' }}>
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -175,6 +237,269 @@ export default function Reports() {
           </button>
         ))}
       </div>
+
+      {/* Summary Tab */}
+      {activeTab === 'summary' && (
+        <div>
+          {/* KPI Cards */}
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
+            gap: 15, 
+            marginBottom: 20 
+          }}>
+            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#2d5f3f' }}>
+                {summaryStats.totalItems.toLocaleString()}
+              </div>
+              <div style={{ color: '#666', fontSize: 13 }}>Total Items</div>
+            </div>
+            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#2d5f3f' }}>
+                {summaryStats.totalStock.toLocaleString()}
+              </div>
+              <div style={{ color: '#666', fontSize: 13 }}>Total Units</div>
+            </div>
+            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#4CAF50' }}>
+                ${summaryStats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+              <div style={{ color: '#666', fontSize: 13 }}>Total Value</div>
+            </div>
+            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center', borderLeft: '4px solid #f44336' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#f44336' }}>
+                {summaryStats.outOfStock}
+              </div>
+              <div style={{ color: '#666', fontSize: 13 }}>Out of Stock</div>
+            </div>
+            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center', borderLeft: '4px solid #ff9800' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#ff9800' }}>
+                {summaryStats.lowStock}
+              </div>
+              <div style={{ color: '#666', fontSize: 13 }}>Low Stock</div>
+            </div>
+            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: '#2196F3' }}>
+                {summaryStats.categories}
+              </div>
+              <div style={{ color: '#666', fontSize: 13 }}>Categories</div>
+            </div>
+          </div>
+
+          {/* Category Breakdown */}
+          <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
+            <h3 style={{ marginBottom: 15 }}>📊 Value by Category</h3>
+            {categoryData.length === 0 ? (
+              <p style={{ color: '#666' }}>No category data available</p>
+            ) : (
+              <div>
+                {categoryData.slice(0, 10).map((cat, idx) => {
+                  const maxValue = categoryData[0]?.value || 1;
+                  return (
+                    <div key={cat.category} style={{ marginBottom: 12 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontWeight: 500 }}>{cat.category}</span>
+                        <span style={{ color: '#666', fontSize: 13 }}>
+                          {cat.items} items | {cat.stock} units | ${cat.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                      <div style={{ background: '#eee', borderRadius: 4, height: 20, overflow: 'hidden' }}>
+                        <div style={{
+                          width: `${(cat.value / maxValue) * 100}%`,
+                          height: '100%',
+                          background: `hsl(${120 - (idx * 12)}, 60%, 45%)`,
+                          borderRadius: 4
+                        }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Value Report Tab */}
+      {activeTab === 'value' && (
+        <div>
+          <div style={{ background: 'white', padding: 20, borderRadius: 8, marginBottom: 20 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <h3>💰 Inventory Value Report</h3>
+              <button
+                className="btn btn-primary"
+                onClick={() => exportToCSV(
+                  topValueItems,
+                  'inventory-value-report',
+                  ['SKU', 'Name', 'Category', 'Stock', 'Unit Price', 'Total Value'],
+                  (i) => [i.partNumber || '', i.name || '', i.category || '', i.stock || 0, i.price || 0, i.totalValue.toFixed(2)]
+                )}
+              >
+                📥 Export CSV
+              </button>
+            </div>
+            
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+              gap: 15,
+              marginBottom: 20,
+              padding: 15,
+              background: '#f9f9f9',
+              borderRadius: 8
+            }}>
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#4CAF50' }}>
+                  ${summaryStats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+                <div style={{ color: '#666', fontSize: 12 }}>Total Inventory Value</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: '#2196F3' }}>
+                  ${summaryStats.avgItemValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </div>
+                <div style={{ color: '#666', fontSize: 12 }}>Average Item Price</div>
+              </div>
+            </div>
+
+            <h4 style={{ marginBottom: 10 }}>Top 15 Items by Value</h4>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f5f5f5' }}>
+                  <th style={{ padding: 10, textAlign: 'left' }}>SKU</th>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Item Name</th>
+                  <th style={{ padding: 10, textAlign: 'left' }}>Category</th>
+                  <th style={{ padding: 10, textAlign: 'right' }}>Stock</th>
+                  <th style={{ padding: 10, textAlign: 'right' }}>Unit Price</th>
+                  <th style={{ padding: 10, textAlign: 'right' }}>Total Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topValueItems.map((item, idx) => (
+                  <tr key={item.id} style={{ borderBottom: '1px solid #eee', background: idx < 3 ? '#fffde7' : 'white' }}>
+                    <td style={{ padding: 10, fontFamily: 'monospace' }}>{item.partNumber || '-'}</td>
+                    <td style={{ padding: 10 }}>{item.name}</td>
+                    <td style={{ padding: 10, color: '#666' }}>{item.category || '-'}</td>
+                    <td style={{ padding: 10, textAlign: 'right' }}>{item.stock || 0}</td>
+                    <td style={{ padding: 10, textAlign: 'right' }}>${(item.price || 0).toFixed(2)}</td>
+                    <td style={{ padding: 10, textAlign: 'right', fontWeight: 600, color: '#4CAF50' }}>
+                      ${item.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Low Stock Tab */}
+      {activeTab === 'lowstock' && (
+        <div>
+          <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+              <h3>⚠️ Low Stock Report</h3>
+              <button
+                className="btn btn-primary"
+                onClick={() => exportToCSV(
+                  lowStockItems,
+                  'low-stock-report',
+                  ['SKU', 'Name', 'Category', 'Current Stock', 'Low Threshold', 'Reorder Point', 'Status'],
+                  (i) => [
+                    i.partNumber || '', 
+                    i.name || '', 
+                    i.category || '', 
+                    i.stock || 0, 
+                    i.lowStockThreshold || 10,
+                    i.reorderPoint || 0,
+                    (i.stock || 0) === 0 ? 'OUT OF STOCK' : (i.stock || 0) <= (i.lowStockThreshold || 10) ? 'LOW' : 'REORDER'
+                  ]
+                )}
+              >
+                📥 Export CSV
+              </button>
+            </div>
+
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+              gap: 15,
+              marginBottom: 20
+            }}>
+              <div style={{ background: '#ffebee', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#c62828' }}>
+                  {items.filter(i => (i.stock || 0) === 0).length}
+                </div>
+                <div style={{ color: '#c62828', fontSize: 12 }}>Out of Stock</div>
+              </div>
+              <div style={{ background: '#fff3e0', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#e65100' }}>
+                  {summaryStats.lowStock}
+                </div>
+                <div style={{ color: '#e65100', fontSize: 12 }}>Low Stock</div>
+              </div>
+              <div style={{ background: '#e3f2fd', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: '#1565c0' }}>
+                  {summaryStats.needsReorder}
+                </div>
+                <div style={{ color: '#1565c0', fontSize: 12 }}>Needs Reorder</div>
+              </div>
+            </div>
+
+            {lowStockItems.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                🎉 All items are well stocked!
+              </div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#f5f5f5' }}>
+                    <th style={{ padding: 10, textAlign: 'left' }}>Status</th>
+                    <th style={{ padding: 10, textAlign: 'left' }}>SKU</th>
+                    <th style={{ padding: 10, textAlign: 'left' }}>Item Name</th>
+                    <th style={{ padding: 10, textAlign: 'right' }}>Stock</th>
+                    <th style={{ padding: 10, textAlign: 'right' }}>Threshold</th>
+                    <th style={{ padding: 10, textAlign: 'right' }}>Reorder At</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lowStockItems.map(item => {
+                    const stock = item.stock || 0;
+                    const isOutOfStock = stock === 0;
+                    const isLow = stock > 0 && stock <= (item.lowStockThreshold || 10);
+                    return (
+                      <tr key={item.id} style={{ 
+                        borderBottom: '1px solid #eee',
+                        background: isOutOfStock ? '#ffebee' : isLow ? '#fff3e0' : 'white'
+                      }}>
+                        <td style={{ padding: 10 }}>
+                          <span style={{
+                            padding: '3px 8px',
+                            borderRadius: 4,
+                            fontSize: 11,
+                            fontWeight: 600,
+                            background: isOutOfStock ? '#f44336' : isLow ? '#ff9800' : '#2196F3',
+                            color: 'white'
+                          }}>
+                            {isOutOfStock ? 'OUT' : isLow ? 'LOW' : 'REORDER'}
+                          </span>
+                        </td>
+                        <td style={{ padding: 10, fontFamily: 'monospace' }}>{item.partNumber || '-'}</td>
+                        <td style={{ padding: 10 }}>{item.name}</td>
+                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 600, color: isOutOfStock ? '#c62828' : '#e65100' }}>
+                          {stock}
+                        </td>
+                        <td style={{ padding: 10, textAlign: 'right', color: '#666' }}>{item.lowStockThreshold || 10}</td>
+                        <td style={{ padding: 10, textAlign: 'right', color: '#666' }}>{item.reorderPoint || '-'}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Dead Stock Tab */}
       {activeTab === 'deadstock' && (

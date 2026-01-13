@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './OrgAuthContext';
+import LandingPage from './pages/LandingPage';
 import OrgLogin from './pages/OrgLogin';
 import SubscriptionRequired from './pages/SubscriptionRequired';
 import OrgSettings from './pages/OrgSettings';
@@ -189,6 +190,12 @@ function AppRoutes() {
 
   return (
     <Routes>
+      {/* Landing page - redirect to dashboard if logged in */}
+      <Route 
+        path="/welcome" 
+        element={user && organization ? <Navigate to="/" replace /> : <LandingPage />} 
+      />
+      
       {/* Public routes */}
       <Route 
         path="/login" 

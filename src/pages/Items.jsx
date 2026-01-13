@@ -19,6 +19,11 @@ export default function Items() {
   
   // Item locations popup state
   const [viewingItemLocations, setViewingItemLocations] = useState(null);
+  
+  // Item history modal state
+  const [viewingItemHistory, setViewingItemHistory] = useState(null);
+  const [itemHistory, setItemHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Add Item modal state
   const [showAddItem, setShowAddItem] = useState(false);
@@ -28,7 +33,9 @@ export default function Items() {
     category: '',
     stock: 0,
     price: 0,
-    location: ''
+    location: '',
+    lowStockThreshold: 10,
+    reorderPoint: 20
   });
 
   // Filter states
@@ -38,6 +45,7 @@ export default function Items() {
     category: '',
     quantity: '',
     location: '',
+    stockStatus: '', // '', 'low', 'reorder', 'ok'
     sortBy: 'sku' // default sort by SKU
   });
   const [showFilters, setShowFilters] = useState(false);
@@ -57,6 +65,58 @@ export default function Items() {
     setLocations(locsData);
     setHasChanges(false);
     setLoading(false);
+  };
+
+  const loadItemHistory = async (item) => {
+    setViewingItemHistory(item);
+    setLoadingHistory(true);
+    try {
+      const history = await DB.getItemHistory(item.id);
+      setItemHistory(history);
+    } catch (error) {
+      console.error('Error loading item history:', error);
+      setItemHistory([]);
+    }
+    setLoadingHistory(false);
+  };
+
+  const formatHistoryEntry = (entry) => {
+    if (entry.historyType === 'movement') {
+      const typeColors = {
+        'PICK': '#f44336',
+        'ADD': '#4CAF50',
+        'MOVE': '#2196F3',
+        'RECEIVE': '#9c27b0',
+        'ADJUST': '#ff9800'
+      };
+      return {
+        icon: entry.type === 'PICK' ? '📤' : entry.type === 'ADD' ? '📥' : entry.type === 'MOVE' ? '🔄' : entry.type === 'RECEIVE' ? '📦' : '✏️',
+        color: typeColors[entry.type] || '#666',
+        title: entry.type,
+        description: entry.type === 'MOVE' 
+          ? `Moved ${entry.quantity} from ${entry.fromLocation} to ${entry.toLocation}`
+          : `${entry.type === 'PICK' ? 'Picked' : 'Added'} ${entry.quantity} ${entry.location ? (entry.type === 'PICK' ? 'from' : 'to') + ' ' + entry.location : ''}`,
+        user: entry.performedBy || 'System',
+        timestamp: entry.timestamp
+      };
+    } else {
+      // Activity log entry
+      const actionIcons = {
+        'ITEM_CREATED': '🆕',
+        'ITEM_UPDATED': '✏️',
+        'ITEM_DELETED': '🗑️',
+        'PRICE_CHANGED': '💰',
+        'STOCK_ADJUSTED': '📊'
+      };
+      return {
+        icon: actionIcons[entry.action] || '📝',
+        color: '#666',
+        title: entry.action?.replace(/_/g, ' ') || 'Activity',
+        description: entry.details?.note || JSON.stringify(entry.details || {}),
+        user: entry.userEmail || 'System',
+        timestamp: entry.timestamp
+      };
+    }
   };
 
   // Get unique categories for dropdown
@@ -105,6 +165,22 @@ export default function Items() {
     // Location filter
     if (filters.location && item.location !== filters.location) {
       return false;
+    }
+    
+    // Stock status filter (low stock, reorder, ok)
+    if (filters.stockStatus) {
+      const stock = item.stock || 0;
+      const lowThreshold = item.lowStockThreshold || 0;
+      const reorderPoint = item.reorderPoint || 0;
+      
+      if (filters.stockStatus === 'low') {
+        if (!(stock <= lowThreshold && lowThreshold > 0)) return false;
+      } else if (filters.stockStatus === 'reorder') {
+        if (!(stock > lowThreshold && stock <= reorderPoint && reorderPoint > 0)) return false;
+      } else if (filters.stockStatus === 'ok') {
+        if (lowThreshold > 0 && stock <= lowThreshold) return false;
+        if (reorderPoint > 0 && stock <= reorderPoint) return false;
+      }
     }
     
     return true;
@@ -206,7 +282,9 @@ export default function Items() {
       category: '',
       stock: 0,
       price: 0,
-      location: ''
+      location: '',
+      lowStockThreshold: 10,
+      reorderPoint: 20
     });
     setShowAddItem(false);
     loadData();
@@ -961,6 +1039,24 @@ export default function Items() {
               </select>
             </div>
             
+            {/* Stock Status filter */}
+            <div>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>
+                Stock Status
+              </label>
+              <select
+                className="form-input"
+                value={filters.stockStatus}
+                onChange={e => setFilters({ ...filters, stockStatus: e.target.value })}
+                style={{ width: '100%' }}
+              >
+                <option value="">All Items</option>
+                <option value="low">🔴 Low Stock</option>
+                <option value="reorder">🟠 Needs Reorder</option>
+                <option value="ok">🟢 Stock OK</option>
+              </select>
+            </div>
+            
             {/* Sort By */}
             <div>
               <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>
@@ -1129,11 +1225,53 @@ export default function Items() {
                 </td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    {/* Low stock indicator */}
+                    {(item.stock || 0) <= (item.lowStockThreshold || 0) && (item.lowStockThreshold || 0) > 0 && (
+                      <span 
+                        title={`Low stock! Below threshold of ${item.lowStockThreshold}`}
+                        style={{
+                          background: '#f44336',
+                          color: 'white',
+                          borderRadius: '50%',
+                          width: 18,
+                          height: 18,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 10,
+                          fontWeight: 'bold'
+                        }}
+                      >!</span>
+                    )}
+                    {(item.stock || 0) > (item.lowStockThreshold || 0) && (item.stock || 0) <= (item.reorderPoint || 0) && (item.reorderPoint || 0) > 0 && (
+                      <span 
+                        title={`Consider reordering - at or below reorder point of ${item.reorderPoint}`}
+                        style={{
+                          background: '#ff9800',
+                          color: 'white',
+                          borderRadius: '50%',
+                          width: 18,
+                          height: 18,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 10,
+                          fontWeight: 'bold'
+                        }}
+                      >⚠</span>
+                    )}
                     <input
                       type="number"
                       value={item.stock || 0}
                       onChange={e => updateItem(item.id, 'stock', e.target.value)}
-                      style={{ width: '60px' }}
+                      style={{ 
+                        width: '60px',
+                        background: (item.stock || 0) <= (item.lowStockThreshold || 0) && (item.lowStockThreshold || 0) > 0 
+                          ? '#ffebee' 
+                          : (item.stock || 0) <= (item.reorderPoint || 0) && (item.reorderPoint || 0) > 0
+                            ? '#fff3e0'
+                            : 'white'
+                      }}
                     />
                     <button
                       onClick={() => setAdjustingItem({ ...item, adjustQty: 1, adjustType: 'add' })}
@@ -1201,6 +1339,14 @@ export default function Items() {
                       style={{ background: '#17a2b8', color: 'white' }}
                     >
                       📍
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      onClick={() => loadItemHistory(item)}
+                      title="View History"
+                      style={{ background: '#9c27b0', color: 'white' }}
+                    >
+                      📜
                     </button>
                     <button
                       className="btn btn-primary btn-sm"
@@ -1319,6 +1465,32 @@ export default function Items() {
                     <option key={loc} value={loc}>{loc}</option>
                   ))}
                 </select>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                <div className="form-group">
+                  <label>Low Stock Alert</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newItem.lowStockThreshold}
+                    onChange={e => setNewItem({ ...newItem, lowStockThreshold: parseInt(e.target.value) || 0 })}
+                    min="0"
+                    title="Alert when stock falls below this number"
+                  />
+                  <small style={{ color: '#666', fontSize: 11 }}>Alert when below this</small>
+                </div>
+                <div className="form-group">
+                  <label>Reorder Point</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newItem.reorderPoint}
+                    onChange={e => setNewItem({ ...newItem, reorderPoint: parseInt(e.target.value) || 0 })}
+                    min="0"
+                    title="Recommended reorder when stock falls to this level"
+                  />
+                  <small style={{ color: '#666', fontSize: 11 }}>Reorder at this level</small>
+                </div>
               </div>
             </div>
             <div className="modal-footer">
@@ -1639,6 +1811,116 @@ export default function Items() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Item History Modal */}
+      {viewingItemHistory && (
+        <div 
+          className="modal-overlay"
+          onClick={() => setViewingItemHistory(null)}
+        >
+          <div 
+            className="modal"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: 600, maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+          >
+            <div className="modal-header">
+              <h2>📜 Item History</h2>
+              <button className="modal-close" onClick={() => setViewingItemHistory(null)}>×</button>
+            </div>
+            
+            <div style={{ padding: '15px 20px', borderBottom: '1px solid #eee', background: '#f9f9f9' }}>
+              <div style={{ fontWeight: 600, fontSize: 16 }}>{viewingItemHistory.name}</div>
+              <div style={{ color: '#666', fontSize: 13 }}>
+                SKU: {viewingItemHistory.partNumber || 'N/A'} | 
+                Current Stock: {viewingItemHistory.stock || 0}
+              </div>
+            </div>
+            
+            <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+              {loadingHistory ? (
+                <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                  Loading history...
+                </div>
+              ) : itemHistory.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                  No history found for this item
+                </div>
+              ) : (
+                <div style={{ position: 'relative' }}>
+                  {/* Timeline line */}
+                  <div style={{
+                    position: 'absolute',
+                    left: 15,
+                    top: 0,
+                    bottom: 0,
+                    width: 2,
+                    background: '#e0e0e0'
+                  }} />
+                  
+                  {itemHistory.map((entry, idx) => {
+                    const formatted = formatHistoryEntry(entry);
+                    return (
+                      <div key={entry.id || idx} style={{ 
+                        display: 'flex', 
+                        gap: 15, 
+                        marginBottom: 20,
+                        position: 'relative'
+                      }}>
+                        {/* Timeline dot */}
+                        <div style={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '50%',
+                          background: formatted.color,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 14,
+                          flexShrink: 0,
+                          zIndex: 1
+                        }}>
+                          {formatted.icon}
+                        </div>
+                        
+                        {/* Content */}
+                        <div style={{ flex: 1 }}>
+                          <div style={{ 
+                            display: 'flex', 
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            marginBottom: 4
+                          }}>
+                            <span style={{ 
+                              fontWeight: 600, 
+                              color: formatted.color,
+                              fontSize: 13
+                            }}>
+                              {formatted.title}
+                            </span>
+                            <span style={{ fontSize: 11, color: '#999' }}>
+                              {new Date(formatted.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>
+                            {formatted.description}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#666' }}>
+                            by {formatted.user}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            
+            <div className="modal-footer">
+              <button className="btn" onClick={() => setViewingItemHistory(null)}>Close</button>
             </div>
           </div>
         </div>

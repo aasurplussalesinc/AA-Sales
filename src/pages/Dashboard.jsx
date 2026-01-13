@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { OrgDB as DB } from '../orgDb';
+import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
@@ -47,15 +48,96 @@ export default function Dashboard() {
           <h3>{stats.outOfStockItems}</h3>
           <p>Out of Stock</p>
         </div>
-        <div className="stat-card" style={{ borderLeft: '4px solid #ff9800' }}>
+        <div className="stat-card" style={{ borderLeft: '4px solid #f44336' }}>
           <h3>{stats.lowStockItems}</h3>
-          <p>Low Stock (≤10)</p>
+          <p>🔴 Low Stock</p>
         </div>
-        <div className="stat-card" style={{ borderLeft: '4px solid #4CAF50' }}>
-          <h3>{stats.movementsLast7Days}</h3>
-          <p>Movements (7 days)</p>
+        <div className="stat-card" style={{ borderLeft: '4px solid #ff9800' }}>
+          <h3>{stats.reorderItems || 0}</h3>
+          <p>🟠 Need Reorder</p>
         </div>
       </div>
+
+      {/* Low Stock Alerts */}
+      {(stats.lowStockItems > 0 || stats.reorderItems > 0) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 20, marginBottom: 20 }}>
+          {/* Low Stock Items */}
+          {stats.lowStockItemsList && stats.lowStockItemsList.length > 0 && (
+            <div style={{ background: '#ffebee', padding: 20, borderRadius: 8, border: '1px solid #f44336' }}>
+              <h3 style={{ marginBottom: 15, color: '#c62828' }}>🔴 Low Stock Alert</h3>
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {stats.lowStockItemsList.map(item => (
+                  <div key={item.id} style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    padding: '8px 0', 
+                    borderBottom: '1px solid #ffcdd2' 
+                  }}>
+                    <span style={{ fontWeight: 500 }}>{item.name || item.partNumber}</span>
+                    <span style={{ 
+                      background: '#f44336', 
+                      color: 'white', 
+                      padding: '2px 8px', 
+                      borderRadius: 4,
+                      fontSize: 12,
+                      fontWeight: 600
+                    }}>
+                      {item.stock || 0} left
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <Link to="/items" style={{ 
+                display: 'block', 
+                textAlign: 'center', 
+                marginTop: 15, 
+                color: '#c62828',
+                fontWeight: 600 
+              }}>
+                View All Low Stock Items →
+              </Link>
+            </div>
+          )}
+          
+          {/* Reorder Items */}
+          {stats.reorderItemsList && stats.reorderItemsList.length > 0 && (
+            <div style={{ background: '#fff3e0', padding: 20, borderRadius: 8, border: '1px solid #ff9800' }}>
+              <h3 style={{ marginBottom: 15, color: '#e65100' }}>🟠 Needs Reorder</h3>
+              <div style={{ maxHeight: 200, overflowY: 'auto' }}>
+                {stats.reorderItemsList.map(item => (
+                  <div key={item.id} style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    padding: '8px 0', 
+                    borderBottom: '1px solid #ffe0b2' 
+                  }}>
+                    <span style={{ fontWeight: 500 }}>{item.name || item.partNumber}</span>
+                    <span style={{ 
+                      background: '#ff9800', 
+                      color: 'white', 
+                      padding: '2px 8px', 
+                      borderRadius: 4,
+                      fontSize: 12,
+                      fontWeight: 600
+                    }}>
+                      {item.stock || 0} (reorder at {item.reorderPoint})
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <Link to="/items" style={{ 
+                display: 'block', 
+                textAlign: 'center', 
+                marginTop: 15, 
+                color: '#e65100',
+                fontWeight: 600 
+              }}>
+                View All Reorder Items →
+              </Link>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Charts Row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 20, marginBottom: 20 }}>

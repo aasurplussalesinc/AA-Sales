@@ -489,6 +489,49 @@ export const OrgDB = {
     }
   },
   
+  async getItemHistory(itemId) {
+    if (!currentOrgId) return [];
+    
+    try {
+      // Get movements for this item
+      const movementsQuery = query(
+        collection(db, 'movements'),
+        where('orgId', '==', currentOrgId),
+        where('itemId', '==', itemId),
+        orderBy('timestamp', 'desc'),
+        limit(100)
+      );
+      const movementsSnapshot = await getDocs(movementsQuery);
+      const movements = movementsSnapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data(),
+        historyType: 'movement'
+      }));
+      
+      // Get activity log entries for this item
+      const activityQuery = query(
+        collection(db, 'activityLog'),
+        where('orgId', '==', currentOrgId),
+        orderBy('timestamp', 'desc'),
+        limit(200)
+      );
+      const activitySnapshot = await getDocs(activityQuery);
+      const activities = activitySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data(), historyType: 'activity' }))
+        .filter(a => a.details?.itemId === itemId);
+      
+      // Combine and sort
+      const combined = [...movements, ...activities]
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 100);
+      
+      return combined;
+    } catch (error) {
+      console.error('Error getting item history:', error);
+      return [];
+    }
+  },
+  
   // ==================== ITEMS (ORG-SCOPED) ====================
   
   async getItems() {
@@ -880,6 +923,87 @@ export const OrgDB = {
       count,
       updatedAt: Date.now()
     });
+  },
+  
+  // ==================== DASHBOARD STATS ====================
+  
+  async getDashboardStats() {
+    const [items, locations, movements] = await Promise.all([
+      this.getItems(),
+      this.getLocations(),
+      this.getMovements()
+    ]);
+    
+    const now = Date.now();
+    const last30Days = now - (30 * 24 * 60 * 60 * 1000);
+    const last7Days = now - (7 * 24 * 60 * 60 * 1000);
+    
+    const recentMovements = movements.filter(m => m.timestamp >= last30Days);
+    const weekMovements = movements.filter(m => m.timestamp >= last7Days);
+    
+    // Low stock items (using item's own threshold, or default 10)
+    const lowStockItems = items.filter(i => {
+      const stock = i.stock || 0;
+      const threshold = i.lowStockThreshold || 10;
+      return stock <= threshold && stock > 0;
+    });
+    
+    // Items needing reorder (above low stock but at/below reorder point)
+    const reorderItems = items.filter(i => {
+      const stock = i.stock || 0;
+      const threshold = i.lowStockThreshold || 10;
+      const reorderPoint = i.reorderPoint || 0;
+      return stock > threshold && stock <= reorderPoint && reorderPoint > 0;
+    });
+    
+    // Top picked items (last 30 days)
+    const pickedItems = {};
+    recentMovements.filter(m => m.type === 'PICK').forEach(m => {
+      if (!pickedItems[m.itemId]) {
+        pickedItems[m.itemId] = { 
+          itemId: m.itemId, 
+          itemName: m.itemName, 
+          totalPicked: 0 
+        };
+      }
+      pickedItems[m.itemId].totalPicked += m.quantity || 0;
+    });
+    
+    const topPicked = Object.values(pickedItems)
+      .sort((a, b) => b.totalPicked - a.totalPicked)
+      .slice(0, 10);
+    
+    // Movement trends by day (last 7 days)
+    const dailyMovements = {};
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(now - (i * 24 * 60 * 60 * 1000));
+      const dateKey = date.toISOString().slice(0, 10);
+      dailyMovements[dateKey] = { date: dateKey, picks: 0, adds: 0, moves: 0 };
+    }
+    
+    weekMovements.forEach(m => {
+      const dateKey = new Date(m.timestamp).toISOString().slice(0, 10);
+      if (dailyMovements[dateKey]) {
+        if (m.type === 'PICK') dailyMovements[dateKey].picks++;
+        else if (m.type === 'ADD' || m.type === 'RECEIVE') dailyMovements[dateKey].adds++;
+        else if (m.type === 'MOVE') dailyMovements[dateKey].moves++;
+      }
+    });
+    
+    return {
+      totalItems: items.length,
+      totalLocations: locations.length,
+      totalStock: items.reduce((sum, i) => sum + (i.stock || 0), 0),
+      lowStockItems: lowStockItems.length,
+      lowStockItemsList: lowStockItems.slice(0, 10), // Top 10 for display
+      reorderItems: reorderItems.length,
+      reorderItemsList: reorderItems.slice(0, 10),
+      outOfStockItems: items.filter(i => (i.stock || 0) === 0).length,
+      movementsLast30Days: recentMovements.length,
+      movementsLast7Days: weekMovements.length,
+      topPickedItems: topPicked,
+      dailyMovements: Object.values(dailyMovements)
+    };
   }
 };
 

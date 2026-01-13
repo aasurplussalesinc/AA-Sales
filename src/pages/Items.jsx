@@ -239,6 +239,9 @@ export default function Items() {
   // Get all locations where an item is stored
   const getItemLocations = (itemId) => {
     const itemLocations = [];
+    const item = items.find(i => i.id === itemId);
+    
+    // Check location inventory (from movements/assignments)
     for (const loc of locations) {
       if (loc.inventory && loc.inventory[itemId] && loc.inventory[itemId] > 0) {
         itemLocations.push({
@@ -248,6 +251,32 @@ export default function Items() {
         });
       }
     }
+    
+    // Also check item's direct location field (from import/manual entry)
+    if (item && item.location && itemLocations.length === 0) {
+      // Find matching location by code
+      const matchingLoc = locations.find(loc => {
+        const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`;
+        return locCode === item.location;
+      });
+      
+      if (matchingLoc) {
+        itemLocations.push({
+          location: matchingLoc,
+          locationCode: item.location,
+          quantity: item.stock || 0
+        });
+      } else {
+        // Location string exists but no matching location record
+        itemLocations.push({
+          location: null,
+          locationCode: item.location,
+          quantity: item.stock || 0,
+          isUnmapped: true
+        });
+      }
+    }
+    
     return itemLocations;
   };
 
@@ -1773,6 +1802,18 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         <tr key={idx}>
                           <td style={{ padding: 10, borderBottom: '1px solid #eee' }}>
                             {loc.locationCode}
+                            {loc.isUnmapped && (
+                              <span style={{ 
+                                marginLeft: 8, 
+                                fontSize: 11, 
+                                color: '#ff9800',
+                                background: '#fff3e0',
+                                padding: '2px 6px',
+                                borderRadius: 4
+                              }}>
+                                (from import)
+                              </span>
+                            )}
                           </td>
                           <td style={{ padding: 10, borderBottom: '1px solid #eee', textAlign: 'right', fontWeight: 'bold' }}>
                             {loc.quantity}

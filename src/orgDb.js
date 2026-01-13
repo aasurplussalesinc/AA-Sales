@@ -757,6 +757,51 @@ export const OrgDB = {
     await this.logActivity('CUSTOMER_DELETED', { customerId });
   },
   
+  async importCustomers(customers) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    
+    // Get existing customers to check for duplicates by company name
+    const existingCustomers = await this.getCustomers();
+    const existingByCompany = {};
+    existingCustomers.forEach(c => {
+      if (c.company) {
+        existingByCompany[c.company.toLowerCase().trim()] = c;
+      }
+    });
+    
+    let added = 0;
+    let updated = 0;
+    let skipped = 0;
+    
+    for (const customer of customers) {
+      const companyKey = (customer.company || '').toLowerCase().trim();
+      
+      if (!companyKey) {
+        skipped++;
+        continue;
+      }
+      
+      const existing = existingByCompany[companyKey];
+      
+      if (existing) {
+        // Update existing customer
+        await this.updateCustomer(existing.id, {
+          ...customer,
+          updatedAt: Date.now()
+        });
+        updated++;
+      } else {
+        // Create new customer
+        await this.createCustomer(customer);
+        added++;
+      }
+    }
+    
+    await this.logActivity('CUSTOMERS_IMPORTED', { added, updated, skipped });
+    
+    return { added, updated, skipped };
+  },
+  
   // ==================== PURCHASE ORDERS (ORG-SCOPED) ====================
   
   async getPurchaseOrders() {

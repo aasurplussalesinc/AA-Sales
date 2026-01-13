@@ -190,32 +190,44 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Landing page - redirect to dashboard if logged in */}
+      {/* Landing page - show at root for logged out users */}
+      <Route 
+        path="/" 
+        element={user && organization ? (
+          <ProtectedRoute>
+            <AppLayout><Dashboard /></AppLayout>
+          </ProtectedRoute>
+        ) : <LandingPage />} 
+      />
+      
+      {/* Keep /welcome as alias */}
       <Route 
         path="/welcome" 
-        element={user && organization ? <Navigate to="/" replace /> : <LandingPage />} 
+        element={user && organization ? <Navigate to="/dashboard" replace /> : <LandingPage />} 
       />
+      
+      {/* Dashboard route for logged in users */}
+      <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <AppLayout><Dashboard /></AppLayout>
+        </ProtectedRoute>
+      } />
       
       {/* Public routes */}
       <Route 
         path="/login" 
-        element={user && organization ? <Navigate to="/" replace /> : <OrgLogin />} 
+        element={user && organization ? <Navigate to="/dashboard" replace /> : <OrgLogin />} 
       />
       
       <Route 
         path="/subscription-required" 
         element={
           !user ? <Navigate to="/login" replace /> : 
-          (subscriptionStatus?.isActive ? <Navigate to="/" replace /> : <SubscriptionRequired />)
+          (subscriptionStatus?.isActive ? <Navigate to="/dashboard" replace /> : <SubscriptionRequired />)
         } 
       />
       
       {/* Protected routes */}
-      <Route path="/" element={
-        <ProtectedRoute>
-          <AppLayout><Dashboard /></AppLayout>
-        </ProtectedRoute>
-      } />
       <Route path="/items" element={
         <ProtectedRoute>
           <AppLayout><Items /></AppLayout>
@@ -273,7 +285,7 @@ function AppRoutes() {
       } />
       
       {/* Catch all */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

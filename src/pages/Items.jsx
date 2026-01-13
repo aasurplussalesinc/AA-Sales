@@ -290,6 +290,22 @@ export default function Items() {
     loadData();
   };
 
+  // Download CSV template
+  const downloadTemplate = () => {
+    const template = `SKU,Item Name,Category,Quantity,Price,Location,Low Stock Threshold,Reorder Point
+PART-001,Example Widget,Electronics,100,29.99,W1-R1-A-1,10,20
+PART-002,Sample Gadget,Hardware,50,49.99,W1-R1-A-2,5,15
+PART-003,Test Component,Parts,200,9.99,,10,25`;
+    
+    const blob = new Blob([template], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'items-import-template.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // Export to CSV
   const exportToCSV = () => {
     // CSV headers
@@ -834,6 +850,14 @@ export default function Items() {
           style={{ background: '#17a2b8', color: 'white' }}
         >
           {importing ? '⏳ Importing...' : '📤 Import CSV'}
+        </button>
+        
+        <button 
+          className="btn"
+          onClick={downloadTemplate}
+          style={{ background: '#6c757d', color: 'white' }}
+        >
+          📋 Download Template
         </button>
         
         <button 

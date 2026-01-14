@@ -845,6 +845,62 @@ export const OrgDB = {
     await this.logActivity('PO_DELETED', { poId });
   },
   
+  async getPurchaseOrder(poId) {
+    const orders = await this.getPurchaseOrders();
+    return orders.find(o => o.id === poId);
+  },
+
+  async confirmPurchaseOrder(poId) {
+    const po = await this.getPurchaseOrder(poId);
+    if (!po) throw new Error('PO not found');
+    
+    // Create pick list from PO
+    const pickListData = {
+      name: `PO: ${po.poNumber} - ${po.customerName}`,
+      notes: `Auto-generated from Purchase Order ${po.poNumber}`,
+      purchaseOrderId: poId,
+      items: po.items.map(item => ({
+        itemId: item.itemId,
+        itemName: item.itemName,
+        partNumber: item.partNumber,
+        requestedQty: item.quantity,
+        pickedQty: 0,
+        location: item.location || ''
+      }))
+    };
+    
+    const pickListId = await this.createPickList(pickListData);
+    
+    // Update PO with pick list reference and status
+    await this.updatePurchaseOrder(poId, {
+      status: 'confirmed',
+      pickListId,
+      confirmedAt: Date.now()
+    });
+    
+    await this.logActivity('PO_CONFIRMED_WITH_PICKLIST', {
+      poId,
+      poNumber: po.poNumber,
+      pickListId
+    });
+    
+    return pickListId;
+  },
+
+  async markPOShipped(poId) {
+    await this.updatePurchaseOrder(poId, {
+      status: 'shipped',
+      shippedAt: Date.now()
+    });
+  },
+
+  async markPOPaid(poId) {
+    await this.updatePurchaseOrder(poId, {
+      status: 'paid',
+      paidAt: Date.now()
+    });
+  },
+  
   // ==================== PICK LISTS (ORG-SCOPED) ====================
   
   async getPickLists() {

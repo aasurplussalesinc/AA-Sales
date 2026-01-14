@@ -739,7 +739,7 @@ export default function PurchaseOrders() {
                 🖨️ Print PO
               </button>
               
-              {selectedOrder.status === 'draft' && (
+              {(!selectedOrder.status || selectedOrder.status === 'draft') && (
                 <button className="btn btn-primary" onClick={() => confirmAndCreatePickList(selectedOrder)}>
                   ✓ Confirm & Create Pick List
                 </button>

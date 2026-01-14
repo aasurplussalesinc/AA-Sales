@@ -815,16 +815,24 @@ export const OrgDB = {
   async createPurchaseOrder(poData) {
     if (!currentOrgId) throw new Error('No organization selected');
     
+    const user = auth.currentUser;
+    
+    // Generate PO number if not provided
+    const poNumber = poData.poNumber || `PO-${Date.now().toString().slice(-8)}`;
+    
     const ref = await addDoc(collection(db, 'purchaseOrders'), {
       ...poData,
+      poNumber,
+      status: 'draft',  // Always start as draft
       orgId: currentOrgId,
+      createdBy: user?.email || 'Unknown',
       createdAt: Date.now(),
       updatedAt: Date.now()
     });
     
     await this.logActivity('PO_CREATED', {
       poId: ref.id,
-      poNumber: poData.poNumber
+      poNumber
     });
     
     return ref.id;

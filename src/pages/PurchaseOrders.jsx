@@ -88,10 +88,10 @@ export default function PurchaseOrders() {
       itemName: item.name,
       partNumber: item.partNumber,
       location: item.location || '',
-      quantity: 1,
-      qtyShipped: 0,
+      quantity: '',  // Qty Ordered - starts blank
+      qtyShipped: '', // Qty Shipped - starts blank, this determines line total
       unitPrice: unitPrice,
-      lineTotal: unitPrice
+      lineTotal: 0  // Start at 0 until qtyShipped is entered
     };
 
     const updatedItems = [...newPO.items, newItem];
@@ -103,8 +103,9 @@ export default function PurchaseOrders() {
     const updatedItems = newPO.items.map(item => {
       if (item.itemId === itemId) {
         const updated = { ...item, [field]: value };
-        if (field === 'quantity' || field === 'unitPrice') {
-          updated.lineTotal = (parseFloat(updated.quantity) || 0) * (parseFloat(updated.unitPrice) || 0);
+        // Line total is based on Qty SHIPPED, not Qty Ordered
+        if (field === 'qtyShipped' || field === 'unitPrice') {
+          updated.lineTotal = (parseFloat(updated.qtyShipped) || 0) * (parseFloat(updated.unitPrice) || 0);
         }
         return updated;
       }
@@ -640,19 +641,21 @@ export default function PurchaseOrders() {
                         <td style={{ padding: 10 }}>
                           <input
                             type="number"
-                            value={item.quantity}
-                            onChange={e => updatePOItem(item.itemId, 'quantity', parseInt(e.target.value) || 1)}
+                            value={item.quantity === '' ? '' : item.quantity}
+                            onChange={e => updatePOItem(item.itemId, 'quantity', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
                             style={{ width: '100%', padding: 5, textAlign: 'center' }}
-                            min="1"
+                            min="0"
+                            placeholder=""
                           />
                         </td>
                         <td style={{ padding: 10 }}>
                           <input
                             type="number"
-                            value={item.qtyShipped || 0}
-                            onChange={e => updatePOItem(item.itemId, 'qtyShipped', parseInt(e.target.value) || 0)}
+                            value={item.qtyShipped === '' ? '' : item.qtyShipped}
+                            onChange={e => updatePOItem(item.itemId, 'qtyShipped', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
                             style={{ width: '100%', padding: 5, textAlign: 'center' }}
                             min="0"
+                            placeholder=""
                           />
                         </td>
                         <td style={{ padding: 10 }}>
@@ -667,7 +670,7 @@ export default function PurchaseOrders() {
                           />
                         </td>
                         <td style={{ padding: 10, textAlign: 'right', fontWeight: 600 }}>
-                          ${item.lineTotal.toFixed(2)}
+                          ${(item.lineTotal || 0).toFixed(2)}
                         </td>
                         <td style={{ padding: 10 }}>
                           <button

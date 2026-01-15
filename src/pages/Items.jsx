@@ -726,23 +726,28 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       for (const item of items) {
         const original = originalItems.find(o => o.id === item.id);
         if (original) {
+          // Normalize values for comparison
+          const itemLocation = item.location || '';
+          const originalLocation = original.location || '';
+          
           const changed = 
-            item.partNumber !== original.partNumber ||
-            item.name !== original.name ||
-            item.category !== original.category ||
-            String(item.stock) !== String(original.stock) ||
-            String(item.price) !== String(original.price) ||
-            item.location !== original.location;
+            (item.partNumber || '') !== (original.partNumber || '') ||
+            (item.name || '') !== (original.name || '') ||
+            (item.category || '') !== (original.category || '') ||
+            String(item.stock || 0) !== String(original.stock || 0) ||
+            String(item.price || 0) !== String(original.price || 0) ||
+            itemLocation !== originalLocation;
           
           if (changed) {
+            console.log('Saving item:', item.id, 'location:', itemLocation, 'original:', originalLocation);
             // Always use sync function to keep locations in sync
             await DB.updateItemWithSync(item.id, {
-              partNumber: item.partNumber,
-              name: item.name,
-              category: item.category,
+              partNumber: item.partNumber || '',
+              name: item.name || '',
+              category: item.category || '',
               stock: parseInt(item.stock) || 0,
               price: parseFloat(item.price) || 0,
-              location: item.location || ''
+              location: itemLocation
             });
           }
         }

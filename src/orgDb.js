@@ -832,7 +832,7 @@ export const OrgDB = {
     
     // First, remove item from all other locations
     for (const loc of locations) {
-      if (loc.inventory && loc.inventory[itemId]) {
+      if (loc.inventory && loc.inventory[itemId] !== undefined) {
         const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         if (locCode !== normalizedCode) {
           // Remove from this location
@@ -847,8 +847,8 @@ export const OrgDB = {
       }
     }
     
-    // Then add to the new location if specified
-    if (normalizedCode && quantity > 0) {
+    // Then add to the new location if specified (regardless of quantity - even 0 or negative)
+    if (normalizedCode) {
       const targetLoc = locations.find(loc => {
         const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         return locCode === normalizedCode;
@@ -864,6 +864,9 @@ export const OrgDB = {
           },
           updatedAt: Date.now()
         });
+        console.log('Synced item', itemId, 'to location', normalizedCode, 'qty:', quantity);
+      } else {
+        console.log('Target location not found:', normalizedCode);
       }
     }
   },

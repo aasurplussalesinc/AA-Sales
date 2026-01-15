@@ -387,53 +387,58 @@ export default function Items() {
   const saveEditedItem = async () => {
     if (!editingItem) return;
     
-    let totalStock = 0;
-    
-    if (editUseMultiLocation) {
-      totalStock = editLocationBreakdown.reduce((sum, lb) => sum + (parseInt(lb.quantity) || 0), 0);
-    } else {
-      totalStock = parseInt(editingItem.stock) || 0;
-    }
-
-    // Update the item
-    await DB.updateItem(editingItem.id, {
-      partNumber: editingItem.partNumber,
-      name: editingItem.name,
-      category: editingItem.category,
-      stock: totalStock,
-      price: parseFloat(editingItem.price) || 0,
-      location: editUseMultiLocation ? '' : editingItem.location,
-      lowStockThreshold: editingItem.lowStockThreshold,
-      reorderPoint: editingItem.reorderPoint
-    });
-
-    // Update location inventories if multi-location
-    if (editUseMultiLocation) {
-      // First clear existing location inventories for this item
-      for (const loc of locations) {
-        if (loc.inventory && loc.inventory[editingItem.id]) {
-          await DB.setInventoryAtLocation(loc.id, editingItem.id, 0);
-        }
-      }
+    try {
+      let totalStock = 0;
       
-      // Set new location inventories
-      const validLocations = editLocationBreakdown.filter(lb => lb.location && lb.quantity > 0);
-      for (const lb of validLocations) {
-        const loc = locations.find(l => {
-          const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
-          return locCode === lb.location;
-        });
-        if (loc) {
-          await DB.setInventoryAtLocation(loc.id, editingItem.id, parseInt(lb.quantity) || 0);
+      if (editUseMultiLocation) {
+        totalStock = editLocationBreakdown.reduce((sum, lb) => sum + (parseInt(lb.quantity) || 0), 0);
+      } else {
+        totalStock = parseInt(editingItem.stock) || 0;
+      }
+
+      // Update the item
+      await DB.updateItem(editingItem.id, {
+        partNumber: editingItem.partNumber,
+        name: editingItem.name,
+        category: editingItem.category,
+        stock: totalStock,
+        price: parseFloat(editingItem.price) || 0,
+        location: editUseMultiLocation ? '' : (editingItem.location || ''),
+        lowStockThreshold: editingItem.lowStockThreshold || 10,
+        reorderPoint: editingItem.reorderPoint || 20
+      });
+
+      // Update location inventories if multi-location
+      if (editUseMultiLocation) {
+        // First clear existing location inventories for this item
+        for (const loc of locations) {
+          if (loc.inventory && loc.inventory[editingItem.id]) {
+            await DB.setInventoryAtLocation(loc.id, editingItem.id, 0);
+          }
+        }
+        
+        // Set new location inventories
+        const validLocations = editLocationBreakdown.filter(lb => lb.location && lb.quantity > 0);
+        for (const lb of validLocations) {
+          const loc = locations.find(l => {
+            const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
+            return locCode === lb.location;
+          });
+          if (loc) {
+            await DB.setInventoryAtLocation(loc.id, editingItem.id, parseInt(lb.quantity) || 0);
+          }
         }
       }
-    }
 
-    setShowEditItem(false);
-    setEditingItem(null);
-    setEditUseMultiLocation(false);
-    setEditLocationBreakdown([{ location: '', quantity: 0 }]);
-    loadData();
+      setShowEditItem(false);
+      setEditingItem(null);
+      setEditUseMultiLocation(false);
+      setEditLocationBreakdown([{ location: '', quantity: 0 }]);
+      loadData();
+    } catch (error) {
+      console.error('Error saving item:', error);
+      throw error;
+    }
   };
 
   // Download CSV template
@@ -1791,13 +1796,54 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
 
       {/* Edit Item Modal */}
       {showEditItem && editingItem && (
-        <div className="modal-overlay" onClick={() => setShowEditItem(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 550, maxHeight: '90vh', overflow: 'auto' }}>
-            <div className="modal-header">
-              <h2>✏️ Edit Item</h2>
-              <button className="modal-close" onClick={() => setShowEditItem(false)}>×</button>
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 20
+          }}
+          onClick={() => setShowEditItem(false)}
+        >
+          <div 
+            onClick={e => e.stopPropagation()} 
+            style={{ 
+              background: 'white',
+              borderRadius: 12,
+              maxWidth: 550,
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
+            }}
+          >
+            <div style={{ 
+              padding: '15px 20px', 
+              borderBottom: '1px solid #eee',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <h2 style={{ margin: 0, fontSize: 20 }}>✏️ Edit Item</h2>
+              <button 
+                onClick={() => setShowEditItem(false)}
+                style={{ 
+                  background: 'none', 
+                  border: 'none', 
+                  fontSize: 24, 
+                  cursor: 'pointer',
+                  color: '#666'
+                }}
+              >×</button>
             </div>
-            <div className="modal-body">
+            <div style={{ padding: 20 }}>
               <div className="form-group">
                 <label>SKU / Part Number</label>
                 <input
@@ -1999,9 +2045,33 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </div>
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn" onClick={() => { setShowEditItem(false); setEditUseMultiLocation(false); }}>Cancel</button>
-              <button className="btn btn-primary" onClick={saveEditedItem}>Save Changes</button>
+            <div style={{ 
+              padding: '15px 20px', 
+              borderTop: '1px solid #eee',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 10
+            }}>
+              <button 
+                className="btn" 
+                onClick={() => { setShowEditItem(false); setEditUseMultiLocation(false); }}
+                style={{ background: '#6c757d', color: 'white' }}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn btn-primary" 
+                onClick={async () => {
+                  try {
+                    await saveEditedItem();
+                  } catch (error) {
+                    console.error('Save error:', error);
+                    alert('Error saving: ' + error.message);
+                  }
+                }}
+              >
+                Save Changes
+              </button>
             </div>
           </div>
         </div>

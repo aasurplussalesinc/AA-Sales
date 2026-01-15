@@ -779,14 +779,35 @@ export const OrgDB = {
 
   // ==================== LOCATION SYNC HELPERS ====================
   
-  // Normalize location code format (handles both old W1-R1-A-1 and new W1-R1-A1)
+  // Normalize location code format (handles various formats to W1-R1-A1)
   normalizeLocationCode(code) {
     if (!code) return '';
-    // If it matches old format W1-R1-A-1, convert to W1-R1-A1
+    code = code.trim();
+    
+    // If it matches old format W1-R1-A-1 (with dash before shelf number), convert to W1-R1-A1
     const oldFormat = code.match(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i);
     if (oldFormat) {
       return `${oldFormat[1]}-R${oldFormat[2]}-${oldFormat[3]}${oldFormat[4]}`;
     }
+    
+    // If already in correct format W1-R1-A1, return as-is
+    const newFormat = code.match(/^(\w+)-R(\d+)-([A-Z])(\d+)$/i);
+    if (newFormat) {
+      return code;
+    }
+    
+    // Try to parse any reasonable format
+    const parts = code.split('-').filter(p => p);
+    if (parts.length >= 3) {
+      const warehouse = parts[0];
+      const rack = parts[1].replace(/^R/i, '');
+      const rest = parts.slice(2).join('');
+      const letterShelf = rest.match(/([A-Z])(\d+)/i);
+      if (letterShelf) {
+        return `${warehouse}-R${rack}-${letterShelf[1]}${letterShelf[2]}`;
+      }
+    }
+    
     return code;
   },
 
@@ -812,10 +833,10 @@ export const OrgDB = {
     // First, remove item from all other locations
     for (const loc of locations) {
       if (loc.inventory && loc.inventory[itemId]) {
-        const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+        const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         if (locCode !== normalizedCode) {
           // Remove from this location
-          const currentInventory = loc.inventory || {};
+          const currentInventory = { ...loc.inventory };
           delete currentInventory[itemId];
           const ref = doc(db, 'locations', loc.id);
           await updateDoc(ref, {
@@ -829,7 +850,7 @@ export const OrgDB = {
     // Then add to the new location if specified
     if (normalizedCode && quantity > 0) {
       const targetLoc = locations.find(loc => {
-        const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+        const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         return locCode === normalizedCode;
       });
       
@@ -867,6 +888,11 @@ export const OrgDB = {
     const itemSnap = await getDoc(ref);
     const currentItem = itemSnap.exists() ? itemSnap.data() : {};
     const stock = updates.stock !== undefined ? updates.stock : (currentItem.stock || 0);
+    
+    // Normalize location if provided
+    if (updates.location) {
+      updates.location = this.normalizeLocationCode(updates.location);
+    }
     
     await updateDoc(ref, {
       ...updates,
@@ -1012,8 +1038,25 @@ export const OrgDB = {
     
     const user = auth.currentUser;
     
-    // Generate PO number if not provided
-    const poNumber = poData.poNumber || `AA-${Date.now().toString().slice(-8)}`;
+    // Generate PO number starting from AA6400
+    let poNumber = poData.poNumber;
+    if (!poNumber) {
+      // Get existing POs to find the highest number
+      const existingPOs = await this.getPurchaseOrders();
+      let maxNum = 6399; // Start at 6400
+      
+      existingPOs.forEach(po => {
+        if (po.poNumber) {
+          const match = po.poNumber.match(/^AA(\d+)$/);
+          if (match) {
+            const num = parseInt(match[1]);
+            if (num > maxNum) maxNum = num;
+          }
+        }
+      });
+      
+      poNumber = `AA${maxNum + 1}`;
+    }
     
     const ref = await addDoc(collection(db, 'purchaseOrders'), {
       ...poData,

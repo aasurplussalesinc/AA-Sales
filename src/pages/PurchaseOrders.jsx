@@ -83,6 +83,7 @@ export default function PurchaseOrders() {
       partNumber: item.partNumber,
       location: item.location || '',
       quantity: 1,
+      qtyShipped: 0,
       unitPrice: unitPrice,
       lineTotal: unitPrice
     };
@@ -235,34 +236,44 @@ export default function PurchaseOrders() {
   };
 
   const printPO = (order) => {
+    // Format date as full month name
+    const formatFullDate = (timestamp) => {
+      const date = new Date(timestamp);
+      const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                      'July', 'August', 'September', 'October', 'November', 'December'];
+      return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+    };
+    
     const printWindow = window.open('', '_blank');
     printWindow.document.write(`
       <html>
         <head>
           <title>Purchase Order - ${order.poNumber}</title>
           <style>
-            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; border-bottom: 3px solid #4a5d23; padding-bottom: 20px; }
+            body { font-family: Arial, sans-serif; padding: 20px 30px; max-width: 800px; margin: 0 auto; font-size: 12px; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 2px solid #4a5d23; padding-bottom: 10px; }
             .company-info { display: flex; flex-direction: column; align-items: flex-start; }
-            .company-logo { max-width: 250px; height: auto; margin-bottom: 5px; }
-            .company-location { font-size: 14px; color: #333; margin-top: 5px; }
+            .company-logo { max-width: 180px; height: auto; margin-bottom: 3px; }
+            .company-location { font-size: 11px; color: #333; }
             .po-info { text-align: right; }
-            .po-number { font-size: 24px; font-weight: bold; color: #4a5d23; }
-            .po-meta { font-size: 14px; color: #666; margin-top: 5px; }
-            .customer-info { margin-bottom: 30px; padding: 15px; background: #f5f5f5; border-radius: 8px; border-left: 4px solid #4a5d23; }
-            .customer-info h3 { margin: 0 0 10px 0; font-size: 14px; color: #666; text-transform: uppercase; }
-            .customer-info p { margin: 3px 0; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th { background: #4a5d23; color: white; padding: 12px; text-align: left; }
-            td { padding: 10px; border-bottom: 1px solid #ddd; }
+            .po-number { font-size: 20px; font-weight: bold; color: #4a5d23; }
+            .po-meta { font-size: 12px; color: #666; margin-top: 3px; }
+            .addresses { display: flex; gap: 30px; margin-bottom: 15px; }
+            .address-box { flex: 1; padding: 10px; background: #f5f5f5; border-radius: 6px; border-left: 3px solid #4a5d23; }
+            .address-box h3 { margin: 0 0 8px 0; font-size: 11px; color: #666; text-transform: uppercase; }
+            .address-box p { margin: 2px 0; font-size: 11px; }
+            .address-box .name { font-weight: bold; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+            th { background: #4a5d23; color: white; padding: 8px 6px; text-align: left; font-size: 11px; }
+            td { padding: 6px; border-bottom: 1px solid #ddd; font-size: 11px; }
             .text-right { text-align: right; }
-            .totals { width: 300px; margin-left: auto; }
-            .totals td { padding: 8px; }
-            .totals .total-row { font-weight: bold; font-size: 18px; background: #f0f0f0; }
-            .notes { margin-top: 30px; padding: 15px; background: #fffde7; border-radius: 8px; }
-            .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; border-top: 1px solid #ddd; padding-top: 20px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
-            @media print { body { padding: 20px; } }
+            .text-center { text-align: center; }
+            .totals { width: 250px; margin-left: auto; }
+            .totals td { padding: 5px; font-size: 11px; }
+            .totals .total-row { font-weight: bold; font-size: 14px; background: #f0f0f0; }
+            .notes { margin-top: 15px; padding: 10px; background: #fffde7; border-radius: 6px; font-size: 11px; }
+            .footer { margin-top: 20px; text-align: center; color: #666; font-size: 10px; border-top: 1px solid #ddd; padding-top: 10px; }
+            @media print { body { padding: 10px; } }
           </style>
         </head>
         <body>
@@ -273,18 +284,25 @@ export default function PurchaseOrders() {
             </div>
             <div class="po-info">
               <div class="po-number">${order.poNumber}</div>
-              <div class="po-meta">Date: ${new Date(order.createdAt).toLocaleDateString()}</div>
-              <div class="po-meta">Status: ${order.status?.toUpperCase()}</div>
-              ${order.dueDate ? `<div class="po-meta">Due: ${new Date(order.dueDate).toLocaleDateString()}</div>` : ''}
+              <div class="po-meta">${formatFullDate(order.createdAt)}</div>
+              ${order.dueDate ? `<div class="po-meta">Terms: ${order.dueDate}</div>` : ''}
             </div>
           </div>
 
-          <div class="customer-info">
-            <h3>Bill To:</h3>
-            <p><strong>${order.customerName}</strong></p>
-            ${order.customerAddress ? `<p>${order.customerAddress}</p>` : ''}
-            ${order.customerPhone ? `<p>Phone: ${order.customerPhone}</p>` : ''}
-            ${order.customerEmail ? `<p>Email: ${order.customerEmail}</p>` : ''}
+          <div class="addresses">
+            <div class="address-box">
+              <h3>Bill To:</h3>
+              <p class="name">${order.customerName}</p>
+              ${order.customerAddress ? `<p>${order.customerAddress}</p>` : ''}
+              ${order.customerPhone ? `<p>Phone: ${order.customerPhone}</p>` : ''}
+              ${order.customerEmail ? `<p>Email: ${order.customerEmail}</p>` : ''}
+            </div>
+            <div class="address-box">
+              <h3>Ship To:</h3>
+              <p class="name">${order.shipToName || order.customerName}</p>
+              ${order.shipToAddress || order.customerAddress ? `<p>${order.shipToAddress || order.customerAddress}</p>` : ''}
+              ${order.shipToPhone || order.customerPhone ? `<p>Phone: ${order.shipToPhone || order.customerPhone}</p>` : ''}
+            </div>
           </div>
 
           <table>
@@ -292,7 +310,8 @@ export default function PurchaseOrders() {
               <tr>
                 <th>SKU</th>
                 <th>Description</th>
-                <th class="text-right">Qty</th>
+                <th class="text-center">Qty Ordered</th>
+                <th class="text-center">Qty Shipped</th>
                 <th class="text-right">Unit Price</th>
                 <th class="text-right">Total</th>
               </tr>
@@ -302,7 +321,8 @@ export default function PurchaseOrders() {
                 <tr>
                   <td>${item.partNumber || '-'}</td>
                   <td>${item.itemName}</td>
-                  <td class="text-right">${item.quantity}</td>
+                  <td class="text-center">${item.quantity}</td>
+                  <td class="text-center">${item.qtyShipped || ''}</td>
                   <td class="text-right">$${(item.unitPrice || 0).toFixed(2)}</td>
                   <td class="text-right">$${(item.lineTotal || 0).toFixed(2)}</td>
                 </tr>
@@ -418,71 +438,144 @@ export default function PurchaseOrders() {
                 <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ color: '#2d5f3f', fontWeight: 600 }}>✓ Customer Selected</span>
                   <button 
-                    onClick={() => setNewPO({ ...newPO, customerId: '', customerName: '', customerEmail: '', customerPhone: '', customerAddress: '' })}
+                    onClick={() => setNewPO({ ...newPO, customerId: '', customerName: '', customerEmail: '', customerPhone: '', customerAddress: '', shipToName: '', shipToAddress: '', shipToPhone: '' })}
                     style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 12 }}
                   >
                     Clear
                   </button>
                 </div>
               )}
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: 15
-              }}>
-                <div>
-                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Customer Name *</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Customer or company name"
-                    value={newPO.customerName}
-                    onChange={e => setNewPO({ ...newPO, customerName: e.target.value })}
-                    style={{ width: '100%' }}
-                  />
+              
+              {/* Bill To Section */}
+              <div style={{ marginBottom: 15 }}>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: 14, color: '#4a5d23' }}>Bill To</h4>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: 10
+                }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 3, fontWeight: 600, fontSize: 12 }}>Customer Name *</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Customer or company name"
+                      value={newPO.customerName}
+                      onChange={e => setNewPO({ ...newPO, customerName: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 3, fontWeight: 600, fontSize: 12 }}>Phone</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Phone number"
+                      value={newPO.customerPhone}
+                      onChange={e => setNewPO({ ...newPO, customerPhone: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 3, fontWeight: 600, fontSize: 12 }}>Email</label>
+                    <input
+                      type="email"
+                      className="form-input"
+                      placeholder="Email address"
+                      value={newPO.customerEmail}
+                      onChange={e => setNewPO({ ...newPO, customerEmail: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 3, fontWeight: 600, fontSize: 12 }}>Terms</label>
+                    <select
+                      className="form-input"
+                      value={newPO.dueDate}
+                      onChange={e => setNewPO({ ...newPO, dueDate: e.target.value })}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="">Select Terms</option>
+                      <option value="Net 30">Net 30</option>
+                      <option value="Net 60">Net 60</option>
+                      <option value="Net 90">Net 90</option>
+                    </select>
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', marginBottom: 3, fontWeight: 600, fontSize: 12 }}>Billing Address</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Billing address"
+                      value={newPO.customerAddress}
+                      onChange={e => setNewPO({ ...newPO, customerAddress: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Phone</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Phone number"
-                    value={newPO.customerPhone}
-                    onChange={e => setNewPO({ ...newPO, customerPhone: e.target.value })}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Email</label>
-                  <input
-                    type="email"
-                    className="form-input"
-                    placeholder="Email address"
-                    value={newPO.customerEmail}
-                    onChange={e => setNewPO({ ...newPO, customerEmail: e.target.value })}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Due Date</label>
-                  <input
-                    type="date"
-                    className="form-input"
-                    value={newPO.dueDate}
-                    onChange={e => setNewPO({ ...newPO, dueDate: e.target.value })}
-                    style={{ width: '100%' }}
-                  />
-                </div>
-                <div style={{ gridColumn: 'span 2' }}>
-                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Address</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="Shipping/billing address"
-                    value={newPO.customerAddress}
-                    onChange={e => setNewPO({ ...newPO, customerAddress: e.target.value })}
-                    style={{ width: '100%' }}
-                  />
+              </div>
+
+              {/* Ship To Section */}
+              <div>
+                <h4 style={{ margin: '0 0 10px 0', fontSize: 14, color: '#4a5d23' }}>Ship To 
+                  <button 
+                    onClick={() => setNewPO({ 
+                      ...newPO, 
+                      shipToName: newPO.customerName, 
+                      shipToAddress: newPO.customerAddress, 
+                      shipToPhone: newPO.customerPhone 
+                    })}
+                    style={{ 
+                      marginLeft: 10, 
+                      fontSize: 11, 
+                      padding: '2px 8px', 
+                      background: '#e0e0e0', 
+                      border: 'none', 
+                      borderRadius: 4, 
+                      cursor: 'pointer' 
+                    }}
+                  >
+                    Same as Bill To
+                  </button>
+                </h4>
+                <div style={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                  gap: 10
+                }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 3, fontWeight: 600, fontSize: 12 }}>Name</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Ship to name"
+                      value={newPO.shipToName || ''}
+                      onChange={e => setNewPO({ ...newPO, shipToName: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 3, fontWeight: 600, fontSize: 12 }}>Phone</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Ship to phone"
+                      value={newPO.shipToPhone || ''}
+                      onChange={e => setNewPO({ ...newPO, shipToPhone: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <label style={{ display: 'block', marginBottom: 3, fontWeight: 600, fontSize: 12 }}>Shipping Address</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="Shipping address"
+                      value={newPO.shipToAddress || ''}
+                      onChange={e => setNewPO({ ...newPO, shipToAddress: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -522,7 +615,8 @@ export default function PurchaseOrders() {
                   <thead>
                     <tr style={{ background: '#f5f5f5' }}>
                       <th style={{ padding: 10, textAlign: 'left' }}>Item</th>
-                      <th style={{ padding: 10, width: 80 }}>Qty</th>
+                      <th style={{ padding: 10, width: 80 }}>Qty Ordered</th>
+                      <th style={{ padding: 10, width: 80 }}>Qty Shipped</th>
                       <th style={{ padding: 10, width: 100 }}>Unit Price</th>
                       <th style={{ padding: 10, width: 100 }}>Line Total</th>
                       <th style={{ padding: 10, width: 50 }}></th>
@@ -542,6 +636,15 @@ export default function PurchaseOrders() {
                             onChange={e => updatePOItem(item.itemId, 'quantity', parseInt(e.target.value) || 1)}
                             style={{ width: '100%', padding: 5, textAlign: 'center' }}
                             min="1"
+                          />
+                        </td>
+                        <td style={{ padding: 10 }}>
+                          <input
+                            type="number"
+                            value={item.qtyShipped || 0}
+                            onChange={e => updatePOItem(item.itemId, 'qtyShipped', parseInt(e.target.value) || 0)}
+                            style={{ width: '100%', padding: 5, textAlign: 'center' }}
+                            min="0"
                           />
                         </td>
                         <td style={{ padding: 10 }}>
@@ -737,6 +840,28 @@ export default function PurchaseOrders() {
               
               <button className="btn" onClick={() => printPO(selectedOrder)} style={{ background: '#17a2b8', color: 'white' }}>
                 🖨️ Print PO
+              </button>
+              
+              <button 
+                className="btn" 
+                onClick={() => {
+                  const subject = encodeURIComponent(`Purchase Order ${selectedOrder.poNumber}`);
+                  const body = encodeURIComponent(
+                    `Dear ${selectedOrder.customerName},\n\n` +
+                    `Please find attached Purchase Order ${selectedOrder.poNumber}.\n\n` +
+                    `Order Total: $${(selectedOrder.total || 0).toFixed(2)}\n` +
+                    `Terms: ${selectedOrder.dueDate || 'N/A'}\n\n` +
+                    `Please print this PO and attach it to the email.\n\n` +
+                    `Thank you for your business!\n\n` +
+                    `AA Surplus Sales Inc.\n` +
+                    `Ronkonkoma, NY\n` +
+                    `716-496-2451`
+                  );
+                  window.location.href = `mailto:${selectedOrder.customerEmail || ''}?subject=${subject}&body=${body}`;
+                }} 
+                style={{ background: '#2196F3', color: 'white' }}
+              >
+                📧 Email PO
               </button>
               
               {(!selectedOrder.status || selectedOrder.status === 'draft') && (

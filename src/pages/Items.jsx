@@ -730,31 +730,20 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             item.partNumber !== original.partNumber ||
             item.name !== original.name ||
             item.category !== original.category ||
-            item.stock !== original.stock ||
-            item.price !== original.price ||
+            String(item.stock) !== String(original.stock) ||
+            String(item.price) !== String(original.price) ||
             item.location !== original.location;
           
           if (changed) {
-            // Use sync function if location changed
-            if (item.location !== original.location) {
-              await DB.updateItemWithSync(item.id, {
-                partNumber: item.partNumber,
-                name: item.name,
-                category: item.category,
-                stock: parseInt(item.stock) || 0,
-                price: parseFloat(item.price) || 0,
-                location: item.location
-              });
-            } else {
-              await DB.updateItem(item.id, {
-                partNumber: item.partNumber,
-                name: item.name,
-                category: item.category,
-                stock: parseInt(item.stock) || 0,
-                price: parseFloat(item.price) || 0,
-                location: item.location
-              });
-            }
+            // Always use sync function to keep locations in sync
+            await DB.updateItemWithSync(item.id, {
+              partNumber: item.partNumber,
+              name: item.name,
+              category: item.category,
+              stock: parseInt(item.stock) || 0,
+              price: parseFloat(item.price) || 0,
+              location: item.location || ''
+            });
           }
         }
       }
@@ -1524,12 +1513,16 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   />
                 </td>
                 <td>
-                  <input
-                    type="text"
+                  <select
                     value={item.location || ''}
                     onChange={e => updateItem(item.id, 'location', e.target.value)}
-                    style={{ width: '90px' }}
-                  />
+                    style={{ width: '110px', padding: '4px' }}
+                  >
+                    <option value="">--</option>
+                    {locationOptions.map(loc => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </select>
                 </td>
                 <td style={{ whiteSpace: 'nowrap', color: '#666', fontSize: 12 }}>
                   {formatDate(item.createdAt)}

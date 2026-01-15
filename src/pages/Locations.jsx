@@ -12,6 +12,7 @@ export default function Locations() {
   const [importing, setImporting] = useState(false);
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [sortBy, setSortBy] = useState('warehouse'); // warehouse, rack, letter, shelf
+  const [filters, setFilters] = useState({ warehouse: '', rack: '', letter: '', search: '' });
   const fileInputRef = useRef(null);
 
   // Dropdown options
@@ -34,8 +35,25 @@ export default function Locations() {
     setItems(itms);
   };
 
-  // Sort locations based on sortBy
-  const sortedLocations = [...locations].sort((a, b) => {
+  // Get unique values from existing locations for filter dropdowns
+  const uniqueWarehouses = [...new Set(locations.map(l => l.warehouse).filter(Boolean))].sort();
+  const uniqueRacks = [...new Set(locations.map(l => l.rack).filter(Boolean))].sort();
+  const uniqueLetters = [...new Set(locations.map(l => l.letter).filter(Boolean))].sort();
+
+  // Filter locations
+  const filteredLocations = locations.filter(loc => {
+    if (filters.warehouse && loc.warehouse !== filters.warehouse) return false;
+    if (filters.rack && loc.rack !== filters.rack) return false;
+    if (filters.letter && loc.letter !== filters.letter) return false;
+    if (filters.search) {
+      const locCode = formatLocation(loc).toLowerCase();
+      if (!locCode.includes(filters.search.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  // Sort filtered locations based on sortBy
+  const sortedLocations = [...filteredLocations].sort((a, b) => {
     const aWarehouse = a.warehouse || '';
     const bWarehouse = b.warehouse || '';
     const aRack = a.rack || '';
@@ -205,7 +223,7 @@ export default function Locations() {
   };
 
   const selectAllLocations = () => {
-    setSelectedLocations(locations.map(loc => loc.id));
+    setSelectedLocations(sortedLocations.map(loc => loc.id));
   };
 
   const clearSelection = () => {
@@ -639,8 +657,106 @@ W2,2,C,3`;
       </div>
 
       <div style={{background: 'white', padding: 20, borderRadius: 8}}>
+        {/* Filters Row */}
+        <div style={{ 
+          display: 'flex', 
+          gap: 15, 
+          marginBottom: 20, 
+          padding: 15, 
+          background: '#f8f9fa', 
+          borderRadius: 8,
+          flexWrap: 'wrap',
+          alignItems: 'center'
+        }}>
+          <div style={{ fontWeight: 600, color: '#2d5f3f' }}>🔍 Filter:</div>
+          
+          <input
+            type="text"
+            placeholder="Search location..."
+            value={filters.search}
+            onChange={e => setFilters({ ...filters, search: e.target.value })}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid #ddd',
+              fontSize: 14,
+              minWidth: 150
+            }}
+          />
+          
+          <select
+            value={filters.warehouse}
+            onChange={e => setFilters({ ...filters, warehouse: e.target.value })}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid #ddd',
+              fontSize: 14
+            }}
+          >
+            <option value="">All Warehouses</option>
+            {uniqueWarehouses.map(w => (
+              <option key={w} value={w}>{w}</option>
+            ))}
+          </select>
+          
+          <select
+            value={filters.rack}
+            onChange={e => setFilters({ ...filters, rack: e.target.value })}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid #ddd',
+              fontSize: 14
+            }}
+          >
+            <option value="">All Racks</option>
+            {uniqueRacks.map(r => (
+              <option key={r} value={r}>R{r}</option>
+            ))}
+          </select>
+          
+          <select
+            value={filters.letter}
+            onChange={e => setFilters({ ...filters, letter: e.target.value })}
+            style={{
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid #ddd',
+              fontSize: 14
+            }}
+          >
+            <option value="">All Letters</option>
+            {uniqueLetters.map(l => (
+              <option key={l} value={l}>{l}</option>
+            ))}
+          </select>
+          
+          {(filters.warehouse || filters.rack || filters.letter || filters.search) && (
+            <button
+              onClick={() => setFilters({ warehouse: '', rack: '', letter: '', search: '' })}
+              style={{
+                padding: '6px 12px',
+                borderRadius: 6,
+                border: 'none',
+                background: '#dc3545',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: 14
+              }}
+            >
+              Clear Filters
+            </button>
+          )}
+        </div>
+
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 10 }}>
-          <h3 style={{ margin: 0 }}>Total Locations: {locations.length}</h3>
+          <h3 style={{ margin: 0 }}>
+            {filteredLocations.length === locations.length 
+              ? `Total Locations: ${locations.length}`
+              : `Showing ${filteredLocations.length} of ${locations.length} locations`
+            }
+          </h3>
           
           {/* Sort dropdown */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

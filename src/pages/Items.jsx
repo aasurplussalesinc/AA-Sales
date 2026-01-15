@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { OrgDB as DB } from '../orgDb';
+import { useAuth } from '../OrgAuthContext';
 
 export default function Items() {
+  const { userRole } = useAuth();
+  const isAdmin = userRole === 'admin';
+  const isManager = userRole === 'manager';
+  const canEdit = isAdmin || isManager; // Admin and Manager can edit
+  
   const [items, setItems] = useState([]);
   const [originalItems, setOriginalItems] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -1033,21 +1039,25 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           </>
         )}
 
-        <button 
-          className="btn btn-primary"
-          onClick={() => setShowAddItem(true)}
-        >
-          + Add Item
-        </button>
+        {canEdit && (
+          <button 
+            className="btn btn-primary"
+            onClick={() => setShowAddItem(true)}
+          >
+            + Add Item
+          </button>
+        )}
         
-        <button 
-          className="btn"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={importing}
-          style={{ background: '#17a2b8', color: 'white' }}
-        >
-          {importing ? '⏳ Importing...' : '📤 Import CSV'}
-        </button>
+        {canEdit && (
+          <button 
+            className="btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            style={{ background: '#17a2b8', color: 'white' }}
+          >
+            {importing ? '⏳ Importing...' : '📤 Import CSV'}
+          </button>
+        )}
         
         <button 
           className="btn"
@@ -1531,14 +1541,18 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   </div>
                 </td>
                 <td>
-                  <input
-                    type="number"
-                    value={item.price || 0}
-                    onChange={e => updateItem(item.id, 'price', parseFloat(e.target.value) || 0)}
-                    style={{ width: '75px' }}
-                    step="0.01"
-                    min="0"
-                  />
+                  {canEdit ? (
+                    <input
+                      type="number"
+                      value={item.price || 0}
+                      onChange={e => updateItem(item.id, 'price', parseFloat(e.target.value) || 0)}
+                      style={{ width: '75px' }}
+                      step="0.01"
+                      min="0"
+                    />
+                  ) : (
+                    <span>${(item.price || 0).toFixed(2)}</span>
+                  )}
                 </td>
                 <td>
                   <select
@@ -1588,13 +1602,15 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     >
                       🖨️
                     </button>
-                    <button
-                      className="btn btn-danger btn-sm"
-                      onClick={() => deleteItem(item.id)}
-                      title="Delete"
-                    >
-                      🗑️
-                    </button>
+                    {canEdit && (
+                      <button
+                        className="btn btn-danger btn-sm"
+                        onClick={() => deleteItem(item.id)}
+                        title="Delete"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>

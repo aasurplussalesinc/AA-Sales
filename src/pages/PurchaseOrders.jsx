@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
 import { OrgDB as DB } from '../orgDb';
 import { COMPANY_LOGO } from '../companyLogo';
+import { useAuth } from '../OrgAuthContext';
 
 export default function PurchaseOrders() {
+  const { userRole } = useAuth();
+  const isAdmin = userRole === 'admin';
+  const isManager = userRole === 'manager';
+  const canEdit = isAdmin || isManager;
+  
   const [orders, setOrders] = useState([]);
   const [items, setItems] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -379,9 +385,11 @@ export default function PurchaseOrders() {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h2>Purchase Orders</h2>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-          + New Purchase Order
-        </button>
+        {canEdit && (
+          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+            + New Purchase Order
+          </button>
+        )}
       </div>
 
       {/* Create/Edit PO Modal */}

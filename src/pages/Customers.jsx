@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { OrgDB as DB } from '../orgDb';
 import { COMPANY_LOGO } from '../companyLogo';
+import { useAuth } from '../OrgAuthContext';
 
 export default function Customers() {
+  const { userRole } = useAuth();
+  const isAdmin = userRole === 'admin';
+  const isManager = userRole === 'manager';
+  const canEdit = isAdmin || isManager;
+  
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
   const [items, setItems] = useState([]);
@@ -541,13 +547,15 @@ export default function Customers() {
               💾 Save Changes
             </button>
 
-            <button 
-              className="btn" 
-              onClick={deleteCustomer} 
-              style={{ width: '100%', marginTop: 10, background: '#dc3545', color: 'white' }}
-            >
-              🗑️ Delete Customer
-            </button>
+            {canEdit && (
+              <button 
+                className="btn" 
+                onClick={deleteCustomer} 
+                style={{ width: '100%', marginTop: 10, background: '#dc3545', color: 'white' }}
+              >
+                🗑️ Delete Customer
+              </button>
+            )}
 
             {/* Stats */}
             {customerStats && (
@@ -1072,26 +1080,30 @@ export default function Customers() {
             accept=".csv"
             style={{ display: 'none' }}
           />
-          <button
-            className="btn"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={importing}
-            style={{ background: '#17a2b8', color: 'white' }}
-          >
-            {importing ? '⏳ Importing...' : '📤 Import CSV'}
-          </button>
+          {canEdit && (
+            <button
+              className="btn"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={importing}
+              style={{ background: '#17a2b8', color: 'white' }}
+            >
+              {importing ? '⏳ Importing...' : '📤 Import CSV'}
+            </button>
+          )}
           <button className="btn" onClick={exportToCSV} style={{ background: '#6c757d', color: 'white' }}>
             📥 Export CSV
           </button>
-          <button className="btn btn-primary" onClick={() => {
-            setEditForm({
-              company: '', customerName: '', addressShort: '', email: '',
-              phone: '', address: '', city: '', state: '', zipCode: ''
-            });
-            setShowCreate(true);
-          }}>
-            + New Customer
-          </button>
+          {canEdit && (
+            <button className="btn btn-primary" onClick={() => {
+              setEditForm({
+                company: '', customerName: '', addressShort: '', email: '',
+                phone: '', address: '', city: '', state: '', zipCode: ''
+              });
+              setShowCreate(true);
+            }}>
+              + New Customer
+            </button>
+          )}
         </div>
       </div>
 

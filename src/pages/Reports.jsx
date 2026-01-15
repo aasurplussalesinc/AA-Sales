@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { OrgDB as DB } from '../orgDb';
+import { useAuth } from '../OrgAuthContext';
 
 export default function Reports() {
+  const { userRole } = useAuth();
+  const isAdmin = userRole === 'admin';
+  const isManager = userRole === 'manager';
+  const canViewReports = isAdmin || isManager;
+  
   const [activeTab, setActiveTab] = useState('summary');
   const [loading, setLoading] = useState(false);
   
@@ -212,6 +218,26 @@ export default function Reports() {
     { id: 'turnover', label: '📈 Turnover' },
     { id: 'custom', label: '📋 Custom' }
   ];
+
+  // Staff cannot access reports
+  if (!canViewReports) {
+    return (
+      <div className="page-content">
+        <h2 style={{ marginBottom: 20 }}>Reports</h2>
+        <div style={{ 
+          background: '#fff3cd', 
+          padding: 30, 
+          borderRadius: 8, 
+          textAlign: 'center',
+          border: '1px solid #ffc107'
+        }}>
+          <h3 style={{ color: '#856404', marginBottom: 10 }}>🔒 Access Restricted</h3>
+          <p style={{ color: '#856404' }}>Reports are only available to Managers and Admins.</p>
+          <p style={{ color: '#856404', fontSize: 14 }}>Contact your administrator if you need access.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-content">

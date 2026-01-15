@@ -1,8 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { OrgDB as DB } from '../orgDb';
+import { useAuth } from '../OrgAuthContext';
 
 export default function Locations() {
+  const { userRole } = useAuth();
+  const isAdmin = userRole === 'admin';
+  const isManager = userRole === 'manager';
+  const canEdit = isAdmin || isManager;
+  
   const [locations, setLocations] = useState([]);
   const [newLocation, setNewLocation] = useState({ warehouse: 'W1', rack: '1', letter: 'A', shelf: '1' });
   const [items, setItems] = useState([]);
@@ -582,14 +588,16 @@ W2,2,C,3`;
           accept=".csv"
           style={{ display: 'none' }}
         />
-        <button 
-          className="btn"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={importing}
-          style={{ background: '#17a2b8', color: 'white' }}
-        >
-          {importing ? '⏳ Importing...' : '📤 Import CSV'}
-        </button>
+        {canEdit && (
+          <button 
+            className="btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            style={{ background: '#17a2b8', color: 'white' }}
+          >
+            {importing ? '⏳ Importing...' : '📤 Import CSV'}
+          </button>
+        )}
         <button 
           className="btn btn-primary"
           onClick={exportLocationsCSV}
@@ -605,56 +613,58 @@ W2,2,C,3`;
         </button>
       </div>
 
-      <div style={{background: 'white', padding: 20, borderRadius: 8, marginBottom: 20}}>
-        <h3 style={{marginBottom: 15}}>Add New Location</h3>
-        <div className="form-row">
-          <select
-            className="form-input"
-            value={newLocation.warehouse}
-            onChange={e => setNewLocation({...newLocation, warehouse: e.target.value})}
-          >
-            {warehouses.map(w => (
-              <option key={w} value={w}>{w}</option>
-            ))}
-          </select>
-          <select
-            className="form-input"
-            value={newLocation.rack}
-            onChange={e => setNewLocation({...newLocation, rack: e.target.value})}
-          >
-            {racks.map(r => (
-              <option key={r} value={r}>Rack {r}</option>
-            ))}
-          </select>
-          <select
-            className="form-input"
-            value={newLocation.letter}
-            onChange={e => setNewLocation({...newLocation, letter: e.target.value})}
-          >
-            {letters.map(l => (
-              <option key={l} value={l}>{l}</option>
-            ))}
-          </select>
-          <select
-            className="form-input"
-            value={newLocation.shelf}
-            onChange={e => setNewLocation({...newLocation, shelf: e.target.value})}
-          >
-            {shelves.map(s => (
-              <option key={s} value={s}>Shelf {s}</option>
-            ))}
-          </select>
-          <button className="btn btn-primary" onClick={addLocation} disabled={saving}>
-            {saving ? 'Adding...' : '+ Add Location'}
-          </button>
+      {canEdit && (
+        <div style={{background: 'white', padding: 20, borderRadius: 8, marginBottom: 20}}>
+          <h3 style={{marginBottom: 15}}>Add New Location</h3>
+          <div className="form-row">
+            <select
+              className="form-input"
+              value={newLocation.warehouse}
+              onChange={e => setNewLocation({...newLocation, warehouse: e.target.value})}
+            >
+              {warehouses.map(w => (
+                <option key={w} value={w}>{w}</option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              value={newLocation.rack}
+              onChange={e => setNewLocation({...newLocation, rack: e.target.value})}
+            >
+              {racks.map(r => (
+                <option key={r} value={r}>Rack {r}</option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              value={newLocation.letter}
+              onChange={e => setNewLocation({...newLocation, letter: e.target.value})}
+            >
+              {letters.map(l => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </select>
+            <select
+              className="form-input"
+              value={newLocation.shelf}
+              onChange={e => setNewLocation({...newLocation, shelf: e.target.value})}
+            >
+              {shelves.map(s => (
+                <option key={s} value={s}>Shelf {s}</option>
+              ))}
+            </select>
+            <button className="btn btn-primary" onClick={addLocation} disabled={saving}>
+              {saving ? 'Adding...' : '+ Add Location'}
+            </button>
+          </div>
+          <div style={{marginTop: 10, padding: 10, background: '#f0f0f0', borderRadius: 4, textAlign: 'center'}}>
+            <strong>Preview: </strong>
+            <span style={{fontSize: 18, color: '#2d5f3f'}}>
+              {newLocation.warehouse}-R{newLocation.rack}-{newLocation.letter}{newLocation.shelf}
+            </span>
+          </div>
         </div>
-        <div style={{marginTop: 10, padding: 10, background: '#f0f0f0', borderRadius: 4, textAlign: 'center'}}>
-          <strong>Preview: </strong>
-          <span style={{fontSize: 18, color: '#2d5f3f'}}>
-            {newLocation.warehouse}-R{newLocation.rack}-{newLocation.letter}{newLocation.shelf}
-          </span>
-        </div>
-      </div>
+      )}
 
       <div style={{background: 'white', padding: 20, borderRadius: 8}}>
         {/* Filters Row */}
@@ -865,19 +875,23 @@ W2,2,C,3`;
                       >
                         View
                       </button>
-                      <button 
-                        className="btn btn-sm"
-                        onClick={() => openEditLocation(loc)}
-                        style={{ background: '#ff9800', color: 'white' }}
-                      >
-                        Edit
-                      </button>
-                      <button 
-                        className="btn btn-danger btn-sm"
-                        onClick={() => deleteLocation(loc)}
-                      >
-                        Delete
-                      </button>
+                      {canEdit && (
+                        <>
+                          <button 
+                            className="btn btn-sm"
+                            onClick={() => openEditLocation(loc)}
+                            style={{ background: '#ff9800', color: 'white' }}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            className="btn btn-danger btn-sm"
+                            onClick={() => deleteLocation(loc)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>

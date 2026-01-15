@@ -602,21 +602,63 @@ export const OrgDB = {
   async importItems(items) {
     if (!currentOrgId) throw new Error('No organization selected');
     
+    // Get existing locations for syncing
+    const locations = await this.getLocations();
+    
+    // Clear existing location inventories
+    for (const loc of locations) {
+      if (loc.inventory && Object.keys(loc.inventory).length > 0) {
+        const ref = doc(db, 'locations', loc.id);
+        await updateDoc(ref, {
+          inventory: {},
+          updatedAt: Date.now()
+        });
+      }
+    }
+    
     // Delete existing items for this org
     const existing = await this.getItems();
     for (const item of existing) {
       await deleteDoc(doc(db, 'items', item.id));
     }
     
-    // Add new items with orgId
+    // Add new items with orgId and sync locations
     let added = 0;
     for (const item of items) {
-      await addDoc(collection(db, 'items'), {
+      // Normalize location code
+      const normalizedLocation = this.normalizeLocationCode(item.location);
+      
+      const ref = await addDoc(collection(db, 'items'), {
         ...item,
+        location: normalizedLocation,
         orgId: currentOrgId,
         createdAt: Date.now(),
         updatedAt: Date.now()
       });
+      
+      // Sync to location inventory if location specified
+      if (normalizedLocation && item.stock > 0) {
+        const targetLoc = locations.find(loc => {
+          const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+          return locCode === normalizedLocation;
+        });
+        
+        if (targetLoc) {
+          const locRef = doc(db, 'locations', targetLoc.id);
+          const locSnap = await getDoc(locRef);
+          const locData = locSnap.data();
+          const currentInventory = locData.inventory || {};
+          
+          await updateDoc(locRef, {
+            inventory: {
+              ...currentInventory,
+              [ref.id]: item.stock
+            },
+            updatedAt: Date.now()
+          });
+        }
+      }
+      
       added++;
     }
     
@@ -677,14 +719,14 @@ export const OrgDB = {
     if (code.startsWith('LOC:')) {
       const locCode = code.replace('LOC:', '');
       return locations.find(l => {
-        const locationCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
+        const locationCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
         return locationCode === locCode;
       }) || null;
     }
     
-    // Also check raw location code format (W1-R1-A-1)
+    // Also check raw location code format (W1-R1-A1)
     return locations.find(l => {
-      const locationCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
+      const locationCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
       return locationCode === code;
     }) || null;
   },
@@ -733,6 +775,138 @@ export const OrgDB = {
     });
     
     await this.logActivity('INVENTORY_SET_AT_LOCATION', { locationId, itemId, quantity });
+  },
+
+  // ==================== LOCATION SYNC HELPERS ====================
+  
+  // Normalize location code format (handles both old W1-R1-A-1 and new W1-R1-A1)
+  normalizeLocationCode(code) {
+    if (!code) return '';
+    // If it matches old format W1-R1-A-1, convert to W1-R1-A1
+    const oldFormat = code.match(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i);
+    if (oldFormat) {
+      return `${oldFormat[1]}-R${oldFormat[2]}-${oldFormat[3]}${oldFormat[4]}`;
+    }
+    return code;
+  },
+
+  // Find location by code (handles both formats)
+  async findLocationByCode(locationCode) {
+    if (!locationCode) return null;
+    const normalizedCode = this.normalizeLocationCode(locationCode);
+    const locations = await this.getLocations();
+    
+    return locations.find(loc => {
+      const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+      return locCode === normalizedCode || this.normalizeLocationCode(locCode) === normalizedCode;
+    }) || null;
+  },
+
+  // Sync item's location field to location inventory
+  async syncItemToLocation(itemId, newLocationCode, quantity) {
+    if (!currentOrgId) return;
+    
+    const normalizedCode = this.normalizeLocationCode(newLocationCode);
+    const locations = await this.getLocations();
+    
+    // First, remove item from all other locations
+    for (const loc of locations) {
+      if (loc.inventory && loc.inventory[itemId]) {
+        const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+        if (locCode !== normalizedCode) {
+          // Remove from this location
+          const currentInventory = loc.inventory || {};
+          delete currentInventory[itemId];
+          const ref = doc(db, 'locations', loc.id);
+          await updateDoc(ref, {
+            inventory: currentInventory,
+            updatedAt: Date.now()
+          });
+        }
+      }
+    }
+    
+    // Then add to the new location if specified
+    if (normalizedCode && quantity > 0) {
+      const targetLoc = locations.find(loc => {
+        const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+        return locCode === normalizedCode;
+      });
+      
+      if (targetLoc) {
+        const ref = doc(db, 'locations', targetLoc.id);
+        const currentInventory = targetLoc.inventory || {};
+        await updateDoc(ref, {
+          inventory: {
+            ...currentInventory,
+            [itemId]: quantity
+          },
+          updatedAt: Date.now()
+        });
+      }
+    }
+  },
+
+  // Sync location inventory to item's location field
+  async syncLocationToItem(itemId, locationCode) {
+    if (!currentOrgId || !itemId) return;
+    
+    const normalizedCode = this.normalizeLocationCode(locationCode);
+    const ref = doc(db, 'items', itemId);
+    await updateDoc(ref, {
+      location: normalizedCode,
+      updatedAt: Date.now()
+    });
+  },
+
+  // Update item with location sync
+  async updateItemWithSync(itemId, updates) {
+    const ref = doc(db, 'items', itemId);
+    
+    // Get current item to know the stock
+    const itemSnap = await getDoc(ref);
+    const currentItem = itemSnap.exists() ? itemSnap.data() : {};
+    const stock = updates.stock !== undefined ? updates.stock : (currentItem.stock || 0);
+    
+    await updateDoc(ref, {
+      ...updates,
+      updatedAt: Date.now()
+    });
+    
+    // If location changed, sync to locations
+    if (updates.location !== undefined) {
+      await this.syncItemToLocation(itemId, updates.location, stock);
+    }
+    
+    await this.logActivity('ITEM_UPDATED', { itemId, updates });
+  },
+
+  // Set inventory at location with item sync
+  async setInventoryAtLocationWithSync(locationId, itemId, quantity) {
+    const locRef = doc(db, 'locations', locationId);
+    const snapshot = await getDoc(locRef);
+    
+    if (!snapshot.exists()) throw new Error('Location not found');
+    
+    const locationData = snapshot.data();
+    const locationCode = locationData.locationCode || 
+      `${locationData.warehouse}-R${locationData.rack}-${locationData.letter}${locationData.shelf}`;
+    const currentInventory = locationData.inventory || {};
+    
+    await updateDoc(locRef, {
+      inventory: {
+        ...currentInventory,
+        [itemId]: quantity
+      },
+      updatedAt: Date.now()
+    });
+    
+    // Sync to item's location field if this is the only/primary location
+    if (quantity > 0) {
+      await this.syncLocationToItem(itemId, locationCode);
+    }
+    
+    await this.logActivity('INVENTORY_SET_AT_LOCATION_SYNCED', { locationId, itemId, quantity, locationCode });
   },
   
   // ==================== CUSTOMERS (ORG-SCOPED) ====================
@@ -1000,6 +1174,36 @@ export const OrgDB = {
       ...updates,
       updatedAt: Date.now()
     });
+  },
+
+  async completeReceiving(receivingId, items) {
+    // Update each item's stock and location with sync
+    for (const item of items) {
+      if (item.receivedQty > 0) {
+        // Get current item data
+        const itemRef = doc(db, 'items', item.itemId);
+        const itemSnap = await getDoc(itemRef);
+        const currentItem = itemSnap.exists() ? itemSnap.data() : {};
+        const newStock = (currentItem.stock || 0) + item.receivedQty;
+        
+        // Update item stock and location
+        await this.updateItemWithSync(item.itemId, {
+          stock: newStock,
+          location: item.locationCode || currentItem.location || ''
+        });
+        
+        // Log movement
+        await this.logMovement({
+          itemId: item.itemId,
+          itemName: item.itemName,
+          quantity: item.receivedQty,
+          type: 'RECEIVE',
+          toLocation: item.locationCode || 'Receiving'
+        });
+      }
+    }
+    
+    await this.updateReceiving(receivingId, { status: 'completed' });
   },
   
   // ==================== MOVEMENTS (ORG-SCOPED) ====================

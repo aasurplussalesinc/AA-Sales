@@ -26,7 +26,7 @@ export default function CreateLocation() {
   }, [qrCode]);
 
   const getLocationCode = () => {
-    return `${warehouse}-R${rack}-${letter}-${shelf}`;
+    return `${warehouse}-R${rack}-${letter}${shelf}`;
   };
 
   const generateQR = () => {

@@ -67,7 +67,7 @@ export default function Scanner() {
     } else if (location) {
       // Get items at this location
       const allItems = await DB.getItems();
-      const locationCode = location.locationCode || `${location.warehouse}-R${location.rack}-${location.letter}-${location.shelf}`;
+      const locationCode = location.locationCode || `${location.warehouse}-R${location.rack}-${location.letter}${location.shelf}`;
       
       // Get inventory from location.inventory object
       const locationItems = [];

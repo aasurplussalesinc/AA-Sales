@@ -132,7 +132,7 @@ export default function Items() {
 
   // Get location options
   const locationOptions = locations.map(loc => 
-    loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`
+    loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`
   ).sort();
 
   // Quantity filter options
@@ -254,7 +254,7 @@ export default function Items() {
       if (loc.inventory && loc.inventory[itemId] && loc.inventory[itemId] > 0) {
         itemLocations.push({
           location: loc,
-          locationCode: loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`,
+          locationCode: loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`,
           quantity: loc.inventory[itemId]
         });
       }
@@ -264,7 +264,7 @@ export default function Items() {
     if (item && item.location && itemLocations.length === 0) {
       // Find matching location by code
       const matchingLoc = locations.find(loc => {
-        const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`;
+        const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
         return locCode === item.location;
       });
       
@@ -329,19 +329,22 @@ export default function Items() {
       reorderPoint: newItem.reorderPoint
     });
 
-    // If multi-location, update location inventories
+    // Sync location(s)
     if (useMultiLocation && itemId) {
+      // Multi-location: update each location's inventory
       const validLocations = newItem.locationBreakdown.filter(lb => lb.location && lb.quantity > 0);
       for (const lb of validLocations) {
-        // Find the location by code
         const loc = locations.find(l => {
-          const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
+          const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
           return locCode === lb.location;
         });
         if (loc) {
-          await DB.setInventoryAtLocation(loc.id, itemId, parseInt(lb.quantity) || 0);
+          await DB.setInventoryAtLocationWithSync(loc.id, itemId, parseInt(lb.quantity) || 0);
         }
       }
+    } else if (newItem.location && itemId) {
+      // Single location: sync to location inventory
+      await DB.syncItemToLocation(itemId, newItem.location, totalStock);
     }
 
     setNewItem({
@@ -396,17 +399,30 @@ export default function Items() {
         totalStock = parseInt(editingItem.stock) || 0;
       }
 
-      // Update the item
-      await DB.updateItem(editingItem.id, {
-        partNumber: editingItem.partNumber,
-        name: editingItem.name,
-        category: editingItem.category,
-        stock: totalStock,
-        price: parseFloat(editingItem.price) || 0,
-        location: editUseMultiLocation ? '' : (editingItem.location || ''),
-        lowStockThreshold: editingItem.lowStockThreshold || 10,
-        reorderPoint: editingItem.reorderPoint || 20
-      });
+      // Update the item (use sync for single location)
+      if (!editUseMultiLocation && editingItem.location) {
+        await DB.updateItemWithSync(editingItem.id, {
+          partNumber: editingItem.partNumber,
+          name: editingItem.name,
+          category: editingItem.category,
+          stock: totalStock,
+          price: parseFloat(editingItem.price) || 0,
+          location: editingItem.location || '',
+          lowStockThreshold: editingItem.lowStockThreshold || 10,
+          reorderPoint: editingItem.reorderPoint || 20
+        });
+      } else {
+        await DB.updateItem(editingItem.id, {
+          partNumber: editingItem.partNumber,
+          name: editingItem.name,
+          category: editingItem.category,
+          stock: totalStock,
+          price: parseFloat(editingItem.price) || 0,
+          location: editUseMultiLocation ? '' : (editingItem.location || ''),
+          lowStockThreshold: editingItem.lowStockThreshold || 10,
+          reorderPoint: editingItem.reorderPoint || 20
+        });
+      }
 
       // Update location inventories if multi-location
       if (editUseMultiLocation) {
@@ -417,15 +433,15 @@ export default function Items() {
           }
         }
         
-        // Set new location inventories
+        // Set new location inventories (with sync)
         const validLocations = editLocationBreakdown.filter(lb => lb.location && lb.quantity > 0);
         for (const lb of validLocations) {
           const loc = locations.find(l => {
-            const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
+            const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
             return locCode === lb.location;
           });
           if (loc) {
-            await DB.setInventoryAtLocation(loc.id, editingItem.id, parseInt(lb.quantity) || 0);
+            await DB.setInventoryAtLocationWithSync(loc.id, editingItem.id, parseInt(lb.quantity) || 0);
           }
         }
       }
@@ -444,8 +460,8 @@ export default function Items() {
   // Download CSV template
   const downloadTemplate = () => {
     const template = `SKU,Item Name,Category,Quantity,Price,Location,Low Stock Threshold,Reorder Point
-PART-001,Example Widget,Electronics,100,29.99,W1-R1-A-1,10,20
-PART-002,Sample Gadget,Hardware,50,49.99,W1-R1-A-2,5,15
+PART-001,Example Widget,Electronics,100,29.99,W1-R1-A1,10,20
+PART-002,Sample Gadget,Hardware,50,49.99,W1-R1-A2,5,15
 PART-003,Test Component,Parts,200,9.99,,10,25`;
     
     const blob = new Blob([template], { type: 'text/csv' });
@@ -632,7 +648,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               // Find the location
               const loc = locations.find(l => 
                 l.locationCode === inv.location ||
-                `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}` === inv.location
+                `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}` === inv.location
               );
               
               if (loc) {
@@ -719,20 +735,33 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             item.location !== original.location;
           
           if (changed) {
-            await DB.updateItem(item.id, {
-              partNumber: item.partNumber,
-              name: item.name,
-              category: item.category,
-              stock: parseInt(item.stock) || 0,
-              price: parseFloat(item.price) || 0,
-              location: item.location
-            });
+            // Use sync function if location changed
+            if (item.location !== original.location) {
+              await DB.updateItemWithSync(item.id, {
+                partNumber: item.partNumber,
+                name: item.name,
+                category: item.category,
+                stock: parseInt(item.stock) || 0,
+                price: parseFloat(item.price) || 0,
+                location: item.location
+              });
+            } else {
+              await DB.updateItem(item.id, {
+                partNumber: item.partNumber,
+                name: item.name,
+                category: item.category,
+                stock: parseInt(item.stock) || 0,
+                price: parseFloat(item.price) || 0,
+                location: item.location
+              });
+            }
           }
         }
       }
       
       setOriginalItems(JSON.parse(JSON.stringify(items)));
       setHasChanges(false);
+      loadData(); // Reload to get synced data
       alert('Changes saved successfully!');
     } catch (error) {
       console.error('Error saving:', error);

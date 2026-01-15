@@ -95,7 +95,7 @@ export const DB = {
   // Location format helper
   formatLocation(loc) {
     if (loc.locationCode) return loc.locationCode;
-    return `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`;
+    return `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
   },
 
   // SYNC OFFLINE QUEUE
@@ -199,7 +199,7 @@ export const DB = {
     // Log activity
     await this.logActivity('LOCATION_CREATED', {
       locationId: ref.id,
-      locationCode: data.locationCode || `${data.warehouse}-R${data.rack}-${data.letter}-${data.shelf}`
+      locationCode: data.locationCode || `${data.warehouse}-R${data.rack}-${data.letter}${data.shelf}`
     });
     
     return ref.id;

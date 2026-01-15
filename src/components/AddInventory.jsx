@@ -103,7 +103,7 @@ export default function AddInventory({ item, location, onClose, onSuccess }) {
           <option value="">Select location...</option>
           {locations.map(loc => (
             <option key={loc.id} value={loc.id}>
-              {loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`}
+              {loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`}
             </option>
           ))}
         </select>

@@ -72,7 +72,7 @@ export default function Locations() {
 
   // Format location code for display
   const formatLocation = (loc) => {
-    return `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`;
+    return `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
   };
 
   const addLocation = async () => {
@@ -81,7 +81,7 @@ export default function Locations() {
       return;
     }
 
-    const locationCode = `${newLocation.warehouse}-R${newLocation.rack}-${newLocation.letter}-${newLocation.shelf}`;
+    const locationCode = `${newLocation.warehouse}-R${newLocation.rack}-${newLocation.letter}${newLocation.shelf}`;
     
     // Check for duplicate
     const exists = locations.find(loc => loc.locationCode === locationCode);
@@ -151,7 +151,7 @@ export default function Locations() {
   const saveEditLocation = async () => {
     if (!editingLocation) return;
     
-    const newLocationCode = `${editingLocation.warehouse}-R${editingLocation.rack}-${editingLocation.letter}-${editingLocation.shelf}`;
+    const newLocationCode = `${editingLocation.warehouse}-R${editingLocation.rack}-${editingLocation.letter}${editingLocation.shelf}`;
     
     // Check for duplicate (excluding current location)
     const exists = locations.find(loc => 
@@ -276,7 +276,7 @@ export default function Locations() {
           // Strip "R" prefix from rack if present (e.g., "R1" -> "1")
           rack = rack.replace(/^R/i, '');
           
-          const locationCode = `${warehouse}-R${rack}-${letter}-${shelf}`;
+          const locationCode = `${warehouse}-R${rack}-${letter}${shelf}`;
           
           // Check if exists
           const exists = locations.find(loc => loc.locationCode === locationCode);
@@ -297,9 +297,9 @@ export default function Locations() {
           });
           added++;
         } else if (cleanValues.length >= 1) {
-          // Format: LocationCode (e.g., W1-R1-A-1)
+          // Format: LocationCode (e.g., W1-R1-A1)
           const locationCode = cleanValues[0];
-          const match = locationCode.match(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/);
+          const match = locationCode.match(/^(\w+)-R(\d+)-([A-Z])(\d+)$/);
           
           if (match) {
             const [, warehouse, rack, letter, shelf] = match;
@@ -633,7 +633,7 @@ W2,2,C,3`;
         <div style={{marginTop: 10, padding: 10, background: '#f0f0f0', borderRadius: 4, textAlign: 'center'}}>
           <strong>Preview: </strong>
           <span style={{fontSize: 18, color: '#2d5f3f'}}>
-            {newLocation.warehouse}-R{newLocation.rack}-{newLocation.letter}-{newLocation.shelf}
+            {newLocation.warehouse}-R{newLocation.rack}-{newLocation.letter}{newLocation.shelf}
           </span>
         </div>
       </div>
@@ -971,7 +971,7 @@ W2,2,C,3`;
               <div style={{ marginTop: 15, padding: 10, background: '#e8f5e9', borderRadius: 4, textAlign: 'center' }}>
                 <strong>New Location Code: </strong>
                 <span style={{ fontSize: 18, color: '#2d5f3f' }}>
-                  {editingLocation.warehouse}-R{editingLocation.rack}-{editingLocation.letter}-{editingLocation.shelf}
+                  {editingLocation.warehouse}-R{editingLocation.rack}-{editingLocation.letter}{editingLocation.shelf}
                 </span>
               </div>
             </div>

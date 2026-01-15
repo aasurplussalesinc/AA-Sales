@@ -66,8 +66,8 @@ export default function MoveLocation({ item, location, onClose, onSuccess }) {
       await DB.logMovement({
         itemId: item.id,
         itemName: item.name,
-        fromLocation: fromLoc.locationCode || `${fromLoc.warehouse}-R${fromLoc.rack}-${fromLoc.letter}-${fromLoc.shelf}`,
-        toLocation: toLoc.locationCode || `${toLoc.warehouse}-R${toLoc.rack}-${toLoc.letter}-${toLoc.shelf}`,
+        fromLocation: fromLoc.locationCode || `${fromLoc.warehouse}-R${fromLoc.rack}-${fromLoc.letter}${fromLoc.shelf}`,
+        toLocation: toLoc.locationCode || `${toLoc.warehouse}-R${toLoc.rack}-${toLoc.letter}${toLoc.shelf}`,
         quantity: quantity,
         type: 'MOVE',
         timestamp: Date.now()
@@ -122,7 +122,7 @@ export default function MoveLocation({ item, location, onClose, onSuccess }) {
           <option value="">Select source...</option>
           {locations.map(loc => (
             <option key={loc.id} value={loc.id}>
-              {loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`}
+              {loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`}
             </option>
           ))}
         </select>
@@ -158,7 +158,7 @@ export default function MoveLocation({ item, location, onClose, onSuccess }) {
           <option value="">Select destination...</option>
           {locations.filter(l => l.id !== fromLocation).map(loc => (
             <option key={loc.id} value={loc.id}>
-              {loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`}
+              {loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`}
             </option>
           ))}
         </select>

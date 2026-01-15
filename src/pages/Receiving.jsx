@@ -118,7 +118,7 @@ export default function Receiving() {
       i.itemId === itemId ? { 
         ...i, 
         locationId, 
-        locationCode: loc ? (loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`) : '' 
+        locationCode: loc ? (loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`) : '' 
       } : i
     );
     
@@ -358,7 +358,7 @@ export default function Receiving() {
                           <option value="">Select...</option>
                           {locations.map(loc => (
                             <option key={loc.id} value={loc.id}>
-                              {loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}-${loc.shelf}`}
+                              {loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`}
                             </option>
                           ))}
                         </select>

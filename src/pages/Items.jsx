@@ -711,17 +711,24 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
   };
 
   const updateItem = async (id, field, value) => {
-    setItems(items.map(item => 
+    console.log('updateItem called:', id, field, value);
+    setItems(prevItems => prevItems.map(item => 
       item.id === id ? { ...item, [field]: value } : item
     ));
     setHasChanges(true);
+    console.log('hasChanges set to true');
   };
 
   const saveAllChanges = async () => {
+    console.log('saveAllChanges called');
+    console.log('items count:', items.length);
+    console.log('originalItems count:', originalItems.length);
+    
     if (!confirm('Save all changes to items?')) return;
     
     setSaving(true);
     try {
+      let changeCount = 0;
       // Find items that changed
       for (const item of items) {
         const original = originalItems.find(o => o.id === item.id);
@@ -739,7 +746,11 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             itemLocation !== originalLocation;
           
           if (changed) {
-            console.log('Saving item:', item.id, 'location:', itemLocation, 'original:', originalLocation);
+            changeCount++;
+            console.log('Changed item found:', item.id, item.name);
+            console.log('  Location: "' + itemLocation + '" vs original: "' + originalLocation + '"');
+            console.log('  Calling updateItemWithSync...');
+            
             // Always use sync function to keep locations in sync
             await DB.updateItemWithSync(item.id, {
               partNumber: item.partNumber || '',
@@ -749,9 +760,12 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               price: parseFloat(item.price) || 0,
               location: itemLocation
             });
+            console.log('  updateItemWithSync completed');
           }
         }
       }
+      
+      console.log('Total changes saved:', changeCount);
       
       setOriginalItems(JSON.parse(JSON.stringify(items)));
       setHasChanges(false);

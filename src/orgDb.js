@@ -668,6 +668,27 @@ export const OrgDB = {
     await this.logActivity('LOCATION_DELETED', { locationId });
   },
 
+  async getLocationByQR(code) {
+    if (!currentOrgId) return null;
+    
+    const locations = await this.getLocations();
+    
+    // Check for LOC: prefix (location QR codes)
+    if (code.startsWith('LOC:')) {
+      const locCode = code.replace('LOC:', '');
+      return locations.find(l => {
+        const locationCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
+        return locationCode === locCode;
+      }) || null;
+    }
+    
+    // Also check raw location code format (W1-R1-A-1)
+    return locations.find(l => {
+      const locationCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
+      return locationCode === code;
+    }) || null;
+  },
+
   async addInventoryToLocation(locationId, itemId, quantity) {
     const ref = doc(db, 'locations', locationId);
     const snapshot = await getDoc(ref);

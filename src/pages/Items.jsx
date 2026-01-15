@@ -27,6 +27,7 @@ export default function Items() {
 
   // Add Item modal state
   const [showAddItem, setShowAddItem] = useState(false);
+  const [useMultiLocation, setUseMultiLocation] = useState(false);
   const [newItem, setNewItem] = useState({
     partNumber: '',
     name: '',
@@ -35,7 +36,8 @@ export default function Items() {
     price: 0,
     location: '',
     lowStockThreshold: 10,
-    reorderPoint: 20
+    reorderPoint: 20,
+    locationBreakdown: [{ location: '', quantity: 0 }] // For multi-location
   });
 
   // Filter states
@@ -292,18 +294,49 @@ export default function Items() {
       return;
     }
 
-    const confirmMsg = `Add new item?\n\nSKU: ${newItem.partNumber || '(none)'}\nName: ${newItem.name || '(none)'}\nCategory: ${newItem.category || '(none)'}\nStock: ${newItem.stock}\nPrice: $${newItem.price}\nLocation: ${newItem.location || '(none)'}`;
+    let totalStock = 0;
+    let locationInfo = '';
+    
+    if (useMultiLocation) {
+      // Calculate total from breakdown
+      const validLocations = newItem.locationBreakdown.filter(lb => lb.location && lb.quantity > 0);
+      totalStock = validLocations.reduce((sum, lb) => sum + parseInt(lb.quantity) || 0, 0);
+      locationInfo = validLocations.map(lb => `${lb.location}: ${lb.quantity}`).join(', ') || '(none)';
+    } else {
+      totalStock = parseInt(newItem.stock) || 0;
+      locationInfo = newItem.location || '(none)';
+    }
+
+    const confirmMsg = `Add new item?\n\nSKU: ${newItem.partNumber || '(none)'}\nName: ${newItem.name || '(none)'}\nCategory: ${newItem.category || '(none)'}\nTotal Stock: ${totalStock}\nPrice: $${newItem.price}\nLocation(s): ${locationInfo}`;
     
     if (!confirm(confirmMsg)) return;
 
-    await DB.createItem({
+    // Create the item
+    const itemId = await DB.createItem({
       partNumber: newItem.partNumber,
       name: newItem.name,
       category: newItem.category,
-      stock: parseInt(newItem.stock) || 0,
+      stock: totalStock,
       price: parseFloat(newItem.price) || 0,
-      location: newItem.location
+      location: useMultiLocation ? '' : newItem.location,
+      lowStockThreshold: newItem.lowStockThreshold,
+      reorderPoint: newItem.reorderPoint
     });
+
+    // If multi-location, update location inventories
+    if (useMultiLocation && itemId) {
+      const validLocations = newItem.locationBreakdown.filter(lb => lb.location && lb.quantity > 0);
+      for (const lb of validLocations) {
+        // Find the location by code
+        const loc = locations.find(l => {
+          const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
+          return locCode === lb.location;
+        });
+        if (loc) {
+          await DB.setInventoryAtLocation(loc.id, itemId, parseInt(lb.quantity) || 0);
+        }
+      }
+    }
 
     setNewItem({
       partNumber: '',
@@ -313,8 +346,10 @@ export default function Items() {
       price: 0,
       location: '',
       lowStockThreshold: 10,
-      reorderPoint: 20
+      reorderPoint: 20,
+      locationBreakdown: [{ location: '', quantity: 0 }]
     });
+    setUseMultiLocation(false);
     setShowAddItem(false);
     loadData();
   };
@@ -1483,42 +1518,152 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   ))}
                 </datalist>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
-                <div className="form-group">
-                  <label>Quantity</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={newItem.stock}
-                    onChange={e => setNewItem({ ...newItem, stock: e.target.value })}
-                    min="0"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Price</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={newItem.price}
-                    onChange={e => setNewItem({ ...newItem, price: e.target.value })}
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-              </div>
+              
               <div className="form-group">
-                <label>Location</label>
-                <select
+                <label>Price</label>
+                <input
+                  type="number"
                   className="form-input"
-                  value={newItem.location}
-                  onChange={e => setNewItem({ ...newItem, location: e.target.value })}
-                >
-                  <option value="">-- Select Location --</option>
-                  {locationOptions.map(loc => (
-                    <option key={loc} value={loc}>{loc}</option>
-                  ))}
-                </select>
+                  value={newItem.price}
+                  onChange={e => setNewItem({ ...newItem, price: e.target.value })}
+                  min="0"
+                  step="0.01"
+                />
               </div>
+
+              {/* Location Mode Toggle */}
+              <div style={{ 
+                background: '#f5f5f5', 
+                padding: 15, 
+                borderRadius: 8, 
+                marginBottom: 15 
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={useMultiLocation}
+                    onChange={e => setUseMultiLocation(e.target.checked)}
+                  />
+                  <span style={{ fontWeight: 500 }}>Split quantity across multiple locations</span>
+                </label>
+              </div>
+
+              {!useMultiLocation ? (
+                /* Single Location Mode */
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                    <div className="form-group">
+                      <label>Quantity</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={newItem.stock}
+                        onChange={e => setNewItem({ ...newItem, stock: e.target.value })}
+                        min="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Location</label>
+                      <select
+                        className="form-input"
+                        value={newItem.location}
+                        onChange={e => setNewItem({ ...newItem, location: e.target.value })}
+                      >
+                        <option value="">-- Select Location --</option>
+                        {locationOptions.map(loc => (
+                          <option key={loc} value={loc}>{loc}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Multi-Location Mode */
+                <div className="form-group">
+                  <label style={{ marginBottom: 10, display: 'block' }}>Location Breakdown</label>
+                  {newItem.locationBreakdown.map((lb, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'center' }}>
+                      <select
+                        className="form-input"
+                        value={lb.location}
+                        onChange={e => {
+                          const updated = [...newItem.locationBreakdown];
+                          updated[idx].location = e.target.value;
+                          setNewItem({ ...newItem, locationBreakdown: updated });
+                        }}
+                        style={{ flex: 2 }}
+                      >
+                        <option value="">-- Select Location --</option>
+                        {locationOptions.map(loc => (
+                          <option key={loc} value={loc}>{loc}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="Qty"
+                        value={lb.quantity}
+                        onChange={e => {
+                          const updated = [...newItem.locationBreakdown];
+                          updated[idx].quantity = parseInt(e.target.value) || 0;
+                          setNewItem({ ...newItem, locationBreakdown: updated });
+                        }}
+                        min="0"
+                        style={{ flex: 1 }}
+                      />
+                      {newItem.locationBreakdown.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = newItem.locationBreakdown.filter((_, i) => i !== idx);
+                            setNewItem({ ...newItem, locationBreakdown: updated });
+                          }}
+                          style={{ 
+                            background: '#f44336', 
+                            color: 'white', 
+                            border: 'none', 
+                            borderRadius: 4, 
+                            padding: '8px 12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNewItem({
+                        ...newItem,
+                        locationBreakdown: [...newItem.locationBreakdown, { location: '', quantity: 0 }]
+                      });
+                    }}
+                    style={{ 
+                      background: '#2196F3', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: 4, 
+                      padding: '8px 15px',
+                      cursor: 'pointer',
+                      marginTop: 5
+                    }}
+                  >
+                    + Add Location
+                  </button>
+                  <div style={{ 
+                    marginTop: 10, 
+                    padding: 10, 
+                    background: '#e8f5e9', 
+                    borderRadius: 4,
+                    fontWeight: 500 
+                  }}>
+                    Total: {newItem.locationBreakdown.reduce((sum, lb) => sum + (parseInt(lb.quantity) || 0), 0)} units
+                  </div>
+                </div>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
                 <div className="form-group">
                   <label>Low Stock Alert</label>
@@ -1547,7 +1692,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn" onClick={() => setShowAddItem(false)}>Cancel</button>
+              <button className="btn" onClick={() => { setShowAddItem(false); setUseMultiLocation(false); }}>Cancel</button>
               <button className="btn btn-primary" onClick={addNewItem}>Add Item</button>
             </div>
           </div>

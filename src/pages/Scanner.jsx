@@ -54,14 +54,48 @@ export default function Scanner() {
     const item = await DB.getItemByPartNumber(code);
     const location = await DB.getLocationByQR(code);
     
-    if (item || location) {
+    if (item) {
       setScannedData({
         code,
-        item: item || null,
-        location: location || null,
-        currentInventory: item ? (item.stock || 0) : 0,
-        currentLocation: item ? (item.location || 'Unassigned') : 
-                         location ? (location.locationCode || `${location.warehouse}-R${location.rack}-${location.letter}-${location.shelf}`) : 'Unknown'
+        type: 'item',
+        item: item,
+        location: null,
+        currentInventory: item.stock || 0,
+        currentLocation: item.location || 'Unassigned'
+      });
+      setShowPopup(true);
+    } else if (location) {
+      // Get items at this location
+      const allItems = await DB.getItems();
+      const locationCode = location.locationCode || `${location.warehouse}-R${location.rack}-${location.letter}-${location.shelf}`;
+      
+      // Get inventory from location.inventory object
+      const locationItems = [];
+      if (location.inventory) {
+        for (const [itemId, qty] of Object.entries(location.inventory)) {
+          if (qty > 0) {
+            const item = allItems.find(i => i.id === itemId);
+            if (item) {
+              locationItems.push({ ...item, qtyAtLocation: qty });
+            }
+          }
+        }
+      }
+      
+      // Also check items that have this location in their location field
+      allItems.forEach(item => {
+        if (item.location === locationCode && !locationItems.find(li => li.id === item.id)) {
+          locationItems.push({ ...item, qtyAtLocation: item.stock || 0 });
+        }
+      });
+      
+      setScannedData({
+        code,
+        type: 'location',
+        item: null,
+        location: location,
+        locationCode,
+        locationItems
       });
       setShowPopup(true);
     } else {
@@ -197,56 +231,139 @@ export default function Scanner() {
             padding: 30,
             maxWidth: 500,
             width: '100%',
+            maxHeight: '80vh',
+            overflow: 'auto',
             boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
           }}>
-            <h2 style={{marginBottom: 20, textAlign: 'center'}}>Scanned Successfully</h2>
-            
-            <div style={{marginBottom: 25}}>
-              <div style={{padding: 15, background: '#f8f9fa', borderRadius: 8, marginBottom: 10}}>
-                <p style={{fontSize: 14, color: '#666', marginBottom: 5}}>Current Inventory</p>
-                <p style={{fontSize: 24, fontWeight: 'bold', color: '#2d5f3f'}}>
-                  {scannedData.currentInventory} units
-                </p>
-              </div>
-              
-              <div style={{padding: 15, background: '#f8f9fa', borderRadius: 8}}>
-                <p style={{fontSize: 14, color: '#666', marginBottom: 5}}>Current Location</p>
-                <p style={{fontSize: 20, fontWeight: 'bold', color: '#2d5f3f'}}>
-                  {scannedData.currentLocation}
-                </p>
-              </div>
-            </div>
+            {/* ITEM SCAN */}
+            {scannedData.type === 'item' && scannedData.item && (
+              <>
+                <h2 style={{marginBottom: 20, textAlign: 'center'}}>📦 Item Scanned</h2>
+                
+                <div style={{ padding: 15, background: '#e8f5e9', borderRadius: 8, marginBottom: 15 }}>
+                  <div style={{ fontWeight: 600, fontSize: 18 }}>{scannedData.item.name}</div>
+                  <div style={{ color: '#666', fontSize: 13 }}>SKU: {scannedData.item.partNumber || 'N/A'}</div>
+                </div>
+                
+                <div style={{marginBottom: 25}}>
+                  <div style={{padding: 15, background: '#f8f9fa', borderRadius: 8, marginBottom: 10}}>
+                    <p style={{fontSize: 14, color: '#666', marginBottom: 5}}>Current Inventory</p>
+                    <p style={{fontSize: 24, fontWeight: 'bold', color: '#2d5f3f'}}>
+                      {scannedData.currentInventory} units
+                    </p>
+                  </div>
+                  
+                  <div style={{padding: 15, background: '#f8f9fa', borderRadius: 8}}>
+                    <p style={{fontSize: 14, color: '#666', marginBottom: 5}}>Current Location</p>
+                    <p style={{fontSize: 20, fontWeight: 'bold', color: '#2d5f3f'}}>
+                      {scannedData.currentLocation}
+                    </p>
+                  </div>
+                </div>
 
-            <div style={{display: 'grid', gap: 10, marginBottom: 15}}>
-              <button
-                className="btn btn-primary"
-                onClick={() => handleAction('add')}
-                style={{padding: 15, fontSize: 16}}
-              >
-                ➕ Add
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => handleAction('pick')}
-                style={{padding: 15, fontSize: 16}}
-              >
-                📦 Pick
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={() => handleAction('new_location')}
-                style={{padding: 15, fontSize: 16}}
-              >
-                📍 New Location
-              </button>
-            </div>
+                <div style={{display: 'grid', gap: 10, marginBottom: 15}}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handleAction('add')}
+                    style={{padding: 15, fontSize: 16}}
+                  >
+                    ➕ Add
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handleAction('pick')}
+                    style={{padding: 15, fontSize: 16}}
+                  >
+                    📦 Pick
+                  </button>
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => handleAction('new_location')}
+                    style={{padding: 15, fontSize: 16}}
+                  >
+                    📍 New Location
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* LOCATION SCAN */}
+            {scannedData.type === 'location' && scannedData.location && (
+              <>
+                <h2 style={{marginBottom: 20, textAlign: 'center'}}>📍 Location Scanned</h2>
+                
+                <div style={{ 
+                  padding: 20, 
+                  background: 'linear-gradient(135deg, #2d5f3f, #1a3a26)', 
+                  borderRadius: 8, 
+                  marginBottom: 20,
+                  color: 'white',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 2 }}>
+                    {scannedData.locationCode}
+                  </div>
+                </div>
+                
+                <div style={{ marginBottom: 20 }}>
+                  <h3 style={{ fontSize: 16, marginBottom: 10, color: '#666' }}>
+                    Items at this location ({scannedData.locationItems?.length || 0})
+                  </h3>
+                  
+                  {(!scannedData.locationItems || scannedData.locationItems.length === 0) ? (
+                    <div style={{ 
+                      padding: 30, 
+                      background: '#f5f5f5', 
+                      borderRadius: 8, 
+                      textAlign: 'center',
+                      color: '#666'
+                    }}>
+                      No items at this location
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: 300, overflowY: 'auto' }}>
+                      {scannedData.locationItems.map((item, idx) => (
+                        <div 
+                          key={item.id || idx}
+                          style={{
+                            padding: 12,
+                            background: idx % 2 === 0 ? '#f8f9fa' : 'white',
+                            borderRadius: 6,
+                            marginBottom: 5,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                          }}
+                        >
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{item.name}</div>
+                            <div style={{ fontSize: 12, color: '#666' }}>
+                              {item.partNumber || 'No SKU'}
+                            </div>
+                          </div>
+                          <div style={{
+                            background: '#2d5f3f',
+                            color: 'white',
+                            padding: '5px 12px',
+                            borderRadius: 20,
+                            fontWeight: 600
+                          }}>
+                            {item.qtyAtLocation}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
             <button
               className="btn"
               onClick={() => setShowPopup(false)}
               style={{width: '100%', padding: 12, background: '#6c757d', color: 'white'}}
             >
-              Cancel
+              Close
             </button>
           </div>
         </div>

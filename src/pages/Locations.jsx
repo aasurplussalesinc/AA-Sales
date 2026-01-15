@@ -375,6 +375,71 @@ W2,2,C,3`;
     URL.revokeObjectURL(url);
   };
 
+  // Print single location QR code (for scanning to see what's at this location)
+  const printSingleLocationQR = async (location) => {
+    try {
+      const locCode = formatLocation(location);
+      const qrData = `LOC:${locCode}`; // Prefix with LOC: to identify as location
+      const qrImage = await QRCode.toDataURL(qrData, { width: 400 });
+
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Location QR - ${locCode}</title>
+            <style>
+              body {
+                font-family: Arial, sans-serif;
+                padding: 40px;
+                text-align: center;
+              }
+              .label {
+                border: 3px solid #000;
+                padding: 30px;
+                display: inline-block;
+                max-width: 400px;
+              }
+              .location-code {
+                font-size: 36px;
+                font-weight: bold;
+                margin-bottom: 20px;
+                letter-spacing: 2px;
+              }
+              .qr-code img {
+                width: 300px;
+                height: 300px;
+              }
+              .scan-text {
+                margin-top: 15px;
+                font-size: 14px;
+                color: #666;
+              }
+              @media print {
+                body { padding: 20px; }
+              }
+            </style>
+          </head>
+          <body>
+            <div class="label">
+              <div class="location-code">${locCode}</div>
+              <div class="qr-code">
+                <img src="${qrImage}" alt="Location QR" />
+              </div>
+              <div class="scan-text">Scan to view inventory at this location</div>
+            </div>
+            <script>
+              window.onload = function() { window.print(); window.close(); }
+            </script>
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    } catch (error) {
+      console.error('Error printing location QR:', error);
+      alert('Error generating QR code');
+    }
+  };
+
   const printLocationQRCodes = async (location) => {
     try {
       // Get all items in this location
@@ -664,11 +729,19 @@ W2,2,C,3`;
                   <td onClick={e => e.stopPropagation()}>
                     <div className="action-buttons">
                       <button 
+                        className="btn btn-sm"
+                        onClick={() => printSingleLocationQR(loc)}
+                        title="Print location QR code"
+                        style={{ background: '#9c27b0', color: 'white' }}
+                      >
+                        📍 QR
+                      </button>
+                      <button 
                         className="btn btn-primary btn-sm"
                         onClick={() => printLocationQRCodes(loc)}
-                        title="Print all QR codes for this location"
+                        title="Print all item QR codes at this location"
                       >
-                        🖨️ Print All
+                        🖨️ Items
                       </button>
                       <button 
                         className="btn btn-primary btn-sm"

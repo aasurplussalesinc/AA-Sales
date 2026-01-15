@@ -130,10 +130,12 @@ export default function Items() {
   // Get unique categories for dropdown
   const categories = [...new Set(items.map(i => i.category).filter(Boolean))].sort();
 
-  // Get location options
-  const locationOptions = locations.map(loc => 
-    loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`
-  ).sort();
+  // Get location options - normalize to consistent format W1-R1-A1
+  const locationOptions = locations.map(loc => {
+    const code = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+    // Normalize: convert W1-R1-A-1 to W1-R1-A1
+    return code.replace(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i, '$1-R$2-$3$4');
+  }).sort();
 
   // Quantity filter options
   const quantityOptions = [
@@ -217,6 +219,13 @@ export default function Items() {
   useEffect(() => {
     setCurrentPage(1);
   }, [filters, items.length]);
+
+  // Normalize location code to consistent format W1-R1-A1
+  const normalizeLocationCode = (code) => {
+    if (!code) return '';
+    // Convert W1-R1-A-1 to W1-R1-A1
+    return code.replace(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i, '$1-R$2-$3$4');
+  };
 
   // Format date
   const formatDate = (timestamp) => {
@@ -1533,7 +1542,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </td>
                 <td>
                   <select
-                    value={item.location || ''}
+                    value={normalizeLocationCode(item.location) || ''}
                     onChange={e => updateItem(item.id, 'location', e.target.value)}
                     style={{ width: '110px', padding: '4px' }}
                   >

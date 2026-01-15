@@ -40,6 +40,12 @@ export default function Items() {
     locationBreakdown: [{ location: '', quantity: 0 }] // For multi-location
   });
 
+  // Edit Item modal state
+  const [showEditItem, setShowEditItem] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [editUseMultiLocation, setEditUseMultiLocation] = useState(false);
+  const [editLocationBreakdown, setEditLocationBreakdown] = useState([{ location: '', quantity: 0 }]);
+
   // Filter states
   const [filters, setFilters] = useState({
     sku: '',
@@ -351,6 +357,82 @@ export default function Items() {
     });
     setUseMultiLocation(false);
     setShowAddItem(false);
+    loadData();
+  };
+
+  // Open edit item modal
+  const openEditItem = (item) => {
+    setEditingItem({ ...item });
+    
+    // Load current location breakdown from location inventory
+    const itemLocations = getItemLocations(item.id);
+    if (itemLocations.length > 0) {
+      setEditLocationBreakdown(itemLocations.map(loc => ({
+        location: loc.locationCode,
+        quantity: loc.quantity
+      })));
+      setEditUseMultiLocation(true);
+    } else if (item.location) {
+      setEditLocationBreakdown([{ location: item.location, quantity: item.stock || 0 }]);
+      setEditUseMultiLocation(false);
+    } else {
+      setEditLocationBreakdown([{ location: '', quantity: 0 }]);
+      setEditUseMultiLocation(false);
+    }
+    
+    setShowEditItem(true);
+  };
+
+  // Save edited item
+  const saveEditedItem = async () => {
+    if (!editingItem) return;
+    
+    let totalStock = 0;
+    
+    if (editUseMultiLocation) {
+      totalStock = editLocationBreakdown.reduce((sum, lb) => sum + (parseInt(lb.quantity) || 0), 0);
+    } else {
+      totalStock = parseInt(editingItem.stock) || 0;
+    }
+
+    // Update the item
+    await DB.updateItem(editingItem.id, {
+      partNumber: editingItem.partNumber,
+      name: editingItem.name,
+      category: editingItem.category,
+      stock: totalStock,
+      price: parseFloat(editingItem.price) || 0,
+      location: editUseMultiLocation ? '' : editingItem.location,
+      lowStockThreshold: editingItem.lowStockThreshold,
+      reorderPoint: editingItem.reorderPoint
+    });
+
+    // Update location inventories if multi-location
+    if (editUseMultiLocation) {
+      // First clear existing location inventories for this item
+      for (const loc of locations) {
+        if (loc.inventory && loc.inventory[editingItem.id]) {
+          await DB.setInventoryAtLocation(loc.id, editingItem.id, 0);
+        }
+      }
+      
+      // Set new location inventories
+      const validLocations = editLocationBreakdown.filter(lb => lb.location && lb.quantity > 0);
+      for (const lb of validLocations) {
+        const loc = locations.find(l => {
+          const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}-${l.shelf}`;
+          return locCode === lb.location;
+        });
+        if (loc) {
+          await DB.setInventoryAtLocation(loc.id, editingItem.id, parseInt(lb.quantity) || 0);
+        }
+      }
+    }
+
+    setShowEditItem(false);
+    setEditingItem(null);
+    setEditUseMultiLocation(false);
+    setEditLocationBreakdown([{ location: '', quantity: 0 }]);
     loadData();
   };
 
@@ -1422,6 +1504,14 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <div className="action-buttons">
                     <button
                       className="btn btn-sm"
+                      onClick={() => openEditItem(item)}
+                      title="Edit Item"
+                      style={{ background: '#ff9800', color: 'white' }}
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      className="btn btn-sm"
                       onClick={() => setViewingItemLocations(item)}
                       title="View Locations"
                       style={{ background: '#17a2b8', color: 'white' }}
@@ -1694,6 +1784,224 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             <div className="modal-footer">
               <button className="btn" onClick={() => { setShowAddItem(false); setUseMultiLocation(false); }}>Cancel</button>
               <button className="btn btn-primary" onClick={addNewItem}>Add Item</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Item Modal */}
+      {showEditItem && editingItem && (
+        <div className="modal-overlay" onClick={() => setShowEditItem(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 550, maxHeight: '90vh', overflow: 'auto' }}>
+            <div className="modal-header">
+              <h2>✏️ Edit Item</h2>
+              <button className="modal-close" onClick={() => setShowEditItem(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>SKU / Part Number</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editingItem.partNumber || ''}
+                  onChange={e => setEditingItem({ ...editingItem, partNumber: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Item Name *</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editingItem.name || ''}
+                  onChange={e => setEditingItem({ ...editingItem, name: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Category</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editingItem.category || ''}
+                  onChange={e => setEditingItem({ ...editingItem, category: e.target.value })}
+                  list="edit-category-list"
+                />
+                <datalist id="edit-category-list">
+                  {categories.map(cat => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+              </div>
+              
+              <div className="form-group">
+                <label>Price</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={editingItem.price || 0}
+                  onChange={e => setEditingItem({ ...editingItem, price: e.target.value })}
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+
+              {/* Location Mode Toggle */}
+              <div style={{ 
+                background: '#f5f5f5', 
+                padding: 15, 
+                borderRadius: 8, 
+                marginBottom: 15 
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={editUseMultiLocation}
+                    onChange={e => setEditUseMultiLocation(e.target.checked)}
+                  />
+                  <span style={{ fontWeight: 500 }}>Split quantity across multiple locations</span>
+                </label>
+              </div>
+
+              {!editUseMultiLocation ? (
+                /* Single Location Mode */
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                    <div className="form-group">
+                      <label>Quantity</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={editingItem.stock || 0}
+                        onChange={e => setEditingItem({ ...editingItem, stock: e.target.value })}
+                        min="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Location</label>
+                      <select
+                        className="form-input"
+                        value={editingItem.location || ''}
+                        onChange={e => setEditingItem({ ...editingItem, location: e.target.value })}
+                      >
+                        <option value="">-- Select Location --</option>
+                        {locationOptions.map(loc => (
+                          <option key={loc} value={loc}>{loc}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                /* Multi-Location Mode */
+                <div className="form-group">
+                  <label style={{ marginBottom: 10, display: 'block' }}>Location Breakdown</label>
+                  {editLocationBreakdown.map((lb, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'center' }}>
+                      <select
+                        className="form-input"
+                        value={lb.location}
+                        onChange={e => {
+                          const updated = [...editLocationBreakdown];
+                          updated[idx].location = e.target.value;
+                          setEditLocationBreakdown(updated);
+                        }}
+                        style={{ flex: 2 }}
+                      >
+                        <option value="">-- Select Location --</option>
+                        {locationOptions.map(loc => (
+                          <option key={loc} value={loc}>{loc}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="Qty"
+                        value={lb.quantity}
+                        onChange={e => {
+                          const updated = [...editLocationBreakdown];
+                          updated[idx].quantity = parseInt(e.target.value) || 0;
+                          setEditLocationBreakdown(updated);
+                        }}
+                        min="0"
+                        style={{ flex: 1 }}
+                      />
+                      {editLocationBreakdown.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = editLocationBreakdown.filter((_, i) => i !== idx);
+                            setEditLocationBreakdown(updated);
+                          }}
+                          style={{ 
+                            background: '#f44336', 
+                            color: 'white', 
+                            border: 'none', 
+                            borderRadius: 4, 
+                            padding: '8px 12px',
+                            cursor: 'pointer'
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditLocationBreakdown([...editLocationBreakdown, { location: '', quantity: 0 }]);
+                    }}
+                    style={{ 
+                      background: '#2196F3', 
+                      color: 'white', 
+                      border: 'none', 
+                      borderRadius: 4, 
+                      padding: '8px 15px',
+                      cursor: 'pointer',
+                      marginTop: 5
+                    }}
+                  >
+                    + Add Location
+                  </button>
+                  <div style={{ 
+                    marginTop: 10, 
+                    padding: 10, 
+                    background: '#e8f5e9', 
+                    borderRadius: 4,
+                    fontWeight: 500 
+                  }}>
+                    Total: {editLocationBreakdown.reduce((sum, lb) => sum + (parseInt(lb.quantity) || 0), 0)} units
+                  </div>
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                <div className="form-group">
+                  <label>Low Stock Alert</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editingItem.lowStockThreshold || 10}
+                    onChange={e => setEditingItem({ ...editingItem, lowStockThreshold: parseInt(e.target.value) || 0 })}
+                    min="0"
+                  />
+                  <small style={{ color: '#666', fontSize: 11 }}>Alert when below this</small>
+                </div>
+                <div className="form-group">
+                  <label>Reorder Point</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editingItem.reorderPoint || 20}
+                    onChange={e => setEditingItem({ ...editingItem, reorderPoint: parseInt(e.target.value) || 0 })}
+                    min="0"
+                  />
+                  <small style={{ color: '#666', fontSize: 11 }}>Reorder at this level</small>
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn" onClick={() => { setShowEditItem(false); setEditUseMultiLocation(false); }}>Cancel</button>
+              <button className="btn btn-primary" onClick={saveEditedItem}>Save Changes</button>
             </div>
           </div>
         </div>

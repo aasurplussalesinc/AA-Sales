@@ -839,7 +839,7 @@ export const OrgDB = {
     const user = auth.currentUser;
     
     // Generate PO number if not provided
-    const poNumber = poData.poNumber || `PO-${Date.now().toString().slice(-8)}`;
+    const poNumber = poData.poNumber || `AA-${Date.now().toString().slice(-8)}`;
     
     const ref = await addDoc(collection(db, 'purchaseOrders'), {
       ...poData,

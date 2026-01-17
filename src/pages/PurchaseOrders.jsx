@@ -30,9 +30,11 @@ export default function PurchaseOrders() {
     dueDate: '',
     notes: '',
     items: [],
+    estSubtotal: 0,
     subtotal: 0,
     tax: 0,
     shipping: 0,
+    estTotal: 0,
     total: 0
   });
 
@@ -89,9 +91,10 @@ export default function PurchaseOrders() {
       partNumber: item.partNumber,
       location: item.location || '',
       quantity: '',  // Qty Ordered - starts blank
-      qtyShipped: '', // Qty Shipped - starts blank, this determines line total
+      qtyShipped: '', // Qty Shipped - starts blank
       unitPrice: unitPrice,
-      lineTotal: 0  // Start at 0 until qtyShipped is entered
+      estTotal: 0,   // Estimate total (Qty Ordered × Price)
+      lineTotal: 0   // Invoice total (Qty Shipped × Price)
     };
 
     const updatedItems = [...newPO.items, newItem];
@@ -107,31 +110,35 @@ export default function PurchaseOrders() {
         if (item.itemId === itemId) {
           const updated = { ...item, [field]: value };
           
-          // Always recalculate line total when qtyShipped or unitPrice changes
-          // Line total is based on Qty SHIPPED, not Qty Ordered
-          if (field === 'qtyShipped' || field === 'unitPrice') {
-            const qty = parseFloat(updated.qtyShipped) || 0;
+          // Always recalculate both totals when quantity or price changes
+          if (field === 'quantity' || field === 'qtyShipped' || field === 'unitPrice') {
+            const qtyOrdered = parseFloat(updated.quantity) || 0;
+            const qtyShipped = parseFloat(updated.qtyShipped) || 0;
             const price = parseFloat(updated.unitPrice) || 0;
-            updated.lineTotal = qty * price;
-            console.log('Recalculated lineTotal:', qty, '*', price, '=', updated.lineTotal);
+            
+            updated.estTotal = qtyOrdered * price;  // Estimate total (Qty Ordered × Price)
+            updated.lineTotal = qtyShipped * price; // Invoice total (Qty Shipped × Price)
+            
+            console.log('Recalculated - estTotal:', updated.estTotal, 'lineTotal:', updated.lineTotal);
           }
           return updated;
         }
         return item;
       });
       
-      const subtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
+      // Calculate both subtotals
+      const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
+      const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
       const tax = parseFloat(prevPO.tax) || 0;
       const shipping = parseFloat(prevPO.shipping) || 0;
-      const total = subtotal + tax + shipping;
-      
-      console.log('New totals - subtotal:', subtotal, 'tax:', tax, 'shipping:', shipping, 'total:', total);
       
       return {
         ...prevPO,
         items: updatedItems,
-        subtotal,
-        total
+        estSubtotal,
+        subtotal: shipSubtotal,
+        estTotal: estSubtotal + tax + shipping,
+        total: shipSubtotal + tax + shipping
       };
     });
   };
@@ -139,32 +146,36 @@ export default function PurchaseOrders() {
   const removeItemFromPO = (itemId) => {
     setNewPO(prevPO => {
       const updatedItems = prevPO.items.filter(i => i.itemId !== itemId);
-      const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
+      const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
+      const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
       const tax = parseFloat(prevPO.tax) || 0;
       const shipping = parseFloat(prevPO.shipping) || 0;
-      const total = subtotal + tax + shipping;
       
       return {
         ...prevPO,
         items: updatedItems,
-        subtotal,
-        total
+        estSubtotal,
+        subtotal: shipSubtotal,
+        estTotal: estSubtotal + tax + shipping,
+        total: shipSubtotal + tax + shipping
       };
     });
   };
 
   const updatePOTotals = (updatedItems) => {
     setNewPO(prevPO => {
-      const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
+      const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
+      const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
       const tax = parseFloat(prevPO.tax) || 0;
       const shipping = parseFloat(prevPO.shipping) || 0;
-      const total = subtotal + tax + shipping;
 
       return {
         ...prevPO,
         items: updatedItems,
-        subtotal,
-        total
+        estSubtotal,
+        subtotal: shipSubtotal,
+        estTotal: estSubtotal + tax + shipping,
+        total: shipSubtotal + tax + shipping
       };
     });
   };
@@ -172,14 +183,16 @@ export default function PurchaseOrders() {
   const updateTaxShipping = (field, value) => {
     setNewPO(prevPO => {
       const val = parseFloat(value) || 0;
-      const subtotal = prevPO.subtotal || 0;
+      const estSubtotal = prevPO.estSubtotal || 0;
+      const shipSubtotal = prevPO.subtotal || 0;
       const tax = field === 'tax' ? val : (parseFloat(prevPO.tax) || 0);
       const shipping = field === 'shipping' ? val : (parseFloat(prevPO.shipping) || 0);
 
       return {
         ...prevPO,
         [field]: val,
-        total: subtotal + tax + shipping
+        estTotal: estSubtotal + tax + shipping,
+        total: shipSubtotal + tax + shipping
       };
     });
   };
@@ -211,13 +224,26 @@ export default function PurchaseOrders() {
 
   const openEditOrder = (order) => {
     // Normalize items to ensure proper number types for calculations
-    const normalizedItems = (order.items || []).map(item => ({
-      ...item,
-      quantity: item.quantity === '' ? '' : (parseInt(item.quantity) || 0),
-      qtyShipped: item.qtyShipped === '' ? '' : (parseInt(item.qtyShipped) || 0),
-      unitPrice: parseFloat(item.unitPrice) || 0,
-      lineTotal: parseFloat(item.lineTotal) || 0
-    }));
+    const normalizedItems = (order.items || []).map(item => {
+      const qty = item.quantity === '' ? 0 : (parseInt(item.quantity) || 0);
+      const qtyShipped = item.qtyShipped === '' ? 0 : (parseInt(item.qtyShipped) || 0);
+      const price = parseFloat(item.unitPrice) || 0;
+      
+      return {
+        ...item,
+        quantity: item.quantity === '' ? '' : qty,
+        qtyShipped: item.qtyShipped === '' ? '' : qtyShipped,
+        unitPrice: price,
+        estTotal: qty * price,
+        lineTotal: qtyShipped * price
+      };
+    });
+    
+    // Calculate both subtotals
+    const estSubtotal = normalizedItems.reduce((sum, i) => sum + (i.estTotal || 0), 0);
+    const shipSubtotal = normalizedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
+    const tax = parseFloat(order.tax) || 0;
+    const shipping = parseFloat(order.shipping) || 0;
     
     setNewPO({
       customerId: order.customerId || '',
@@ -228,10 +254,12 @@ export default function PurchaseOrders() {
       dueDate: order.dueDate || '',
       notes: order.notes || '',
       items: normalizedItems,
-      subtotal: parseFloat(order.subtotal) || 0,
-      tax: parseFloat(order.tax) || 0,
-      shipping: parseFloat(order.shipping) || 0,
-      total: parseFloat(order.total) || 0
+      estSubtotal,
+      subtotal: shipSubtotal,
+      tax,
+      shipping,
+      estTotal: estSubtotal + tax + shipping,
+      total: shipSubtotal + tax + shipping
     });
     setEditingOrderId(order.id);
     setEditMode(true);
@@ -249,9 +277,11 @@ export default function PurchaseOrders() {
       dueDate: '',
       notes: '',
       items: [],
+      estSubtotal: 0,
       subtotal: 0,
       tax: 0,
       shipping: 0,
+      estTotal: 0,
       total: 0
     });
   };
@@ -289,7 +319,25 @@ export default function PurchaseOrders() {
     setSelectedOrder(null);
   };
 
-  const printPO = (order) => {
+  const printPO = (order, printType = 'invoice') => {
+    // printType: 'estimate' uses Qty Ordered & estTotal, 'invoice' uses Qty Shipped & lineTotal
+    const isEstimate = printType === 'estimate';
+    const docTitle = isEstimate ? 'Estimate' : 'Invoice';
+    const accentColor = isEstimate ? '#1976d2' : '#4a5d23';
+    
+    // Calculate totals based on print type
+    const items = (order.items || []).map(item => {
+      const qty = isEstimate ? (item.quantity || 0) : (item.qtyShipped || 0);
+      const price = parseFloat(item.unitPrice) || 0;
+      const total = qty * price;
+      return { ...item, displayQty: qty, displayTotal: total };
+    });
+    
+    const subtotal = items.reduce((sum, i) => sum + i.displayTotal, 0);
+    const tax = parseFloat(order.tax) || 0;
+    const shipping = parseFloat(order.shipping) || 0;
+    const total = subtotal + tax + shipping;
+    
     // Format date as full month name
     const formatFullDate = (timestamp) => {
       const date = new Date(timestamp);
@@ -302,23 +350,24 @@ export default function PurchaseOrders() {
     printWindow.document.write(`
       <html>
         <head>
-          <title>Purchase Order - ${order.poNumber}</title>
+          <title>${docTitle} - ${order.poNumber}</title>
           <style>
             body { font-family: Arial, sans-serif; padding: 20px 30px; max-width: 800px; margin: 0 auto; font-size: 12px; }
-            .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 2px solid #4a5d23; padding-bottom: 10px; }
+            .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; border-bottom: 2px solid ${accentColor}; padding-bottom: 10px; }
             .company-info { display: flex; flex-direction: column; align-items: flex-start; }
             .company-logo { max-width: 180px; height: auto; margin-bottom: 3px; }
             .company-location { font-size: 11px; color: #333; }
             .po-info { text-align: right; }
-            .po-number { font-size: 20px; font-weight: bold; color: #4a5d23; }
+            .po-number { font-size: 20px; font-weight: bold; color: ${accentColor}; }
+            .doc-type { font-size: 14px; font-weight: bold; color: ${accentColor}; text-transform: uppercase; margin-bottom: 5px; }
             .po-meta { font-size: 12px; color: #666; margin-top: 3px; }
             .addresses { display: flex; gap: 30px; margin-bottom: 15px; }
-            .address-box { flex: 1; padding: 10px; background: #f5f5f5; border-radius: 6px; border-left: 3px solid #4a5d23; }
+            .address-box { flex: 1; padding: 10px; background: #f5f5f5; border-radius: 6px; border-left: 3px solid ${accentColor}; }
             .address-box h3 { margin: 0 0 8px 0; font-size: 11px; color: #666; text-transform: uppercase; }
             .address-box p { margin: 2px 0; font-size: 11px; }
             .address-box .name { font-weight: bold; font-size: 12px; }
             table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-            th { background: #4a5d23; color: white; padding: 8px 6px; text-align: left; font-size: 11px; }
+            th { background: ${accentColor}; color: white; padding: 8px 6px; text-align: left; font-size: 11px; }
             td { padding: 6px; border-bottom: 1px solid #ddd; font-size: 11px; }
             .text-right { text-align: right; }
             .text-center { text-align: center; }
@@ -337,6 +386,7 @@ export default function PurchaseOrders() {
               <div class="company-location">Ronkonkoma, NY • 716-496-2451</div>
             </div>
             <div class="po-info">
+              <div class="doc-type">${docTitle}</div>
               <div class="po-number">${order.poNumber}</div>
               <div class="po-meta">${formatFullDate(order.createdAt)}</div>
               ${order.dueDate ? `<div class="po-meta">Terms: ${order.dueDate}</div>` : ''}
@@ -364,21 +414,21 @@ export default function PurchaseOrders() {
               <tr>
                 <th>SKU</th>
                 <th>Description</th>
-                <th class="text-center">Qty Ordered</th>
-                <th class="text-center">Qty Shipped</th>
+                <th class="text-center">${isEstimate ? 'Quantity' : 'Qty Ordered'}</th>
+                ${!isEstimate ? '<th class="text-center">Qty Shipped</th>' : ''}
                 <th class="text-right">Unit Price</th>
                 <th class="text-right">Total</th>
               </tr>
             </thead>
             <tbody>
-              ${order.items.map(item => `
+              ${items.map(item => `
                 <tr>
                   <td>${item.partNumber || '-'}</td>
                   <td>${item.itemName}</td>
-                  <td class="text-center">${item.quantity}</td>
-                  <td class="text-center">${item.qtyShipped || ''}</td>
+                  <td class="text-center">${isEstimate ? item.quantity : item.quantity}</td>
+                  ${!isEstimate ? `<td class="text-center">${item.qtyShipped || ''}</td>` : ''}
                   <td class="text-right">$${(item.unitPrice || 0).toFixed(2)}</td>
-                  <td class="text-right">$${(item.lineTotal || 0).toFixed(2)}</td>
+                  <td class="text-right">$${item.displayTotal.toFixed(2)}</td>
                 </tr>
               `).join('')}
             </tbody>
@@ -387,13 +437,13 @@ export default function PurchaseOrders() {
           <table class="totals">
             <tr>
               <td>Subtotal:</td>
-              <td class="text-right">$${(order.subtotal || 0).toFixed(2)}</td>
+              <td class="text-right">$${subtotal.toFixed(2)}</td>
             </tr>
-            ${order.tax ? `<tr><td>Tax:</td><td class="text-right">$${order.tax.toFixed(2)}</td></tr>` : ''}
-            ${order.shipping ? `<tr><td>Shipping:</td><td class="text-right">$${order.shipping.toFixed(2)}</td></tr>` : ''}
+            ${tax ? `<tr><td>Tax:</td><td class="text-right">$${tax.toFixed(2)}</td></tr>` : ''}
+            ${shipping ? `<tr><td>Shipping:</td><td class="text-right">$${shipping.toFixed(2)}</td></tr>` : ''}
             <tr class="total-row">
               <td>TOTAL:</td>
-              <td class="text-right">$${(order.total || 0).toFixed(2)}</td>
+              <td class="text-right">$${total.toFixed(2)}</td>
             </tr>
           </table>
 
@@ -673,8 +723,9 @@ export default function PurchaseOrders() {
                       <th style={{ padding: 10, textAlign: 'left' }}>Item</th>
                       <th style={{ padding: 10, width: 80 }}>Qty Ordered</th>
                       <th style={{ padding: 10, width: 80 }}>Qty Shipped</th>
-                      <th style={{ padding: 10, width: 100 }}>Unit Price</th>
-                      <th style={{ padding: 10, width: 100 }}>Line Total</th>
+                      <th style={{ padding: 10, width: 90 }}>Unit Price</th>
+                      <th style={{ padding: 10, width: 90, background: '#e3f2fd' }}>Est. Total</th>
+                      <th style={{ padding: 10, width: 90, background: '#e8f5e9' }}>Ship Total</th>
                       <th style={{ padding: 10, width: 50 }}></th>
                     </tr>
                   </thead>
@@ -716,7 +767,10 @@ export default function PurchaseOrders() {
                             placeholder="0.00"
                           />
                         </td>
-                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 600 }}>
+                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 600, background: '#e3f2fd' }}>
+                          ${(item.estTotal || 0).toFixed(2)}
+                        </td>
+                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 600, background: '#e8f5e9' }}>
                           ${(item.lineTotal || 0).toFixed(2)}
                         </td>
                         <td style={{ padding: 10 }}>
@@ -732,12 +786,35 @@ export default function PurchaseOrders() {
                   </tbody>
                 </table>
 
-                {/* Totals */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 15 }}>
-                  <div style={{ width: 250 }}>
+                {/* Totals - Side by Side */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 15, gap: 30 }}>
+                  {/* Estimate Total (Blue) */}
+                  <div style={{ width: 220, background: '#e3f2fd', padding: 15, borderRadius: 8, border: '2px solid #1976d2' }}>
+                    <div style={{ fontWeight: 600, color: '#1976d2', marginBottom: 10, fontSize: 14 }}>📋 ESTIMATE</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
                       <span>Subtotal:</span>
-                      <span>${newPO.subtotal.toFixed(2)}</span>
+                      <span>${(newPO.estSubtotal || 0).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+                      <span>Tax:</span>
+                      <span>${(newPO.tax || 0).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+                      <span>Shipping:</span>
+                      <span>${(newPO.shipping || 0).toFixed(2)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #1976d2', fontWeight: 'bold', fontSize: 18, color: '#1976d2' }}>
+                      <span>Quote Total:</span>
+                      <span>${(newPO.estTotal || 0).toFixed(2)}</span>
+                    </div>
+                  </div>
+                  
+                  {/* Invoice Total (Green) */}
+                  <div style={{ width: 220, background: '#e8f5e9', padding: 15, borderRadius: 8, border: '2px solid #388e3c' }}>
+                    <div style={{ fontWeight: 600, color: '#388e3c', marginBottom: 10, fontSize: 14 }}>💵 INVOICE</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+                      <span>Subtotal:</span>
+                      <span>${(newPO.subtotal || 0).toFixed(2)}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}>
                       <span>Tax:</span>
@@ -745,7 +822,7 @@ export default function PurchaseOrders() {
                         type="number"
                         value={newPO.tax}
                         onChange={e => updateTaxShipping('tax', e.target.value)}
-                        style={{ width: 80, padding: 5, textAlign: 'right' }}
+                        style={{ width: 70, padding: 5, textAlign: 'right' }}
                         step="0.01"
                         min="0"
                       />
@@ -756,14 +833,14 @@ export default function PurchaseOrders() {
                         type="number"
                         value={newPO.shipping}
                         onChange={e => updateTaxShipping('shipping', e.target.value)}
-                        style={{ width: 80, padding: 5, textAlign: 'right' }}
+                        style={{ width: 70, padding: 5, textAlign: 'right' }}
                         step="0.01"
                         min="0"
                       />
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #333', fontWeight: 'bold', fontSize: 18 }}>
-                      <span>Total:</span>
-                      <span>${newPO.total.toFixed(2)}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #388e3c', fontWeight: 'bold', fontSize: 18, color: '#388e3c' }}>
+                      <span>Invoice Total:</span>
+                      <span>${(newPO.total || 0).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -896,8 +973,12 @@ export default function PurchaseOrders() {
                 ✏️ Edit
               </button>
               
-              <button className="btn" onClick={() => printPO(selectedOrder)} style={{ background: '#17a2b8', color: 'white' }}>
-                🖨️ Print PO
+              <button className="btn" onClick={() => printPO(selectedOrder, 'estimate')} style={{ background: '#1976d2', color: 'white' }}>
+                📋 Print Estimate
+              </button>
+              
+              <button className="btn" onClick={() => printPO(selectedOrder, 'invoice')} style={{ background: '#388e3c', color: 'white' }}>
+                💵 Print Invoice
               </button>
               
               <button 
@@ -917,7 +998,7 @@ export default function PurchaseOrders() {
                   );
                   window.location.href = `mailto:${selectedOrder.customerEmail || ''}?subject=${subject}&body=${body}`;
                 }} 
-                style={{ background: '#2196F3', color: 'white' }}
+                style={{ background: '#17a2b8', color: 'white' }}
               >
                 📧 Email PO
               </button>

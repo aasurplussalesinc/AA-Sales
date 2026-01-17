@@ -63,6 +63,9 @@ export default function Items() {
     sortBy: 'sku' // default sort by SKU
   });
   const [showFilters, setShowFilters] = useState(false);
+  
+  // Lock filtered items when editing - prevents items from disappearing mid-edit
+  const [lockedItemIds, setLockedItemIds] = useState(new Set());
 
   useEffect(() => {
     loadData();
@@ -152,8 +155,13 @@ export default function Items() {
     { value: '51+', label: 'High (51+)' }
   ];
 
-  // Filter logic
+  // Filter logic - but keep locked items visible during editing
   const filteredItems = items.filter(item => {
+    // Always show locked items (items being actively edited)
+    if (lockedItemIds.has(item.id)) {
+      return true;
+    }
+    
     // SKU filter
     if (filters.sku && !item.partNumber?.toLowerCase().includes(filters.sku.toLowerCase())) {
       return false;
@@ -252,8 +260,10 @@ export default function Items() {
       category: '',
       quantity: '',
       location: '',
+      stockStatus: '',
       sortBy: 'sku'
     });
+    setLockedItemIds(new Set()); // Clear locked items when filters are cleared
   };
 
   // Check if any filters are active
@@ -727,6 +737,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
 
   const updateItem = async (id, field, value) => {
     console.log('updateItem called:', id, field, value);
+    
+    // Lock this item so it stays visible even if filter no longer matches
+    setLockedItemIds(prev => new Set([...prev, id]));
+    
     setItems(prevItems => prevItems.map(item => 
       item.id === id ? { ...item, [field]: value } : item
     ));
@@ -784,6 +798,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       
       setOriginalItems(JSON.parse(JSON.stringify(items)));
       setHasChanges(false);
+      setLockedItemIds(new Set()); // Clear locked items after saving
       loadData(); // Reload to get synced data
       alert('Changes saved successfully!');
     } catch (error) {
@@ -798,6 +813,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
     if (!confirm('Discard all unsaved changes?')) return;
     setItems(JSON.parse(JSON.stringify(originalItems)));
     setHasChanges(false);
+    setLockedItemIds(new Set()); // Clear locked items after discarding
   };
 
   const applyAdjustment = async () => {

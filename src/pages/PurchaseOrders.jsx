@@ -100,49 +100,78 @@ export default function PurchaseOrders() {
   };
 
   const updatePOItem = (itemId, field, value) => {
-    const updatedItems = newPO.items.map(item => {
-      if (item.itemId === itemId) {
-        const updated = { ...item, [field]: value };
-        // Line total is based on Qty SHIPPED, not Qty Ordered
-        if (field === 'qtyShipped' || field === 'unitPrice') {
-          updated.lineTotal = (parseFloat(updated.qtyShipped) || 0) * (parseFloat(updated.unitPrice) || 0);
+    setNewPO(prevPO => {
+      const updatedItems = prevPO.items.map(item => {
+        if (item.itemId === itemId) {
+          const updated = { ...item, [field]: value };
+          // Line total is based on Qty SHIPPED, not Qty Ordered
+          if (field === 'qtyShipped' || field === 'unitPrice') {
+            updated.lineTotal = (parseFloat(updated.qtyShipped) || 0) * (parseFloat(updated.unitPrice) || 0);
+          }
+          return updated;
         }
-        return updated;
-      }
-      return item;
+        return item;
+      });
+      
+      const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
+      const tax = parseFloat(prevPO.tax) || 0;
+      const shipping = parseFloat(prevPO.shipping) || 0;
+      const total = subtotal + tax + shipping;
+      
+      return {
+        ...prevPO,
+        items: updatedItems,
+        subtotal,
+        total
+      };
     });
-    updatePOTotals(updatedItems);
   };
 
   const removeItemFromPO = (itemId) => {
-    const updatedItems = newPO.items.filter(i => i.itemId !== itemId);
-    updatePOTotals(updatedItems);
+    setNewPO(prevPO => {
+      const updatedItems = prevPO.items.filter(i => i.itemId !== itemId);
+      const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
+      const tax = parseFloat(prevPO.tax) || 0;
+      const shipping = parseFloat(prevPO.shipping) || 0;
+      const total = subtotal + tax + shipping;
+      
+      return {
+        ...prevPO,
+        items: updatedItems,
+        subtotal,
+        total
+      };
+    });
   };
 
   const updatePOTotals = (updatedItems) => {
-    const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
-    const tax = parseFloat(newPO.tax) || 0;
-    const shipping = parseFloat(newPO.shipping) || 0;
-    const total = subtotal + tax + shipping;
+    setNewPO(prevPO => {
+      const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
+      const tax = parseFloat(prevPO.tax) || 0;
+      const shipping = parseFloat(prevPO.shipping) || 0;
+      const total = subtotal + tax + shipping;
 
-    setNewPO({
-      ...newPO,
-      items: updatedItems,
-      subtotal,
-      total
+      return {
+        ...prevPO,
+        items: updatedItems,
+        subtotal,
+        total
+      };
     });
   };
 
   const updateTaxShipping = (field, value) => {
-    const val = parseFloat(value) || 0;
-    const subtotal = newPO.subtotal;
-    const tax = field === 'tax' ? val : (parseFloat(newPO.tax) || 0);
-    const shipping = field === 'shipping' ? val : (parseFloat(newPO.shipping) || 0);
+    setNewPO(prevPO => {
+      const val = parseFloat(value) || 0;
+      const subtotal = prevPO.subtotal || 0;
+      const tax = field === 'tax' ? val : (parseFloat(prevPO.tax) || 0);
+      const shipping = field === 'shipping' ? val : (parseFloat(prevPO.shipping) || 0);
 
-    setNewPO({
-      ...newPO,
-      [field]: val,
-      total: subtotal + tax + shipping
+      return {
+        ...prevPO,
+        [field]: val,
+        total: subtotal + tax + shipping
+      };
     });
   };
 

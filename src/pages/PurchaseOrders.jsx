@@ -100,23 +100,32 @@ export default function PurchaseOrders() {
   };
 
   const updatePOItem = (itemId, field, value) => {
+    console.log('updatePOItem called:', itemId, field, value);
+    
     setNewPO(prevPO => {
       const updatedItems = prevPO.items.map(item => {
         if (item.itemId === itemId) {
           const updated = { ...item, [field]: value };
+          
+          // Always recalculate line total when qtyShipped or unitPrice changes
           // Line total is based on Qty SHIPPED, not Qty Ordered
           if (field === 'qtyShipped' || field === 'unitPrice') {
-            updated.lineTotal = (parseFloat(updated.qtyShipped) || 0) * (parseFloat(updated.unitPrice) || 0);
+            const qty = parseFloat(updated.qtyShipped) || 0;
+            const price = parseFloat(updated.unitPrice) || 0;
+            updated.lineTotal = qty * price;
+            console.log('Recalculated lineTotal:', qty, '*', price, '=', updated.lineTotal);
           }
           return updated;
         }
         return item;
       });
       
-      const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
+      const subtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
       const tax = parseFloat(prevPO.tax) || 0;
       const shipping = parseFloat(prevPO.shipping) || 0;
       const total = subtotal + tax + shipping;
+      
+      console.log('New totals - subtotal:', subtotal, 'tax:', tax, 'shipping:', shipping, 'total:', total);
       
       return {
         ...prevPO,
@@ -201,6 +210,15 @@ export default function PurchaseOrders() {
   };
 
   const openEditOrder = (order) => {
+    // Normalize items to ensure proper number types for calculations
+    const normalizedItems = (order.items || []).map(item => ({
+      ...item,
+      quantity: item.quantity === '' ? '' : (parseInt(item.quantity) || 0),
+      qtyShipped: item.qtyShipped === '' ? '' : (parseInt(item.qtyShipped) || 0),
+      unitPrice: parseFloat(item.unitPrice) || 0,
+      lineTotal: parseFloat(item.lineTotal) || 0
+    }));
+    
     setNewPO({
       customerId: order.customerId || '',
       customerName: order.customerName || '',
@@ -209,11 +227,11 @@ export default function PurchaseOrders() {
       customerAddress: order.customerAddress || '',
       dueDate: order.dueDate || '',
       notes: order.notes || '',
-      items: order.items || [],
-      subtotal: order.subtotal || 0,
-      tax: order.tax || 0,
-      shipping: order.shipping || 0,
-      total: order.total || 0
+      items: normalizedItems,
+      subtotal: parseFloat(order.subtotal) || 0,
+      tax: parseFloat(order.tax) || 0,
+      shipping: parseFloat(order.shipping) || 0,
+      total: parseFloat(order.total) || 0
     });
     setEditingOrderId(order.id);
     setEditMode(true);

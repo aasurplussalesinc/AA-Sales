@@ -318,8 +318,11 @@ export default function Items() {
     return getItemLocations(itemId).reduce((sum, loc) => sum + loc.quantity, 0);
   };
 
-  // Add new item
-  const addNewItem = async () => {
+  // Success message state for Save & Add Another
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState('');
+
+  // Add new item (addAnother = true keeps modal open with name/category prefilled)
+  const addNewItem = async (addAnother = false) => {
     if (!newItem.name && !newItem.partNumber) {
       alert('Please enter at least a name or SKU');
       return;
@@ -338,9 +341,11 @@ export default function Items() {
       locationInfo = newItem.location || '(none)';
     }
 
-    const confirmMsg = `Add new item?\n\nSKU: ${newItem.partNumber || '(none)'}\nName: ${newItem.name || '(none)'}\nCategory: ${newItem.category || '(none)'}\nTotal Stock: ${totalStock}\nPrice: $${newItem.price}\nLocation(s): ${locationInfo}`;
-    
-    if (!confirm(confirmMsg)) return;
+    // Skip confirmation for Save & Add Another to speed up workflow
+    if (!addAnother) {
+      const confirmMsg = `Add new item?\n\nSKU: ${newItem.partNumber || '(none)'}\nName: ${newItem.name || '(none)'}\nCategory: ${newItem.category || '(none)'}\nTotal Stock: ${totalStock}\nPrice: $${newItem.price}\nLocation(s): ${locationInfo}`;
+      if (!confirm(confirmMsg)) return;
+    }
 
     // Create the item
     const itemId = await DB.createItem({
@@ -372,20 +377,66 @@ export default function Items() {
       await DB.syncItemToLocation(itemId, newItem.location, totalStock);
     }
 
+    if (addAnother) {
+      // Keep modal open, preserve name and category, clear the rest
+      const savedName = newItem.name;
+      const savedCategory = newItem.category;
+      const savedPrice = newItem.price; // Often same price for variants
+      
+      setNewItem({
+        partNumber: '',
+        name: savedName,
+        category: savedCategory,
+        stock: 0,
+        price: savedPrice,
+        location: '',
+        lowStockThreshold: 10,
+        reorderPoint: 20,
+        locationBreakdown: [{ location: '', quantity: 0 }]
+      });
+      setUseMultiLocation(false);
+      
+      // Show success message briefly
+      setSaveSuccessMsg(`✓ Added: ${savedName} (${newItem.partNumber || 'no SKU'})`);
+      setTimeout(() => setSaveSuccessMsg(''), 3000);
+      
+      // Reload data in background
+      loadData();
+    } else {
+      // Normal save - close modal
+      setNewItem({
+        partNumber: '',
+        name: '',
+        category: '',
+        stock: 0,
+        price: 0,
+        location: '',
+        lowStockThreshold: 10,
+        reorderPoint: 20,
+        locationBreakdown: [{ location: '', quantity: 0 }]
+      });
+      setUseMultiLocation(false);
+      setShowAddItem(false);
+      loadData();
+    }
+  };
+
+  // Duplicate an existing item (opens Add modal with item data pre-filled)
+  const duplicateItem = (item) => {
     setNewItem({
-      partNumber: '',
-      name: '',
-      category: '',
-      stock: 0,
-      price: 0,
-      location: '',
-      lowStockThreshold: 10,
-      reorderPoint: 20,
+      partNumber: '', // Clear SKU - must be unique
+      name: item.name || '',
+      category: item.category || '',
+      stock: 0, // Start with 0 stock
+      price: item.price || 0,
+      location: '', // Clear location
+      lowStockThreshold: item.lowStockThreshold || 10,
+      reorderPoint: item.reorderPoint || 20,
       locationBreakdown: [{ location: '', quantity: 0 }]
     });
     setUseMultiLocation(false);
-    setShowAddItem(false);
-    loadData();
+    setShowAddItem(true);
+    setSaveSuccessMsg(''); // Clear any previous message
   };
 
   // Open edit item modal
@@ -1597,6 +1648,14 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     </button>
                     <button
                       className="btn btn-sm"
+                      onClick={() => duplicateItem(item)}
+                      title="Duplicate Item"
+                      style={{ background: '#607d8b', color: 'white' }}
+                    >
+                      📋
+                    </button>
+                    <button
+                      className="btn btn-sm"
                       onClick={() => setViewingItemLocations(item)}
                       title="View Locations"
                       style={{ background: '#17a2b8', color: 'white' }}
@@ -1652,12 +1711,26 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
 
       {/* Add Item Modal */}
       {showAddItem && (
-        <div className="modal-overlay" onClick={() => setShowAddItem(false)}>
+        <div className="modal-overlay" onClick={() => { setShowAddItem(false); setSaveSuccessMsg(''); }}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <h2>Add New Item</h2>
-              <button className="modal-close" onClick={() => setShowAddItem(false)}>×</button>
+              <button className="modal-close" onClick={() => { setShowAddItem(false); setSaveSuccessMsg(''); }}>×</button>
             </div>
+            {/* Success message for Save & Add Another */}
+            {saveSuccessMsg && (
+              <div style={{
+                background: '#4CAF50',
+                color: 'white',
+                padding: '10px 15px',
+                fontWeight: 600,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10
+              }}>
+                {saveSuccessMsg}
+              </div>
+            )}
             <div className="modal-body">
               <div className="form-group">
                 <label>SKU / Part Number</label>
@@ -1868,9 +1941,19 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </div>
               </div>
             </div>
-            <div className="modal-footer">
-              <button className="btn" onClick={() => { setShowAddItem(false); setUseMultiLocation(false); }}>Cancel</button>
-              <button className="btn btn-primary" onClick={addNewItem}>Add Item</button>
+            <div className="modal-footer" style={{ display: 'flex', gap: 10, justifyContent: 'space-between' }}>
+              <button className="btn" onClick={() => { setShowAddItem(false); setUseMultiLocation(false); setSaveSuccessMsg(''); }}>Cancel</button>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button 
+                  className="btn" 
+                  onClick={() => addNewItem(true)}
+                  style={{ background: '#ff9800', color: 'white' }}
+                  title="Save this item and keep the form open to add another variant"
+                >
+                  Save & Add Another
+                </button>
+                <button className="btn btn-primary" onClick={() => addNewItem(false)}>Add Item</button>
+              </div>
             </div>
           </div>
         </div>

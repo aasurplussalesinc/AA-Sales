@@ -1152,15 +1152,8 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
 
       {/* Bulk Label Print Modal */}
       {showLabelModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
-          justifyContent: 'center', zIndex: 1000, padding: 20
-        }}>
-          <div style={{
-            background: 'white', borderRadius: 12, padding: 30,
-            maxWidth: 500, width: '100%'
-          }}>
+        <div className="modal-overlay" style={{ zIndex: 1000 }}>
+          <div className="modal" style={{ maxWidth: 500, padding: 30 }}>
             <h3 style={{ marginBottom: 20 }}>🏷️ Print QR Labels</h3>
             
             {/* Selection controls */}
@@ -1962,53 +1955,23 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       {/* Edit Item Modal */}
       {showEditItem && editingItem && (
         <div 
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-            padding: 20
-          }}
+          className="modal-overlay"
+          style={{ zIndex: 9999 }}
           onClick={() => setShowEditItem(false)}
         >
           <div 
+            className="modal"
             onClick={e => e.stopPropagation()} 
-            style={{ 
-              background: 'white',
-              borderRadius: 12,
-              maxWidth: 550,
-              width: '100%',
-              maxHeight: '90vh',
-              overflow: 'auto',
-              boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
-            }}
+            style={{ maxWidth: 550 }}
           >
-            <div style={{ 
-              padding: '15px 20px', 
-              borderBottom: '1px solid #eee',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
+            <div className="modal-header">
               <h2 style={{ margin: 0, fontSize: 20 }}>✏️ Edit Item</h2>
               <button 
+                className="modal-close"
                 onClick={() => setShowEditItem(false)}
-                style={{ 
-                  background: 'none', 
-                  border: 'none', 
-                  fontSize: 24, 
-                  cursor: 'pointer',
-                  color: '#666'
-                }}
               >×</button>
             </div>
-            <div style={{ padding: 20 }}>
+            <div className="modal-body">
               <div className="form-group">
                 <label>SKU / Part Number</label>
                 <input
@@ -2245,29 +2208,14 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       {/* Quantity Adjustment Popup */}
       {adjustingItem && (
         <div 
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999
-          }}
+          className="modal-overlay"
+          style={{ zIndex: 9999 }}
           onClick={() => setAdjustingItem(null)}
         >
           <div 
+            className="modal"
             onClick={e => e.stopPropagation()} 
-            style={{ 
-              background: 'white',
-              borderRadius: 12,
-              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
-              width: 340,
-              overflow: 'hidden'
-            }}
+            style={{ width: 340, maxWidth: '95%', padding: 0 }}
           >
             {/* Header */}
             <div style={{ 
@@ -2411,30 +2359,17 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       {/* Item Locations Popup */}
       {viewingItemLocations && (
         <div 
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999
-          }}
+          className="modal-overlay"
+          style={{ zIndex: 9999 }}
           onClick={() => setViewingItemLocations(null)}
         >
           <div 
+            className="modal"
             onClick={e => e.stopPropagation()} 
             style={{ 
-              background: 'white',
-              borderRadius: 12,
-              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
-              width: '90%',
               maxWidth: 450,
               maxHeight: '80vh',
-              overflow: 'hidden',
+              padding: 0,
               display: 'flex',
               flexDirection: 'column'
             }}

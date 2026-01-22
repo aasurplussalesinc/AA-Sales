@@ -978,6 +978,30 @@ export default function PickLists() {
                           style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
                         />
                         <span style={{ color: '#666', fontSize: 12 }}>in</span>
+                        
+                        {/* Quick fill buttons */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateBoxDetail(boxNum, 'length', '24');
+                            updateBoxDetail(boxNum, 'width', '16');
+                            updateBoxDetail(boxNum, 'height', '17');
+                          }}
+                          style={{ marginLeft: 10, padding: '4px 8px', background: '#e3f2fd', color: '#1976d2', border: '1px solid #1976d2', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+                        >
+                          17"
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            updateBoxDetail(boxNum, 'length', '24');
+                            updateBoxDetail(boxNum, 'width', '16');
+                            updateBoxDetail(boxNum, 'height', '24');
+                          }}
+                          style={{ padding: '4px 8px', background: '#e8f5e9', color: '#2e7d32', border: '1px solid #2e7d32', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+                        >
+                          24"
+                        </button>
                       </div>
                     </div>
                   ))}

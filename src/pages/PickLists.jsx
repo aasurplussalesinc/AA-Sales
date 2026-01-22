@@ -9,7 +9,6 @@ export default function PickLists() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedList, setSelectedList] = useState(null);
-  const [localPickedQty, setLocalPickedQty] = useState({}); // Local state for picked quantities
   
   // QR Scanner state
   const [scanMode, setScanMode] = useState(false);
@@ -28,17 +27,6 @@ export default function PickLists() {
   useEffect(() => {
     loadData();
   }, []);
-
-  // Initialize local picked quantities when selectedList changes
-  useEffect(() => {
-    if (selectedList) {
-      const initialQty = {};
-      selectedList.items?.forEach(item => {
-        initialQty[item.itemId] = item.pickedQty || 0;
-      });
-      setLocalPickedQty(initialQty);
-    }
-  }, [selectedList]);
 
   const loadData = async () => {
     setLoading(true);
@@ -111,28 +99,7 @@ export default function PickLists() {
     );
     
     await DB.updatePickList(list.id, { items: updatedItems });
-    
-    // Update selectedList locally without full reload
-    setSelectedList(prev => ({
-      ...prev,
-      items: updatedItems
-    }));
-  };
-
-  // Handle local input change (no database call)
-  const handleLocalQtyChange = (itemId, value) => {
-    setLocalPickedQty(prev => ({
-      ...prev,
-      [itemId]: value === '' ? '' : (parseInt(value) || 0)
-    }));
-  };
-
-  // Save to database on blur
-  const handleQtyBlur = async (itemId) => {
-    const qty = localPickedQty[itemId];
-    if (selectedList) {
-      await updatePickedQty(selectedList, itemId, qty);
-    }
+    loadData();
   };
 
   const completePickList = async (list) => {
@@ -242,15 +209,12 @@ export default function PickLists() {
 
     if (qty !== null && !isNaN(parseInt(qty))) {
       const newPickedQty = (pickListItem.pickedQty || 0) + parseInt(qty);
-      const finalQty = Math.min(newPickedQty, pickListItem.requestedQty);
+      await updatePickedQty(selectedList, scannedItem.id, Math.min(newPickedQty, pickListItem.requestedQty));
       
-      // Update local state immediately
-      setLocalPickedQty(prev => ({
-        ...prev,
-        [scannedItem.id]: finalQty
-      }));
-      
-      await updatePickedQty(selectedList, scannedItem.id, finalQty);
+      // Refresh selected list
+      const updatedLists = await DB.getPickLists();
+      const updatedList = updatedLists.find(l => l.id === selectedList.id);
+      setSelectedList(updatedList);
     }
   };
 
@@ -560,9 +524,8 @@ export default function PickLists() {
                       ) : (
                         <input
                           type="number"
-                          value={localPickedQty[item.itemId] ?? item.pickedQty ?? 0}
-                          onChange={e => handleLocalQtyChange(item.itemId, e.target.value)}
-                          onBlur={() => handleQtyBlur(item.itemId)}
+                          value={item.pickedQty || 0}
+                          onChange={e => updatePickedQty(selectedList, item.itemId, e.target.value)}
                           style={{ width: 60, padding: 5, textAlign: 'center' }}
                           min="0"
                           max={item.requestedQty}
@@ -570,7 +533,7 @@ export default function PickLists() {
                       )}
                     </td>
                     <td style={{ padding: 10, textAlign: 'center' }}>
-                      {(localPickedQty[item.itemId] ?? item.pickedQty ?? 0) >= item.requestedQty ? '✅' : (localPickedQty[item.itemId] ?? item.pickedQty ?? 0) > 0 ? '🔶' : '⬜'}
+                      {item.pickedQty >= item.requestedQty ? '✅' : item.pickedQty > 0 ? '🔶' : '⬜'}
                     </td>
                   </tr>
                 ))}

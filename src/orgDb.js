@@ -1425,6 +1425,150 @@ export const OrgDB = {
       };
     }
   }
+  // ==================== CONTRACTS (ORG-SCOPED) ====================
+  
+  async createContract(contractData) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    
+    const ref = await addDoc(collection(db, 'contracts'), {
+      ...contractData,
+      orgId: currentOrgId,
+      quickSaleCount: 0,
+      totalRevenue: 0,
+      totalCost: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    
+    await this.logActivity('CONTRACT_CREATED', { 
+      contractId: ref.id, 
+      contractNumber: contractData.contractNumber 
+    });
+    
+    return ref.id;
+  },
+  
+  async getContracts() {
+    if (!currentOrgId) return [];
+    
+    try {
+      const q = query(
+        collection(db, 'contracts'),
+        where('orgId', '==', currentOrgId),
+        orderBy('createdAt', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      // Fallback without orderBy if index doesn't exist
+      const q = query(
+        collection(db, 'contracts'),
+        where('orgId', '==', currentOrgId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
+  },
+  
+  async updateContract(contractId, updates) {
+    const ref = doc(db, 'contracts', contractId);
+    await updateDoc(ref, {
+      ...updates,
+      updatedAt: Date.now()
+    });
+    
+    await this.logActivity('CONTRACT_UPDATED', { 
+      contractId, 
+      contractNumber: updates.contractNumber 
+    });
+  },
+  
+  async deleteContract(contractId) {
+    await deleteDoc(doc(db, 'contracts', contractId));
+    await this.logActivity('CONTRACT_DELETED', { contractId });
+  },
+  
+  async updateContractStats(contractId) {
+    // Recalculate contract stats from quick sales
+    const sales = await this.getQuickSales();
+    const contractSales = sales.filter(s => s.contractId === contractId);
+    
+    const stats = {
+      quickSaleCount: contractSales.length,
+      totalRevenue: contractSales.reduce((sum, s) => sum + (s.totalRevenue || 0), 0),
+      totalCost: contractSales.reduce((sum, s) => sum + (s.totalCost || 0), 0)
+    };
+    
+    const ref = doc(db, 'contracts', contractId);
+    await updateDoc(ref, {
+      ...stats,
+      updatedAt: Date.now()
+    });
+  },
+  
+  // ==================== QUICK SALES (ORG-SCOPED) ====================
+  
+  async createQuickSale(saleData) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    
+    const user = auth.currentUser;
+    const ref = await addDoc(collection(db, 'quickSales'), {
+      ...saleData,
+      orgId: currentOrgId,
+      createdBy: user?.email || 'Unknown',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    
+    await this.logActivity('QUICK_SALE_CREATED', { 
+      saleId: ref.id, 
+      customerName: saleData.customerName,
+      totalRevenue: saleData.totalRevenue,
+      margin: saleData.margin
+    });
+    
+    return ref.id;
+  },
+  
+  async getQuickSales() {
+    if (!currentOrgId) return [];
+    
+    try {
+      const q = query(
+        collection(db, 'quickSales'),
+        where('orgId', '==', currentOrgId),
+        orderBy('createdAt', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      // Fallback without orderBy if index doesn't exist
+      const q = query(
+        collection(db, 'quickSales'),
+        where('orgId', '==', currentOrgId)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    }
+  },
+  
+  async updateQuickSale(saleId, updates) {
+    const ref = doc(db, 'quickSales', saleId);
+    await updateDoc(ref, {
+      ...updates,
+      updatedAt: Date.now()
+    });
+    
+    await this.logActivity('QUICK_SALE_UPDATED', { 
+      saleId, 
+      customerName: updates.customerName 
+    });
+  },
+  
+  async deleteQuickSale(saleId) {
+    await deleteDoc(doc(db, 'quickSales', saleId));
+    await this.logActivity('QUICK_SALE_DELETED', { saleId });
+  }
 };
 
 export default OrgDB;

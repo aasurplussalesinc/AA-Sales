@@ -1424,7 +1424,7 @@ export const OrgDB = {
         dailyMovements: []
       };
     }
-  }
+  },
   // ==================== CONTRACTS (ORG-SCOPED) ====================
   
   async createContract(contractData) {

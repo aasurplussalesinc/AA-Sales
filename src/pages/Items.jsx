@@ -842,6 +842,18 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
     setSaving(true);
     try {
       let changeCount = 0;
+      
+      // Find items that were deleted (in original but not in current)
+      const currentIds = new Set(items.map(i => i.id));
+      const deletedItems = originalItems.filter(o => !currentIds.has(o.id));
+      
+      // Delete removed items
+      for (const item of deletedItems) {
+        changeCount++;
+        console.log('Deleting item:', item.id, item.name);
+        await DB.deleteItem(item.id);
+      }
+      
       // Find items that changed
       for (const item of items) {
         const original = originalItems.find(o => o.id === item.id);
@@ -940,6 +952,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
   const deleteItem = async (id) => {
     if (!confirm('Delete this item?')) return;
     setItems(items.filter(item => item.id !== id));
+    setHasChanges(true);
   };
 
   const printQR = async (item) => {

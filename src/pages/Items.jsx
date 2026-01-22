@@ -84,6 +84,39 @@ export default function Items() {
     setLoading(false);
   };
 
+  // Generate the next SKU starting from 4000
+  const generateNextSku = () => {
+    const numericSkus = items
+      .map(item => parseInt(item.partNumber))
+      .filter(num => !isNaN(num) && num >= 4000);
+    
+    if (numericSkus.length === 0) {
+      return '4000';
+    }
+    
+    const maxSku = Math.max(...numericSkus);
+    return String(maxSku + 1);
+  };
+
+  // Open add item modal with auto-generated SKU
+  const openAddItem = () => {
+    const nextSku = generateNextSku();
+    setNewItem({
+      partNumber: nextSku,
+      name: '',
+      category: '',
+      stock: 0,
+      price: 0,
+      location: '',
+      lowStockThreshold: 10,
+      reorderPoint: 20,
+      locationBreakdown: [{ location: '', quantity: 0 }]
+    });
+    setUseMultiLocation(false);
+    setShowAddItem(true);
+    setSaveSuccessMsg('');
+  };
+
   const loadItemHistory = async (item) => {
     setViewingItemHistory(item);
     setLoadingHistory(true);
@@ -1109,7 +1142,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         {canEdit && (
           <button 
             className="btn btn-primary"
-            onClick={() => setShowAddItem(true)}
+            onClick={openAddItem}
           >
             + Add Item
           </button>

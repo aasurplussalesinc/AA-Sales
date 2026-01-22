@@ -34,7 +34,8 @@ export default function Customers() {
     address: '',
     city: '',
     state: '',
-    zipCode: ''
+    zipCode: '',
+    country: ''
   });
 
   useEffect(() => {
@@ -65,7 +66,8 @@ export default function Customers() {
       address: customer.address || '',
       city: customer.city || '',
       state: customer.state || '',
-      zipCode: customer.zipCode || ''
+      zipCode: customer.zipCode || '',
+      country: customer.country || ''
     });
     
     // Get customer's orders
@@ -88,10 +90,21 @@ export default function Customers() {
       return;
     }
 
+    let formToSave = { ...editForm };
+    
+    // Auto-lookup country if missing but zip code exists
+    if (!formToSave.country && formToSave.zipCode) {
+      const country = await lookupCountryFromZip(formToSave.zipCode);
+      if (country) {
+        formToSave.country = country;
+        setEditForm(formToSave); // Update form to show the detected country
+      }
+    }
+
     if (selectedCustomer) {
-      await DB.updateCustomer(selectedCustomer.id, editForm);
+      await DB.updateCustomer(selectedCustomer.id, formToSave);
     } else {
-      await DB.createCustomer(editForm);
+      await DB.createCustomer(formToSave);
     }
     
     setShowCreate(false);
@@ -132,6 +145,53 @@ export default function Customers() {
     }
   };
 
+  // Lookup country from zip code using Zippopotam.us API
+  const lookupCountryFromZip = async (zipCode) => {
+    if (!zipCode || zipCode.length < 3) return null;
+    
+    // Try common country codes in order of likelihood
+    const countryCodes = ['us', 'ca', 'gb', 'au', 'de', 'fr', 'nl', 'be', 'it', 'es', 'mx', 'br', 'jp', 'kr', 'nz'];
+    
+    for (const countryCode of countryCodes) {
+      try {
+        const response = await fetch(`https://api.zippopotam.us/${countryCode}/${encodeURIComponent(zipCode)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.country) {
+            return data.country;
+          }
+        }
+      } catch (e) {
+        // Continue to next country
+      }
+    }
+    return null;
+  };
+
+  // Batch lookup countries for multiple customers (with rate limiting)
+  const batchLookupCountries = async (customers) => {
+    const results = [...customers];
+    let lookupCount = 0;
+    
+    for (let i = 0; i < results.length; i++) {
+      const customer = results[i];
+      if (!customer.country && customer.zipCode) {
+        // Rate limit: small delay between requests
+        if (lookupCount > 0) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        const country = await lookupCountryFromZip(customer.zipCode);
+        if (country) {
+          results[i] = { ...customer, country };
+          lookupCount++;
+        }
+      }
+    }
+    
+    return { customers: results, lookupsPerformed: lookupCount };
+  };
+
   // Import CSV
   const handleImportCSV = (event) => {
     const file = event.target.files[0];
@@ -162,8 +222,9 @@ export default function Customers() {
           'phone': ['phone', 'phone number', 'tel', 'telephone'],
           'address': ['address', 'street', 'street address'],
           'city': ['city'],
-          'state': ['state', 'province'],
-          'zipCode': ['zip code', 'zipcode', 'zip', 'postal code', 'postal']
+          'state': ['state', 'province', 'state/province'],
+          'zipCode': ['zip code', 'zipcode', 'zip', 'postal code', 'postal', 'postcode'],
+          'country': ['country', 'country/region', 'nation']
         };
 
         const columnIndices = {};
@@ -186,7 +247,8 @@ export default function Customers() {
             address: columnIndices.address !== undefined ? values[columnIndices.address]?.trim() : '',
             city: columnIndices.city !== undefined ? values[columnIndices.city]?.trim() : '',
             state: columnIndices.state !== undefined ? values[columnIndices.state]?.trim() : '',
-            zipCode: columnIndices.zipCode !== undefined ? values[columnIndices.zipCode]?.trim() : ''
+            zipCode: columnIndices.zipCode !== undefined ? values[columnIndices.zipCode]?.trim() : '',
+            country: columnIndices.country !== undefined ? values[columnIndices.country]?.trim() : ''
           };
 
           if (customer.company || customer.customerName) {
@@ -200,8 +262,20 @@ export default function Customers() {
           return;
         }
 
+        // Auto-lookup countries for customers missing country but having zip code
+        const customersNeedingLookup = newCustomers.filter(c => !c.country && c.zipCode);
+        let countryLookupMsg = '';
+        
+        if (customersNeedingLookup.length > 0) {
+          const { customers: enrichedCustomers, lookupsPerformed } = await batchLookupCountries(newCustomers);
+          newCustomers.splice(0, newCustomers.length, ...enrichedCustomers);
+          if (lookupsPerformed > 0) {
+            countryLookupMsg = `\n✓ ${lookupsPerformed} countries auto-detected from zip codes`;
+          }
+        }
+
         const result = await DB.importCustomers(newCustomers);
-        alert(`Import complete!\n\n✓ ${result.added} new customers added\n✓ ${result.updated} existing customers updated\n○ ${result.skipped} rows skipped (no company name)`);
+        alert(`Import complete!\n\n✓ ${result.added} new customers added\n✓ ${result.updated} existing customers updated${countryLookupMsg}\n○ ${result.skipped} rows skipped (no company name)`);
         loadData();
       } catch (error) {
         alert('Import failed: ' + error.message);
@@ -241,7 +315,7 @@ export default function Customers() {
 
   // Export CSV with stats
   const exportToCSV = async () => {
-    const headers = ['Company', 'Customer Name', 'Address Short', 'Email', 'Phone', 'Address', 'City', 'State', 'Zip Code', 'Unpaid Invoice Amount', 'Paid Invoice Amount'];
+    const headers = ['Company', 'Customer Name', 'Address Short', 'Email', 'Phone', 'Address', 'City', 'State', 'Zip Code', 'Country', 'Unpaid Invoice Amount', 'Paid Invoice Amount'];
 
     const rows = await Promise.all(customers.map(async (c) => {
       const custOrders = orders.filter(o => o.customerId === c.id);
@@ -258,6 +332,7 @@ export default function Customers() {
         c.city || '',
         c.state || '',
         c.zipCode || '',
+        c.country || '',
         unpaidAmount.toFixed(2),
         paidAmount.toFixed(2)
       ];
@@ -541,6 +616,18 @@ export default function Customers() {
                   style={{ width: '100%' }}
                 />
               </div>
+            </div>
+
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Country</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="USA, Canada, etc."
+                value={editForm.country}
+                onChange={e => setEditForm({ ...editForm, country: e.target.value })}
+                style={{ width: '100%' }}
+              />
             </div>
 
             <button className="btn btn-primary" onClick={saveCustomer} style={{ width: '100%' }}>
@@ -1097,7 +1184,7 @@ export default function Customers() {
             <button className="btn btn-primary" onClick={() => {
               setEditForm({
                 company: '', customerName: '', addressShort: '', email: '',
-                phone: '', address: '', city: '', state: '', zipCode: ''
+                phone: '', address: '', city: '', state: '', zipCode: '', country: ''
               });
               setShowCreate(true);
             }}>
@@ -1205,7 +1292,7 @@ export default function Customers() {
               />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px', gap: 10, marginBottom: 20 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px', gap: 10, marginBottom: 15 }}>
               <div>
                 <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>City</label>
                 <input
@@ -1238,6 +1325,18 @@ export default function Customers() {
               </div>
             </div>
 
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Country</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="USA, Canada, etc."
+                value={editForm.country}
+                onChange={e => setEditForm({ ...editForm, country: e.target.value })}
+                style={{ width: '100%' }}
+              />
+            </div>
+
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-primary" onClick={saveCustomer} style={{ flex: 1 }}>
                 Create Customer
@@ -1259,7 +1358,7 @@ export default function Customers() {
               <th>Contact</th>
               <th>Email</th>
               <th>Phone</th>
-              <th>City, State</th>
+              <th>Location</th>
               <th>Orders</th>
             </tr>
           </thead>
@@ -1267,6 +1366,7 @@ export default function Customers() {
             {filteredCustomers.map(customer => {
               const custOrders = orders.filter(o => o.customerId === customer.id);
               const unpaid = custOrders.filter(o => o.status !== 'paid').reduce((sum, o) => sum + (o.total || 0), 0);
+              const locationParts = [customer.city, customer.state, customer.country].filter(Boolean);
               
               return (
                 <tr 
@@ -1278,7 +1378,7 @@ export default function Customers() {
                   <td>{customer.customerName || '-'}</td>
                   <td>{customer.email || '-'}</td>
                   <td>{customer.phone || '-'}</td>
-                  <td>{[customer.city, customer.state].filter(Boolean).join(', ') || '-'}</td>
+                  <td>{locationParts.length > 0 ? locationParts.join(', ') : '-'}</td>
                   <td>
                     <span>{custOrders.length} orders</span>
                     {unpaid > 0 && (

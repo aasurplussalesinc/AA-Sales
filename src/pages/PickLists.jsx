@@ -6,10 +6,17 @@ export default function PickLists() {
   const [pickLists, setPickLists] = useState([]);
   const [items, setItems] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [selectedList, setSelectedList] = useState(null);
   const [localPickedQty, setLocalPickedQty] = useState({}); // Local state for picked quantities
+  
+  // Pack Order state
+  const [showPackOrder, setShowPackOrder] = useState(false);
+  const [packingOrder, setPackingOrder] = useState(null);
+  const [boxAssignments, setBoxAssignments] = useState({});
+  const [boxDetails, setBoxDetails] = useState({}); // { boxNumber: { weight: '', length: '', width: '', height: '' } }
   
   // QR Scanner state
   const [scanMode, setScanMode] = useState(false);
@@ -42,14 +49,16 @@ export default function PickLists() {
 
   const loadData = async () => {
     setLoading(true);
-    const [lists, itemsData, locsData] = await Promise.all([
+    const [lists, itemsData, locsData, ordersData] = await Promise.all([
       DB.getPickLists(),
       DB.getItems(),
-      DB.getLocations()
+      DB.getLocations(),
+      DB.getPurchaseOrders()
     ]);
     setPickLists(lists);
     setItems(itemsData);
     setLocations(locsData);
+    setOrders(ordersData);
     setLoading(false);
   };
 
@@ -351,6 +360,162 @@ export default function PickLists() {
     printWindow.print();
   };
 
+  // ==================== PACK ORDER FUNCTIONS ====================
+  
+  const getLinkedOrder = (pickList) => {
+    if (!pickList.purchaseOrderId) return null;
+    return orders.find(o => o.id === pickList.purchaseOrderId);
+  };
+
+  const openPackOrder = (pickList) => {
+    const order = getLinkedOrder(pickList);
+    if (!order) {
+      alert('No linked purchase order found for this pick list.');
+      return;
+    }
+    
+    // Build a map of picked quantities from the pick list
+    const pickedQtyMap = {};
+    if (pickList.items) {
+      pickList.items.forEach(plItem => {
+        pickedQtyMap[plItem.itemId] = plItem.pickedQty || 0;
+      });
+    }
+    
+    // Store pick list reference and picked quantities with the order for packing
+    const orderWithPickedQty = {
+      ...order,
+      pickListId: pickList.id,
+      items: (order.items || []).map(item => ({
+        ...item,
+        pickedQty: pickedQtyMap[item.itemId] ?? (parseInt(item.qtyShipped) || parseInt(item.quantity) || 0)
+      }))
+    };
+    
+    setPackingOrder(orderWithPickedQty);
+    
+    // Initialize box distributions based on PICKED quantities
+    const distributions = {};
+    orderWithPickedQty.items.forEach((item, idx) => {
+      const totalQty = item.pickedQty;
+      // Check if we have saved distributions
+      if (order.boxDistributions && order.boxDistributions[idx]) {
+        distributions[idx] = order.boxDistributions[idx];
+      } else if (item.boxNumber) {
+        // Legacy: single box assignment
+        distributions[idx] = [{ box: item.boxNumber, qty: totalQty }];
+      } else {
+        // Default: all in box 1
+        distributions[idx] = [{ box: 1, qty: totalQty }];
+      }
+    });
+    setBoxAssignments(distributions);
+    
+    // Initialize box details from saved data or empty
+    setBoxDetails(order.boxDetails || {});
+    
+    setShowPackOrder(true);
+  };
+
+  const updateBoxDetail = (boxNum, field, value) => {
+    setBoxDetails(prev => ({
+      ...prev,
+      [boxNum]: { ...(prev[boxNum] || {}), [field]: value }
+    }));
+  };
+
+  const getUniqueBoxNumbers = () => {
+    const boxes = new Set();
+    Object.values(boxAssignments).forEach(dists => {
+      dists.forEach(d => boxes.add(d.box));
+    });
+    return Array.from(boxes).sort((a, b) => a - b);
+  };
+
+  const updateBoxDistribution = (itemIndex, distIndex, field, value) => {
+    setBoxAssignments(prev => {
+      const itemDist = [...(prev[itemIndex] || [])];
+      itemDist[distIndex] = { ...itemDist[distIndex], [field]: field === 'qty' ? (parseInt(value) || 0) : (parseInt(value) || 1) };
+      return { ...prev, [itemIndex]: itemDist };
+    });
+  };
+
+  const addBoxDistribution = (itemIndex) => {
+    setBoxAssignments(prev => {
+      const itemDist = [...(prev[itemIndex] || [])];
+      const maxBox = Math.max(...itemDist.map(d => d.box), 0);
+      itemDist.push({ box: maxBox + 1, qty: 0 });
+      return { ...prev, [itemIndex]: itemDist };
+    });
+  };
+
+  const removeBoxDistribution = (itemIndex, distIndex) => {
+    setBoxAssignments(prev => {
+      const itemDist = [...(prev[itemIndex] || [])];
+      itemDist.splice(distIndex, 1);
+      if (itemDist.length === 0) itemDist.push({ box: 1, qty: 0 });
+      return { ...prev, [itemIndex]: itemDist };
+    });
+  };
+
+  const getDistributionTotal = (itemIndex) => {
+    const dist = boxAssignments[itemIndex] || [];
+    return dist.reduce((sum, d) => sum + (parseInt(d.qty) || 0), 0);
+  };
+
+  const getItemQty = (item) => item.pickedQty ?? (parseInt(item.qtyShipped) || parseInt(item.quantity) || 0);
+
+  const validatePacking = () => {
+    for (let idx = 0; idx < (packingOrder?.items || []).length; idx++) {
+      const item = packingOrder.items[idx];
+      const expected = getItemQty(item);
+      const actual = getDistributionTotal(idx);
+      if (actual !== expected) return false;
+    }
+    return true;
+  };
+
+  const savePackOrder = async () => {
+    if (!packingOrder) return;
+    if (!validatePacking()) {
+      alert('Please make sure all quantities are distributed correctly across boxes.');
+      return;
+    }
+    
+    // Calculate qtyShipped from box distributions (what was actually packed)
+    const updatedItems = packingOrder.items.map((item, idx) => {
+      const distributions = boxAssignments[idx] || [{ box: 1, qty: getItemQty(item) }];
+      const totalPacked = distributions.reduce((sum, d) => sum + (parseInt(d.qty) || 0), 0);
+      return {
+        ...item,
+        qtyShipped: totalPacked, // Update shipped qty based on what was packed
+        boxDistributions: distributions
+      };
+    });
+    
+    // Recalculate order totals based on new qtyShipped values
+    const newSubtotal = updatedItems.reduce((sum, item) => {
+      return sum + ((item.qtyShipped || 0) * (parseFloat(item.unitPrice) || 0));
+    }, 0);
+    const tax = parseFloat(packingOrder.tax) || 0;
+    const shipping = parseFloat(packingOrder.shipping) || 0;
+    
+    await DB.updatePurchaseOrder(packingOrder.id, {
+      ...packingOrder,
+      items: updatedItems,
+      boxDistributions: boxAssignments,
+      boxDetails: boxDetails,
+      packingComplete: true,
+      subtotal: newSubtotal,
+      total: newSubtotal + tax + shipping
+    });
+    
+    setShowPackOrder(false);
+    setPackingOrder(null);
+    loadData();
+    alert('Packing saved! Shipped quantities updated.');
+  };
+
   const formatDate = (timestamp) => {
     return new Date(timestamp).toLocaleString();
   };
@@ -635,10 +800,19 @@ export default function PickLists() {
                     >
                       {list.status === 'completed' ? 'View' : 'Process'}
                     </button>
+                    {list.status === 'completed' && list.purchaseOrderId && !getLinkedOrder(list)?.packingComplete && (
+                      <button 
+                        className="btn btn-sm"
+                        onClick={() => openPackOrder(list)}
+                        style={{ background: '#9c27b0', color: 'white' }}
+                      >
+                        📦 Pack
+                      </button>
+                    )}
                     <button 
                       className="btn btn-sm"
                       onClick={() => printPickList(list)}
-                      style={{ background: '#9c27b0', color: 'white' }}
+                      style={{ background: '#607d8b', color: 'white' }}
                     >
                       🖨️ Print
                     </button>
@@ -664,6 +838,164 @@ export default function PickLists() {
           </tbody>
         </table>
       </div>
+
+      {/* Pack Order Modal */}
+      {showPackOrder && packingOrder && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 1000, padding: 20
+        }} onClick={() => setShowPackOrder(false)}>
+          <div style={{
+            background: 'white', borderRadius: 12, maxWidth: 700, width: '100%',
+            maxHeight: '90vh', overflow: 'auto'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ padding: '15px 20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>📦 Pack Order - {packingOrder.poNumber}</h3>
+              <button onClick={() => setShowPackOrder(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#666' }}>×</button>
+            </div>
+            <div style={{ padding: 20 }}>
+              <div style={{ background: '#e3f2fd', padding: 12, borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
+                <strong>📋 Quantities from Pick List</strong>
+                <span style={{ color: '#666', marginLeft: 10 }}>Packing quantities are based on what was actually picked.</span>
+              </div>
+              
+              {(packingOrder.items || []).map((item, idx) => {
+                const pickedQty = getItemQty(item);
+                const orderedQty = parseInt(item.qtyShipped) || parseInt(item.quantity) || 0;
+                const distributedQty = getDistributionTotal(idx);
+                const isValid = distributedQty === pickedQty;
+                const hasShortage = pickedQty < orderedQty;
+                
+                return (
+                  <div key={idx} style={{ marginBottom: 20, padding: 15, background: isValid ? '#f5f5f5' : '#fff3e0', borderRadius: 8, border: isValid ? '1px solid #ddd' : '2px solid #ff9800' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                      <div>
+                        <strong>{item.itemName}</strong>
+                        {item.partNumber && <span style={{ color: '#666', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
+                        {hasShortage && (
+                          <div style={{ fontSize: 11, color: '#f57c00', marginTop: 2 }}>
+                            ⚠️ Shortage: Ordered {orderedQty}, Picked {pickedQty}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontWeight: 'bold', color: isValid ? '#4CAF50' : '#ff9800' }}>
+                          {distributedQty} / {pickedQty}
+                        </span>
+                        <div style={{ fontSize: 10, color: '#666' }}>packed / picked</div>
+                        {!isValid && <div style={{ fontSize: 11, color: '#ff9800' }}>⚠️ {distributedQty < pickedQty ? `${pickedQty - distributedQty} remaining` : `${distributedQty - pickedQty} over`}</div>}
+                      </div>
+                    </div>
+                    
+                    {(boxAssignments[idx] || []).map((dist, distIdx) => (
+                      <div key={distIdx} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                        <span style={{ width: 60 }}>Box</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={dist.box}
+                          onChange={e => updateBoxDistribution(idx, distIdx, 'box', e.target.value)}
+                          style={{ width: 60, padding: 6, textAlign: 'center', fontWeight: 'bold' }}
+                        />
+                        <span style={{ width: 40 }}>Qty:</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={pickedQty}
+                          value={dist.qty}
+                          onChange={e => updateBoxDistribution(idx, distIdx, 'qty', e.target.value)}
+                          style={{ width: 70, padding: 6, textAlign: 'center' }}
+                        />
+                        {(boxAssignments[idx] || []).length > 1 && (
+                          <button
+                            onClick={() => removeBoxDistribution(idx, distIdx)}
+                            style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
+                          >✕</button>
+                        )}
+                      </div>
+                    ))}
+                    
+                    <button
+                      onClick={() => addBoxDistribution(idx)}
+                      style={{ background: '#e3f2fd', color: '#1976d2', border: '1px dashed #1976d2', borderRadius: 4, padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 5 }}
+                    >+ Add to another box</button>
+                  </div>
+                );
+              })}
+              
+              {/* Box Weight & Dimensions Section */}
+              {getUniqueBoxNumbers().length > 0 && (
+                <div style={{ marginTop: 25, padding: 20, background: '#f9f9f9', borderRadius: 8, border: '1px solid #e0e0e0' }}>
+                  <h4 style={{ margin: '0 0 15px 0', color: '#333' }}>📐 Box Weight & Dimensions</h4>
+                  {getUniqueBoxNumbers().map(boxNum => (
+                    <div key={boxNum} style={{ display: 'flex', alignItems: 'center', gap: 15, marginBottom: 12, flexWrap: 'wrap' }}>
+                      <strong style={{ minWidth: 60 }}>Box {boxNum}:</strong>
+                      
+                      {/* Weight */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          placeholder="0"
+                          value={boxDetails[boxNum]?.weight || ''}
+                          onChange={e => updateBoxDetail(boxNum, 'weight', e.target.value)}
+                          style={{ width: 70, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                        />
+                        <span style={{ color: '#666' }}>lbs</span>
+                      </div>
+                      
+                      {/* Dimensions */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          placeholder="L"
+                          value={boxDetails[boxNum]?.length || ''}
+                          onChange={e => updateBoxDetail(boxNum, 'length', e.target.value)}
+                          style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                        />
+                        <span style={{ color: '#666', fontWeight: 'bold' }}>×</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          placeholder="W"
+                          value={boxDetails[boxNum]?.width || ''}
+                          onChange={e => updateBoxDetail(boxNum, 'width', e.target.value)}
+                          style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                        />
+                        <span style={{ color: '#666', fontWeight: 'bold' }}>×</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          placeholder="H"
+                          value={boxDetails[boxNum]?.height || ''}
+                          onChange={e => updateBoxDetail(boxNum, 'height', e.target.value)}
+                          style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                        />
+                        <span style={{ color: '#666', fontSize: 12 }}>in</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <div style={{ marginTop: 20, padding: 15, background: validatePacking() ? '#e8f5e9' : '#ffebee', borderRadius: 8 }}>
+                <strong>Summary:</strong> {new Set(Object.values(boxAssignments).flatMap(d => d.map(x => x.box))).size} boxes
+                {!validatePacking() && <span style={{ color: '#f44336', marginLeft: 10 }}>⚠️ Fix quantity mismatches before saving</span>}
+              </div>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: 15, borderTop: '1px solid #eee' }}>
+              <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+              <button onClick={savePackOrder} disabled={!validatePacking()} style={{ padding: '10px 20px', background: validatePacking() ? '#4CAF50' : '#ccc', color: 'white', border: 'none', borderRadius: 6, cursor: validatePacking() ? 'pointer' : 'not-allowed' }}>Save Packing</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

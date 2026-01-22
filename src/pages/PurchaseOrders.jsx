@@ -397,12 +397,53 @@ export default function PurchaseOrders() {
         }
       });
     });
+    
+    const boxDets = order.boxDetails || {};
+    const formatBoxDims = (boxNum) => {
+      const d = boxDets[boxNum];
+      if (!d) return '';
+      const dims = (d.length && d.width && d.height) ? `${d.length}"×${d.width}"×${d.height}"` : '';
+      const wt = d.weight ? `${d.weight} lbs` : '';
+      if (dims && wt) return `${wt} | ${dims}`;
+      return dims || wt;
+    };
+    
     const printContent = `<!DOCTYPE html><html><head><title>Packing List - ${order.poNumber}</title>
-      <style>body{font-family:Arial,sans-serif;padding:20px;max-width:800px;margin:0 auto}.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px;border-bottom:2px solid #333;padding-bottom:20px}.logo{max-width:150px;max-height:80px}h1{margin:0 0 10px 0;font-size:24px}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:30px}.info-box{background:#f5f5f5;padding:15px;border-radius:8px}.info-box h3{margin:0 0 10px 0;font-size:14px;color:#666;text-transform:uppercase}.box-section{margin-bottom:25px;border:2px solid #333;border-radius:8px;overflow:hidden}.box-header{background:#333;color:white;padding:10px 15px;font-weight:bold;font-size:16px}table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:10px;text-align:left;border-bottom:1px solid #ddd}td{padding:10px;border-bottom:1px solid #eee}.footer{margin-top:40px;padding-top:20px;border-top:1px solid #ddd;font-size:12px;color:#666;text-align:center}@media print{body{padding:0}}</style></head><body>
-      <div class="header"><div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : ''}<h1>PACKING LIST</h1><div style="color:#666">${order.poNumber}</div></div><div style="text-align:right;font-size:12px;color:#666"><strong>${organization?.name || 'Warehouse'}</strong><br>${organization?.address || ''}<br>${organization?.phone || ''}</div></div>
-      <div class="info-grid"><div class="info-box"><h3>Ship To</h3><strong>${order.customerName}</strong><br>${order.customerAddress || ''}</div><div class="info-box"><h3>Order Details</h3><div>Date: ${formatDate(order.createdAt)}</div><div>Total Items: ${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)}</div><div>Total Boxes: ${Object.keys(boxes).length}</div></div></div>
-      ${Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => '<div class="box-section"><div class="box-header">📦 Box ' + boxNum + '</div><table><thead><tr><th>Item</th><th style="text-align:center;width:80px">Qty</th></tr></thead><tbody>' + boxItems.map(item => '<tr><td><strong>' + item.itemName + '</strong>' + (item.partNumber ? '<div style="font-size:12px;color:#666">' + item.partNumber + '</div>' : '') + '</td><td style="text-align:center;font-weight:bold">' + item.qtyInBox + '</td></tr>').join('') + '</tbody></table></div>').join('')}
-      ${order.notes ? '<div style="margin-top:20px;padding:15px;background:#fff9e6;border-radius:8px"><strong>Notes:</strong> ' + order.notes + '</div>' : ''}
+      <style>
+        body{font-family:Arial,sans-serif;padding:15px;max-width:800px;margin:0 auto;font-size:11px}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:2px solid #333;padding-bottom:10px}
+        .logo{max-width:120px;max-height:60px}
+        h1{margin:0;font-size:18px}
+        .info-row{display:flex;justify-content:space-between;margin-bottom:12px;gap:15px}
+        .info-box{background:#f5f5f5;padding:8px 10px;border-radius:4px;flex:1}
+        .info-box h3{margin:0 0 4px 0;font-size:9px;color:#666;text-transform:uppercase}
+        .box-section{margin-bottom:10px;border:1px solid #333;border-radius:4px;overflow:hidden;page-break-inside:avoid}
+        .box-header{background:#333;color:white;padding:5px 10px;font-weight:bold;font-size:11px;display:flex;justify-content:space-between}
+        .box-dims{font-weight:normal;font-size:10px;color:#ccc}
+        table{width:100%;border-collapse:collapse}
+        th{background:#f0f0f0;padding:4px 8px;text-align:left;font-size:10px;border-bottom:1px solid #ddd}
+        td{padding:4px 8px;border-bottom:1px solid #eee;font-size:10px}
+        .item-name{font-weight:600}
+        .item-sku{color:#666;font-size:9px}
+        .qty{text-align:center;font-weight:bold;font-size:12px}
+        .footer{margin-top:15px;padding-top:10px;border-top:1px solid #ddd;font-size:10px;color:#666;text-align:center}
+        @media print{body{padding:10px}@page{margin:0.5in}}
+      </style></head><body>
+      <div class="header">
+        <div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : ''}<h1>PACKING LIST</h1><div style="color:#666;font-size:12px">${order.poNumber}</div></div>
+        <div style="text-align:right;font-size:10px;color:#666"><strong>${organization?.name || ''}</strong><br>${organization?.address || ''}<br>${organization?.phone || ''}</div>
+      </div>
+      <div class="info-row">
+        <div class="info-box"><h3>Ship To</h3><strong>${order.customerName}</strong><br>${order.customerAddress || ''}</div>
+        <div class="info-box"><h3>Order Details</h3>Date: ${formatDate(order.createdAt)}<br>Items: ${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} | Boxes: ${Object.keys(boxes).length}</div>
+      </div>
+      ${Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => `
+        <div class="box-section">
+          <div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div>
+          <table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead>
+          <tbody>${boxItems.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInBox}</td></tr>`).join('')}</tbody></table>
+        </div>`).join('')}
+      ${order.notes ? '<div style="margin-top:10px;padding:8px;background:#fff9e6;border-radius:4px;font-size:10px"><strong>Notes:</strong> ' + order.notes + '</div>' : ''}
       <div class="footer">Thank you for your business!</div></body></html>`;
     const printWindow = window.open('', '_blank');
     printWindow.document.write(printContent); printWindow.document.close(); printWindow.print();
@@ -420,6 +461,16 @@ export default function PurchaseOrders() {
         }
       });
     });
+    
+    const boxDets = order.boxDetails || {};
+    const formatBoxDims = (boxNum) => {
+      const d = boxDets[boxNum];
+      if (!d) return '';
+      const dims = (d.length && d.width && d.height) ? `${d.length}"×${d.width}"×${d.height}"` : '';
+      const wt = d.weight ? `${d.weight} lbs` : '';
+      if (dims && wt) return `${wt} | ${dims}`;
+      return dims || wt;
+    };
     
     // Calculate totals based on full item quantities (not per-box)
     let totalRevenue = 0, totalKnownCost = 0, unknownCostCount = 0;
@@ -445,23 +496,80 @@ export default function PurchaseOrders() {
     };
     
     const printContent = `<!DOCTYPE html><html><head><title>INTERNAL - ${order.poNumber}</title>
-      <style>body{font-family:Arial,sans-serif;padding:20px;max-width:900px;margin:0 auto;font-size:12px}.header{background:#ff9800;color:white;padding:15px;margin-bottom:20px;border-radius:8px}.header h1{margin:0;font-size:20px}.warning{background:#fff3e0;border:2px solid #ff9800;padding:10px;margin-bottom:20px;border-radius:4px;font-weight:bold;text-align:center}.info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:15px;margin-bottom:20px}.info-box{background:#f5f5f5;padding:12px;border-radius:8px}.info-box h3{margin:0 0 8px 0;font-size:11px;color:#666;text-transform:uppercase}.info-box .value{font-size:16px;font-weight:bold}.box-section{margin-bottom:20px;border:1px solid #ddd;border-radius:8px;overflow:hidden}.box-header{background:#333;color:white;padding:8px 12px;font-weight:bold}table{width:100%;border-collapse:collapse}th{background:#f5f5f5;padding:8px;text-align:left;font-size:11px;border-bottom:1px solid #ddd}td{padding:8px;border-bottom:1px solid #eee}.profit{color:#4CAF50}.cost{color:#f44336}.unknown{color:#999;font-style:italic}.summary{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}.summary-box{padding:15px;border-radius:8px}.summary-box.costs{background:#ffebee}.summary-box.revenue{background:#e8f5e9}.summary-row{display:flex;justify-content:space-between;margin-bottom:6px}.summary-row.total{font-size:14px;font-weight:bold;border-top:2px solid currentColor;padding-top:8px;margin-top:8px}.source-badge{padding:2px 6px;border-radius:3px;font-size:10px;font-weight:600}.source-inventory{background:#e3f2fd;color:#1976d2}.source-inventory_contract{background:#fff3e0;color:#f57c00}.source-direct_contract{background:#fce4ec;color:#c2185b}@media print{body{padding:0}.warning{background:white!important}}</style></head><body>
-      <div class="header"><h1>⚠️ INTERNAL USE ONLY - COST ANALYSIS</h1><div>${order.poNumber} | ${order.customerName}</div></div>
-      <div class="warning">DO NOT SHARE WITH CUSTOMER - CONTAINS COST & MARGIN DATA</div>
-      <div class="info-grid"><div class="info-box"><h3>Order Info</h3><div class="value">${order.poNumber}</div><div>${formatDate(order.createdAt)}</div></div><div class="info-box"><h3>Customer</h3><div class="value">${order.customerName}</div></div><div class="info-box"><h3>Items / Boxes</h3><div class="value">${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} items / ${Object.keys(boxes).length} boxes</div></div></div>
+      <style>
+        body{font-family:Arial,sans-serif;padding:12px;max-width:900px;margin:0 auto;font-size:9px}
+        .header{background:#ff9800;color:white;padding:8px 12px;margin-bottom:10px;border-radius:4px}
+        .header h1{margin:0;font-size:14px}
+        .warning{background:#fff3e0;border:1px solid #ff9800;padding:6px;margin-bottom:10px;border-radius:3px;font-weight:bold;text-align:center;font-size:10px}
+        .info-row{display:flex;gap:10px;margin-bottom:10px}
+        .info-box{background:#f5f5f5;padding:6px 8px;border-radius:4px;flex:1}
+        .info-box h3{margin:0 0 3px 0;font-size:8px;color:#666;text-transform:uppercase}
+        .info-box .value{font-size:11px;font-weight:bold}
+        .box-section{margin-bottom:8px;border:1px solid #ddd;border-radius:4px;overflow:hidden;page-break-inside:avoid}
+        .box-header{background:#333;color:white;padding:4px 8px;font-weight:bold;font-size:10px;display:flex;justify-content:space-between}
+        .box-dims{font-weight:normal;font-size:9px;color:#ccc}
+        table{width:100%;border-collapse:collapse}
+        th{background:#f0f0f0;padding:3px 5px;text-align:left;font-size:8px;border-bottom:1px solid #ddd}
+        td{padding:3px 5px;border-bottom:1px solid #eee;font-size:9px}
+        .profit{color:#4CAF50}
+        .cost{color:#f44336}
+        .unknown{color:#999;font-style:italic}
+        .summary{display:flex;gap:15px;margin-top:12px}
+        .summary-box{padding:10px;border-radius:4px;flex:1}
+        .summary-box.costs{background:#ffebee}
+        .summary-box.revenue{background:#e8f5e9}
+        .summary-row{display:flex;justify-content:space-between;margin-bottom:3px;font-size:9px}
+        .summary-row.total{font-size:11px;font-weight:bold;border-top:1px solid currentColor;padding-top:5px;margin-top:5px}
+        .src{padding:1px 4px;border-radius:2px;font-size:7px;font-weight:600}
+        .src-inv{background:#e3f2fd;color:#1976d2}
+        .src-ic{background:#fff3e0;color:#f57c00}
+        .src-dc{background:#fce4ec;color:#c2185b}
+        @media print{body{padding:8px}@page{margin:0.4in}}
+      </style></head><body>
+      <div class="header"><h1>⚠️ INTERNAL - COST ANALYSIS</h1><span>${order.poNumber} | ${order.customerName}</span></div>
+      <div class="warning">DO NOT SHARE WITH CUSTOMER</div>
+      <div class="info-row">
+        <div class="info-box"><h3>Order</h3><div class="value">${order.poNumber}</div>${formatDate(order.createdAt)}</div>
+        <div class="info-box"><h3>Customer</h3><div class="value">${order.customerName}</div></div>
+        <div class="info-box"><h3>Totals</h3><div class="value">${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} items / ${Object.keys(boxes).length} boxes</div></div>
+      </div>
       ${Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => {
-        return '<div class="box-section"><div class="box-header">📦 Box ' + boxNum + '</div><table><thead><tr><th>Item</th><th style="text-align:center">Source</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt/ea</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Revenue</th><th style="text-align:right">Margin</th></tr></thead><tbody>' + boxItems.map(item => {
-          const qtyInBox = item.qtyInBox;
-          const price = parseFloat(item.unitPrice) || 0;
-          const revenue = qtyInBox * price;
-          const cost = calculatePartialCost(item, qtyInBox);
-          const margin = cost !== null ? revenue - cost : null;
-          const weight = parseFloat(item.weightPerItem) || 0;
-          return '<tr><td><strong>' + item.itemName + '</strong>' + (item.partNumber ? '<div style="font-size:10px;color:#666">' + item.partNumber + '</div>' : '') + (item.contractNumber ? '<div style="font-size:10px;color:#f57c00">Contract: ' + item.contractNumber + '</div>' : '') + '</td><td style="text-align:center"><span class="source-badge source-' + (item.source || 'inventory') + '">' + getSourceLabel(item.source) + '</span></td><td style="text-align:center;font-weight:bold">' + qtyInBox + '</td><td style="text-align:right">' + (weight ? weight.toFixed(2) + ' lbs' : '<span class="unknown">—</span>') + '</td><td style="text-align:right" class="cost">' + (cost !== null ? '$' + cost.toFixed(2) : '<span class="unknown">—</span>') + '</td><td style="text-align:right">$' + price.toFixed(2) + '</td><td style="text-align:right">$' + revenue.toFixed(2) + '</td><td style="text-align:right" class="profit">' + (margin !== null ? '$' + margin.toFixed(2) : '<span class="unknown">—</span>') + '</td></tr>';
-        }).join('') + '</tbody></table></div>';
+        return `<div class="box-section">
+          <div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div>
+          <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th></tr></thead>
+          <tbody>${boxItems.map(item => {
+            const qtyInBox = item.qtyInBox;
+            const price = parseFloat(item.unitPrice) || 0;
+            const revenue = qtyInBox * price;
+            const cost = calculatePartialCost(item, qtyInBox);
+            const margin = cost !== null ? revenue - cost : null;
+            const weight = parseFloat(item.weightPerItem) || 0;
+            const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
+            const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
+            return `<tr>
+              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}</td>
+              <td><span class="src src-${srcClass}">${srcLabel}</span></td>
+              <td style="text-align:center;font-weight:bold">${qtyInBox}</td>
+              <td style="text-align:right">${weight ? weight.toFixed(1) : '—'}</td>
+              <td style="text-align:right" class="cost">${cost !== null ? '$' + cost.toFixed(2) : '—'}</td>
+              <td style="text-align:right">$${price.toFixed(2)}</td>
+              <td style="text-align:right">$${revenue.toFixed(2)}</td>
+              <td style="text-align:right" class="profit">${margin !== null ? '$' + margin.toFixed(2) : '—'}</td>
+            </tr>`;
+          }).join('')}</tbody></table></div>`;
       }).join('')}
-      <div class="summary"><div class="summary-box costs"><h3 style="margin:0 0 12px 0;color:#c62828">Cost Summary</h3><div class="summary-row"><span>Items with known cost:</span><span>${(order.items || []).length - unknownCostCount} of ${(order.items || []).length}</span></div><div class="summary-row total" style="color:#c62828"><span>Total Known Cost:</span><span>$${totalKnownCost.toFixed(2)}</span></div>${unknownCostCount > 0 ? '<div style="font-size:11px;color:#999;margin-top:8px">* ' + unknownCostCount + ' item(s) have unknown cost</div>' : ''}</div><div class="summary-box revenue"><h3 style="margin:0 0 12px 0;color:#2e7d32">Profitability</h3><div class="summary-row"><span>Total Revenue:</span><span>$${totalRevenue.toFixed(2)}</span></div><div class="summary-row"><span>Known Cost:</span><span>-$${totalKnownCost.toFixed(2)}</span></div><div class="summary-row total" style="color:#2e7d32"><span>Known Margin:</span><span>$${knownMargin.toFixed(2)}</span></div>${unknownCostCount > 0 ? '<div style="font-size:11px;color:#999;margin-top:8px">* Actual margin may be lower</div>' : ''}</div></div>
-      ${order.notes ? '<div style="margin-top:20px;padding:12px;background:#f5f5f5;border-radius:8px"><strong>Notes:</strong> ' + order.notes + '</div>' : ''}
+      <div class="summary">
+        <div class="summary-box costs"><h3 style="margin:0 0 8px 0;color:#c62828;font-size:10px">Cost Summary</h3>
+          <div class="summary-row"><span>Known cost items:</span><span>${(order.items || []).length - unknownCostCount}/${(order.items || []).length}</span></div>
+          <div class="summary-row total" style="color:#c62828"><span>Total Cost:</span><span>$${totalKnownCost.toFixed(2)}</span></div>
+        </div>
+        <div class="summary-box revenue"><h3 style="margin:0 0 8px 0;color:#2e7d32;font-size:10px">Profitability</h3>
+          <div class="summary-row"><span>Revenue:</span><span>$${totalRevenue.toFixed(2)}</span></div>
+          <div class="summary-row"><span>Cost:</span><span>-$${totalKnownCost.toFixed(2)}</span></div>
+          <div class="summary-row total" style="color:#2e7d32"><span>Margin:</span><span>$${knownMargin.toFixed(2)}</span></div>
+        </div>
+      </div>
+      ${order.notes ? '<div style="margin-top:10px;padding:6px;background:#f5f5f5;border-radius:4px;font-size:9px"><strong>Notes:</strong> ' + order.notes + '</div>' : ''}
       </body></html>`;
     const printWindow = window.open('', '_blank');
     printWindow.document.write(printContent); printWindow.document.close(); printWindow.print();

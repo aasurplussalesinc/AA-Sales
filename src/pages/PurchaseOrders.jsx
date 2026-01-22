@@ -330,31 +330,59 @@ export default function PurchaseOrders() {
     setShowDeleteConfirm(true);
   };
 
+  // Check if order has any picked/packed/shipped quantities
+  const getRestorableItems = (order) => {
+    if (!order?.items) return [];
+    
+    // Get linked pick list to check picked quantities
+    const linkedPickList = pickLists.find(pl => pl.purchaseOrderId === order.id);
+    const pickedQtyMap = {};
+    if (linkedPickList?.items) {
+      linkedPickList.items.forEach(plItem => {
+        pickedQtyMap[plItem.itemId] = plItem.pickedQty || 0;
+      });
+    }
+    
+    return order.items
+      .map(item => {
+        const qtyShipped = parseInt(item.qtyShipped) || 0;
+        const qtyPicked = pickedQtyMap[item.itemId] || 0;
+        const restoreQty = Math.max(qtyShipped, qtyPicked);
+        return { ...item, restoreQty };
+      })
+      .filter(item => item.restoreQty > 0 && item.itemId);
+  };
+
   const confirmDelete = async () => {
     if (!orderToDelete) return;
     
-    // If restoring inventory, add back the shipped quantities
-    if (deleteRestoreInventory && orderToDelete.items) {
-      for (const item of orderToDelete.items) {
-        const qtyShipped = parseInt(item.qtyShipped) || 0;
-        if (qtyShipped > 0 && item.itemId) {
-          const dbItem = items.find(i => i.id === item.itemId);
-          if (dbItem) {
-            const newStock = (dbItem.stock || 0) + qtyShipped;
-            await DB.updateItemStock(item.itemId, newStock);
-            
-            // Log the restoration
-            await DB.logMovement({
-              itemId: item.itemId,
-              itemName: item.itemName,
-              quantity: qtyShipped,
-              type: 'RESTORE',
-              notes: `Restored from deleted order ${orderToDelete.poNumber}`,
-              timestamp: Date.now()
-            });
-          }
+    const restorableItems = getRestorableItems(orderToDelete);
+    
+    // If restoring inventory, add back the picked/shipped quantities
+    if (deleteRestoreInventory && restorableItems.length > 0) {
+      for (const item of restorableItems) {
+        const dbItem = items.find(i => i.id === item.itemId);
+        if (dbItem) {
+          const newStock = (dbItem.stock || 0) + item.restoreQty;
+          await DB.updateItemStock(item.itemId, newStock);
+          
+          // Log the restoration
+          await DB.logMovement({
+            itemId: item.itemId,
+            itemName: item.itemName,
+            quantity: item.restoreQty,
+            type: 'RESTORE',
+            notes: `Restored from deleted order ${orderToDelete.poNumber}`,
+            timestamp: Date.now()
+          });
         }
       }
+    }
+    
+    // Delete linked pick list if exists
+    const linkedPickList = pickLists.find(pl => pl.purchaseOrderId === orderToDelete.id);
+    if (linkedPickList) {
+      await DB.deletePickList(linkedPickList.id);
     }
     
     await DB.deletePurchaseOrder(orderToDelete.id);
@@ -940,11 +968,18 @@ export default function PurchaseOrders() {
             maxWidth: 450, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
           }}>
             <h3 style={{ marginTop: 0, color: '#f44336' }}>🗑️ Delete Order</h3>
-            <p style={{ fontSize: 16, marginBottom: 20 }}>
+            <p style={{ fontSize: 16, marginBottom: 15 }}>
               Delete order <strong>{orderToDelete.poNumber}</strong>?
             </p>
             
-            {orderToDelete.status === 'shipped' && orderToDelete.items?.some(i => parseInt(i.qtyShipped) > 0) && (
+            {/* Show linked pick list info */}
+            {pickLists.find(pl => pl.purchaseOrderId === orderToDelete.id) && (
+              <p style={{ fontSize: 13, color: '#666', marginBottom: 15 }}>
+                📋 The linked pick list will also be deleted.
+              </p>
+            )}
+            
+            {getRestorableItems(orderToDelete).length > 0 && (
               <div style={{
                 padding: 15, background: '#fff3e0', borderRadius: 8, marginBottom: 20,
                 border: '1px solid #ffb74d'
@@ -959,14 +994,14 @@ export default function PurchaseOrders() {
                   <div>
                     <strong style={{ color: '#e65100' }}>Restore inventory</strong>
                     <p style={{ margin: '5px 0 0', fontSize: 13, color: '#666' }}>
-                      Add shipped quantities back to stock. Use this if the order was cancelled or returned.
+                      Add picked/shipped quantities back to stock. Use this if the order was cancelled or returned.
                     </p>
                     {deleteRestoreInventory && (
                       <div style={{ marginTop: 10, fontSize: 12, color: '#2e7d32' }}>
                         Will restore:
                         <ul style={{ margin: '5px 0', paddingLeft: 20 }}>
-                          {orderToDelete.items.filter(i => parseInt(i.qtyShipped) > 0).map(i => (
-                            <li key={i.itemId}>+{i.qtyShipped} {i.itemName}</li>
+                          {getRestorableItems(orderToDelete).map(i => (
+                            <li key={i.itemId}>+{i.restoreQty} {i.itemName}</li>
                           ))}
                         </ul>
                       </div>

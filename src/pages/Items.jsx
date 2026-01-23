@@ -19,6 +19,10 @@ export default function Items() {
   const [adjustingItem, setAdjustingItem] = useState(null);
   const fileInputRef = useRef(null);
   
+  // Batch category state
+  const [showBatchCategory, setShowBatchCategory] = useState(false);
+  const [batchCategory, setBatchCategory] = useState('');
+  
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
@@ -250,6 +254,16 @@ export default function Items() {
         return (a.name || '').localeCompare(b.name || '');
       case 'name-desc':
         return (b.name || '').localeCompare(a.name || '');
+      case 'stock-asc':
+        return (parseInt(a.stock) || 0) - (parseInt(b.stock) || 0);
+      case 'stock-desc':
+        return (parseInt(b.stock) || 0) - (parseInt(a.stock) || 0);
+      case 'price-asc':
+        return (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0);
+      case 'price-desc':
+        return (parseFloat(b.price) || 0) - (parseFloat(a.price) || 0);
+      case 'sku-desc':
+        return (b.partNumber || '').localeCompare(a.partNumber || '');
       case 'sku':
       default:
         return (a.partNumber || '').localeCompare(b.partNumber || '');
@@ -416,8 +430,18 @@ export default function Items() {
       const savedCategory = newItem.category;
       const savedPrice = newItem.price; // Often same price for variants
       
+      // Reload data first so we can generate correct next SKU
+      await loadData();
+      
+      // Generate next SKU (need to calculate based on updated items including the one we just added)
+      const updatedItems = await DB.getItems();
+      const numericSkus = updatedItems
+        .map(item => parseInt(item.partNumber))
+        .filter(num => !isNaN(num) && num >= 4000);
+      const nextSku = numericSkus.length === 0 ? '4000' : String(Math.max(...numericSkus) + 1);
+      
       setNewItem({
-        partNumber: '',
+        partNumber: nextSku,
         name: savedName,
         category: savedCategory,
         stock: 0,
@@ -432,9 +456,6 @@ export default function Items() {
       // Show success message briefly
       setSaveSuccessMsg(`✓ Added: ${savedName} (${newItem.partNumber || 'no SKU'})`);
       setTimeout(() => setSaveSuccessMsg(''), 3000);
-      
-      // Reload data in background
-      loadData();
     } else {
       // Normal save - close modal
       setNewItem({
@@ -1006,6 +1027,27 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
   const selectAllFiltered = () => setSelectedItems(sortedItems.map(i => i.id));
   const clearSelection = () => setSelectedItems([]);
 
+  // Apply category to all selected items
+  const applyBatchCategory = () => {
+    if (selectedItems.length === 0) {
+      alert('Select items first');
+      return;
+    }
+    
+    const updatedItems = items.map(item => {
+      if (selectedItems.includes(item.id)) {
+        return { ...item, category: batchCategory };
+      }
+      return item;
+    });
+    
+    setItems(updatedItems);
+    setHasChanges(true);
+    setShowBatchCategory(false);
+    setBatchCategory('');
+    alert(`Category "${batchCategory || '(cleared)'}" applied to ${selectedItems.length} items.\n\nDon't forget to Save Changes!`);
+  };
+
   const printBulkLabels = async (format) => {
     const itemsToPrint = items.filter(i => selectedItems.includes(i.id));
     if (itemsToPrint.length === 0) return alert('Select items first');
@@ -1189,12 +1231,115 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         
         <button 
           className="btn"
+          onClick={() => setShowBatchCategory(true)}
+          style={{ background: '#ff9800', color: 'white' }}
+        >
+          📁 Batch Category
+        </button>
+        
+        <button 
+          className="btn"
           onClick={() => setShowLabelModal(true)}
           style={{ background: '#9c27b0', color: 'white' }}
         >
           🏷️ Print Labels
         </button>
       </div>
+
+      {/* Batch Category Modal */}
+      {showBatchCategory && (
+        <div className="modal-overlay" style={{ zIndex: 1000 }}>
+          <div className="modal" style={{ maxWidth: 500, padding: 30 }}>
+            <h3 style={{ marginBottom: 20 }}>📁 Batch Assign Category</h3>
+            
+            {/* Selection controls */}
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ marginBottom: 10 }}>
+                <strong>{selectedItems.length}</strong> items selected
+              </p>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button className="btn btn-primary btn-sm" onClick={selectAllFiltered}>
+                  Select All Filtered ({sortedItems.length})
+                </button>
+                <button className="btn btn-sm" onClick={() => setSelectedItems(paginatedItems.map(i => i.id))} style={{ background: '#17a2b8', color: 'white' }}>
+                  Select This Page ({paginatedItems.length})
+                </button>
+                {selectedItems.length > 0 && (
+                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: '#6c757d', color: 'white' }}>
+                    Clear Selection
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Category input */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Category</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Enter category name..."
+                value={batchCategory}
+                onChange={e => setBatchCategory(e.target.value)}
+                style={{ width: '100%', marginBottom: 10 }}
+                list="category-suggestions"
+              />
+              <datalist id="category-suggestions">
+                {categories.map(cat => (
+                  <option key={cat} value={cat} />
+                ))}
+              </datalist>
+              <p style={{ fontSize: 12, color: '#666' }}>
+                Leave blank to clear category from selected items
+              </p>
+            </div>
+            
+            {/* Quick category buttons */}
+            {categories.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 13 }}>Quick Select</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {categories.slice(0, 10).map(cat => (
+                    <button
+                      key={cat}
+                      onClick={() => setBatchCategory(cat)}
+                      style={{
+                        padding: '4px 10px',
+                        border: batchCategory === cat ? '2px solid #2d5f3f' : '1px solid #ddd',
+                        borderRadius: 4,
+                        background: batchCategory === cat ? '#e8f5e9' : '#f5f5f5',
+                        cursor: 'pointer',
+                        fontSize: 12
+                      }}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="btn"
+                onClick={() => { setShowBatchCategory(false); setBatchCategory(''); }}
+                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={applyBatchCategory}
+                disabled={selectedItems.length === 0}
+                style={{ flex: 1 }}
+              >
+                Apply to {selectedItems.length} Items
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Label Print Modal */}
       {showLabelModal && (
@@ -1405,9 +1550,14 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 onChange={e => setFilters({ ...filters, sortBy: e.target.value })}
                 style={{ width: '100%' }}
               >
-                <option value="sku">SKU</option>
+                <option value="sku">SKU (A-Z)</option>
+                <option value="sku-desc">SKU (Z-A)</option>
                 <option value="name-asc">Item Name (A-Z)</option>
                 <option value="name-desc">Item Name (Z-A)</option>
+                <option value="stock-desc">Stock (High to Low)</option>
+                <option value="stock-asc">Stock (Low to High)</option>
+                <option value="price-desc">Price (High to Low)</option>
+                <option value="price-asc">Price (Low to High)</option>
               </select>
             </div>
           </div>

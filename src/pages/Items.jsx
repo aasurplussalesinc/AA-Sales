@@ -1868,7 +1868,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       value={item.name || ''}
                       onChange={e => updateItem(item.id, 'name', e.target.value)}
                       className="item-name-input"
-                      style={{ width: '100%', minWidth: '180px' }}
+                      style={{ width: '100%', minWidth: '250px' }}
                     />
                     <button
                       onClick={() => loadItemHistory(item)}

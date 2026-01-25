@@ -78,7 +78,7 @@ body {
 
 .page-content {
   padding: 20px;
-  max-width: 1400px;
+  max-width: 1800px;
   margin: 0 auto;
 }
 
@@ -142,7 +142,7 @@ body {
 .data-table table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 900px;
+  min-width: 1200px;
 }
 
 .data-table th {

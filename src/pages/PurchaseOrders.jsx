@@ -25,6 +25,19 @@ export default function PurchaseOrders() {
   const [packingOrder, setPackingOrder] = useState(null);
   const [boxAssignments, setBoxAssignments] = useState({});
 
+  // Filter and sort state
+  const [showFilters, setShowFilters] = useState(false);
+  const [filterSearch, setFilterSearch] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [sortBy, setSortBy] = useState('date-desc');
+
+  // Payment modal state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentOrder, setPaymentOrder] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('');
+
   const [newPO, setNewPO] = useState({
     customerId: '', customerName: '', customerEmail: '', customerPhone: '', customerAddress: '',
     dueDate: '', notes: '', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0
@@ -318,7 +331,24 @@ export default function PurchaseOrders() {
     await DB.markPOShipped(order.id); loadData(); setSelectedOrder(null);
   };
 
-  const markPaid = async (order) => { await DB.markPOPaid(order.id); loadData(); setSelectedOrder(null); };
+  const markPaid = async (order) => { 
+    setPaymentOrder(order);
+    setPaymentMethod('');
+    setShowPaymentModal(true);
+  };
+
+  const confirmPayment = async () => {
+    if (!paymentMethod) {
+      alert('Please select a payment method');
+      return;
+    }
+    await DB.markPOPaid(paymentOrder.id, paymentMethod);
+    loadData();
+    setSelectedOrder(null);
+    setShowPaymentModal(false);
+    setPaymentOrder(null);
+    setPaymentMethod('');
+  };
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteRestoreInventory, setDeleteRestoreInventory] = useState(false);
@@ -847,6 +877,15 @@ export default function PurchaseOrders() {
 
               {selectedOrder.notes && <div style={{ background: '#fffde7', padding: 15, borderRadius: 8, marginBottom: 20 }}><strong>Notes:</strong> {selectedOrder.notes}</div>}
 
+              {selectedOrder.paymentMethod && (
+                <div style={{ background: '#e8f5e9', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+                  <strong>💰 Payment:</strong> {
+                    { cash: '💵 Cash', credit_card: '💳 Credit Card', zelle: '📱 Zelle', venmo: '📲 Venmo', apple_pay: '🍎 Apple Pay', ach: '🏦 ACH', wire: '🔌 Wire Transfer', check: '📝 Check' }[selectedOrder.paymentMethod] || selectedOrder.paymentMethod
+                  }
+                  {selectedOrder.paidAt && <span style={{ marginLeft: 15, color: '#666', fontSize: 13 }}>on {formatDate(selectedOrder.paidAt)}</span>}
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button className="btn" onClick={() => openEditOrder(selectedOrder)} style={{ background: '#ff9800', color: 'white' }}>✏️ Edit</button>
                 <button className="btn" onClick={() => printPO(selectedOrder, 'estimate')} style={{ background: '#1976d2', color: 'white' }}>📋 Estimate</button>
@@ -957,26 +996,169 @@ export default function PurchaseOrders() {
         </div>
       )}
 
+      {/* Filter/Sort Section */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <button 
+            className="btn" 
+            onClick={() => setShowFilters(!showFilters)}
+            style={{ background: showFilters ? '#2d5f3f' : '#f5f5f5', color: showFilters ? 'white' : '#333' }}
+          >
+            🔍 Filter {(filterSearch || filterStatus || filterDateFrom || filterDateTo) && '•'}
+          </button>
+          
+          <input
+            type="text"
+            placeholder="Search PO# or customer..."
+            value={filterSearch}
+            onChange={e => setFilterSearch(e.target.value)}
+            style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, width: 220 }}
+          />
+          
+          <select
+            value={sortBy}
+            onChange={e => setSortBy(e.target.value)}
+            style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+          >
+            <option value="date-desc">Date (Newest)</option>
+            <option value="date-asc">Date (Oldest)</option>
+            <option value="po-asc">PO# (A-Z)</option>
+            <option value="po-desc">PO# (Z-A)</option>
+            <option value="customer-asc">Customer (A-Z)</option>
+            <option value="customer-desc">Customer (Z-A)</option>
+            <option value="total-desc">Total (High-Low)</option>
+            <option value="total-asc">Total (Low-High)</option>
+          </select>
+        </div>
+        
+        {showFilters && (
+          <div style={{ marginTop: 15, padding: 15, background: '#f9f9f9', borderRadius: 8, display: 'flex', gap: 15, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Status</label>
+              <select
+                value={filterStatus}
+                onChange={e => setFilterStatus(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, minWidth: 120 }}
+              >
+                <option value="">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="picking">Picking</option>
+                <option value="packed">Packed</option>
+                <option value="shipped">Shipped</option>
+                <option value="paid">Paid</option>
+              </select>
+            </div>
+            
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Date From</label>
+              <input
+                type="date"
+                value={filterDateFrom}
+                onChange={e => setFilterDateFrom(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+              />
+            </div>
+            
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Date To</label>
+              <input
+                type="date"
+                value={filterDateTo}
+                onChange={e => setFilterDateTo(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+              />
+            </div>
+            
+            <button
+              className="btn btn-sm"
+              onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterDateFrom(''); setFilterDateTo(''); }}
+              style={{ background: '#6c757d', color: 'white', padding: '8px 12px' }}
+            >
+              Clear Filters
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Orders Table */}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden' }}>
           <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th></tr></thead>
           <tbody>
-            {orders.length === 0 ? (
-              <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#999' }}>No purchase orders yet. Click "+ New Order" to create one.</td></tr>
-            ) : (
-              orders.map(order => (
+            {(() => {
+              // Filter orders
+              let filtered = orders.filter(order => {
+                // Search filter
+                if (filterSearch) {
+                  const search = filterSearch.toLowerCase();
+                  const matchPO = order.poNumber?.toLowerCase().includes(search);
+                  const matchCustomer = order.customerName?.toLowerCase().includes(search);
+                  if (!matchPO && !matchCustomer) return false;
+                }
+                // Status filter
+                if (filterStatus && order.status !== filterStatus) return false;
+                // Date range filter
+                if (filterDateFrom || filterDateTo) {
+                  const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+                  if (filterDateFrom) {
+                    const fromDate = new Date(filterDateFrom);
+                    fromDate.setHours(0, 0, 0, 0);
+                    if (orderDate < fromDate) return false;
+                  }
+                  if (filterDateTo) {
+                    const toDate = new Date(filterDateTo);
+                    toDate.setHours(23, 59, 59, 999);
+                    if (orderDate > toDate) return false;
+                  }
+                }
+                return true;
+              });
+              
+              // Sort orders
+              filtered.sort((a, b) => {
+                switch (sortBy) {
+                  case 'date-asc':
+                    return (a.createdAt?.toDate?.() || new Date(a.createdAt)) - (b.createdAt?.toDate?.() || new Date(b.createdAt));
+                  case 'date-desc':
+                    return (b.createdAt?.toDate?.() || new Date(b.createdAt)) - (a.createdAt?.toDate?.() || new Date(a.createdAt));
+                  case 'po-asc':
+                    return (a.poNumber || '').localeCompare(b.poNumber || '');
+                  case 'po-desc':
+                    return (b.poNumber || '').localeCompare(a.poNumber || '');
+                  case 'customer-asc':
+                    return (a.customerName || '').localeCompare(b.customerName || '');
+                  case 'customer-desc':
+                    return (b.customerName || '').localeCompare(a.customerName || '');
+                  case 'total-desc':
+                    return (b.total || 0) - (a.total || 0);
+                  case 'total-asc':
+                    return (a.total || 0) - (b.total || 0);
+                  default:
+                    return 0;
+                }
+              });
+              
+              if (filtered.length === 0) {
+                return <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#999' }}>{orders.length === 0 ? 'No purchase orders yet. Click "+ New Order" to create one.' : 'No orders match your filters.'}</td></tr>;
+              }
+              
+              return filtered.map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: 12 }}><strong>{order.poNumber}</strong></td>
                   <td style={{ padding: 12 }}>{order.customerName}</td>
                   <td style={{ padding: 12, textAlign: 'center' }}>{order.items?.length || 0}</td>
                   <td style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>{formatCurrency(order.total)}</td>
-                  <td style={{ padding: 12, textAlign: 'center' }}><span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: getStatusColor(order.status), color: 'white' }}>{order.status || 'draft'}</span>{order.packingComplete && <span style={{ marginLeft: 5, fontSize: 11, color: '#9c27b0' }}>📦</span>}</td>
+                  <td style={{ padding: 12, textAlign: 'center' }}>
+                    <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: getStatusColor(order.status), color: 'white' }}>{order.status || 'draft'}</span>
+                    {order.packingComplete && <span style={{ marginLeft: 5, fontSize: 11, color: '#9c27b0' }}>📦</span>}
+                    {order.paymentMethod && <span style={{ marginLeft: 5, fontSize: 10, color: '#388e3c' }}>💵</span>}
+                  </td>
                   <td style={{ padding: 12, textAlign: 'center', fontSize: 13 }}>{formatDate(order.createdAt)}</td>
                   <td style={{ padding: 12, textAlign: 'center' }}><button className="btn btn-primary" onClick={() => setSelectedOrder(order)} style={{ padding: '4px 12px', fontSize: 12 }}>View</button></td>
                 </tr>
-              ))
-            )}
+              ));
+            })()}
           </tbody>
         </table>
       </div>
@@ -1054,6 +1236,69 @@ export default function PurchaseOrders() {
                 }}
               >
                 Delete{deleteRestoreInventory ? ' & Restore' : ''}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Method Modal */}
+      {showPaymentModal && paymentOrder && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center',
+          justifyContent: 'center', zIndex: 2000, padding: 20
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 12, padding: 30,
+            maxWidth: 450, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
+          }}>
+            <h3 style={{ marginTop: 0, color: '#388e3c' }}>💰 Confirm Payment</h3>
+            <p style={{ fontSize: 16, marginBottom: 15 }}>
+              Mark order <strong>{paymentOrder.poNumber}</strong> as paid.
+            </p>
+            <p style={{ fontSize: 14, color: '#666', marginBottom: 20 }}>
+              Total: <strong style={{ color: '#388e3c', fontSize: 18 }}>{formatCurrency(paymentOrder.total)}</strong>
+            </p>
+            
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Payment Method</label>
+              <select
+                value={paymentMethod}
+                onChange={e => setPaymentMethod(e.target.value)}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }}
+              >
+                <option value="">-- Select Payment Method --</option>
+                <option value="cash">💵 Cash</option>
+                <option value="credit_card">💳 Credit Card</option>
+                <option value="zelle">📱 Zelle</option>
+                <option value="venmo">📲 Venmo</option>
+                <option value="apple_pay">🍎 Apple Pay</option>
+                <option value="ach">🏦 ACH</option>
+                <option value="wire">🔌 Wire Transfer</option>
+                <option value="check">📝 Check</option>
+              </select>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => { setShowPaymentModal(false); setPaymentOrder(null); setPaymentMethod(''); }}
+                style={{
+                  flex: 1, padding: '12px 20px', background: '#6c757d', color: 'white',
+                  border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmPayment}
+                disabled={!paymentMethod}
+                style={{
+                  flex: 1, padding: '12px 20px', background: paymentMethod ? '#388e3c' : '#ccc', color: 'white',
+                  border: 'none', borderRadius: 6, cursor: paymentMethod ? 'pointer' : 'not-allowed', fontSize: 14, fontWeight: 600
+                }}
+              >
+                ✓ Confirm Payment
               </button>
             </div>
           </div>

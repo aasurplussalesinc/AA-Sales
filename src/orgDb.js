@@ -1143,10 +1143,11 @@ export const OrgDB = {
     });
   },
 
-  async markPOPaid(poId) {
+  async markPOPaid(poId, paymentMethod = '') {
     await this.updatePurchaseOrder(poId, {
       status: 'paid',
-      paidAt: Date.now()
+      paidAt: Date.now(),
+      paymentMethod: paymentMethod
     });
   },
   

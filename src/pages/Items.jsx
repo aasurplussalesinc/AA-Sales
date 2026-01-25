@@ -531,8 +531,8 @@ export default function Items() {
       stock: 0, // Start with 0 stock
       price: item.price || 0,
       location: '', // Clear location
-      lowStockThreshold: item.lowStockThreshold || 10,
-      reorderPoint: item.reorderPoint || 20,
+      lowStockThreshold: item.lowStockThreshold ?? 0,
+      reorderPoint: item.reorderPoint ?? 0,
       locationBreakdown: [{ location: '', quantity: 0 }]
     });
     setUseMultiLocation(false);
@@ -585,8 +585,8 @@ export default function Items() {
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
           location: editingItem.location || '',
-          lowStockThreshold: editingItem.lowStockThreshold || 10,
-          reorderPoint: editingItem.reorderPoint || 20
+          lowStockThreshold: editingItem.lowStockThreshold ?? 0,
+          reorderPoint: editingItem.reorderPoint ?? 0
         });
       } else {
         await DB.updateItem(editingItem.id, {
@@ -596,8 +596,8 @@ export default function Items() {
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
           location: editUseMultiLocation ? '' : (editingItem.location || ''),
-          lowStockThreshold: editingItem.lowStockThreshold || 10,
-          reorderPoint: editingItem.reorderPoint || 20
+          lowStockThreshold: editingItem.lowStockThreshold ?? 0,
+          reorderPoint: editingItem.reorderPoint ?? 0
         });
       }
 

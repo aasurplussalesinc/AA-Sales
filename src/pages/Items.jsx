@@ -40,6 +40,12 @@ export default function Items() {
   const [itemOrderHistory, setItemOrderHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyTab, setHistoryTab] = useState('orders'); // 'orders' or 'activity'
+  
+  // Order history pagination and filtering
+  const [orderHistoryPage, setOrderHistoryPage] = useState(1);
+  const [orderHistoryDateFrom, setOrderHistoryDateFrom] = useState('');
+  const [orderHistoryDateTo, setOrderHistoryDateTo] = useState('');
+  const ordersPerPage = 20;
 
   // Add Item modal state
   const [showAddItem, setShowAddItem] = useState(false);
@@ -130,6 +136,9 @@ export default function Items() {
   const loadItemHistory = async (item) => {
     setViewingItemHistory(item);
     setHistoryTab('orders'); // Default to orders tab
+    setOrderHistoryPage(1); // Reset pagination
+    setOrderHistoryDateFrom(''); // Reset date filters
+    setOrderHistoryDateTo('');
     setLoadingHistory(true);
     try {
       // Load activity history
@@ -2942,90 +2951,237 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </div>
               ) : historyTab === 'orders' ? (
                 /* Orders Tab */
-                itemOrderHistory.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
-                    No orders found for this item
-                  </div>
-                ) : (
-                  <div>
-                    {/* Summary stats */}
-                    <div style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: 'repeat(3, 1fr)', 
-                      gap: 15, 
-                      marginBottom: 20 
-                    }}>
-                      <div style={{ background: '#e3f2fd', padding: 15, borderRadius: 8, textAlign: 'center' }}>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#1976d2' }}>
-                          {itemOrderHistory.length}
-                        </div>
-                        <div style={{ fontSize: 12, color: '#666' }}>Total Orders</div>
-                      </div>
-                      <div style={{ background: '#e8f5e9', padding: 15, borderRadius: 8, textAlign: 'center' }}>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#388e3c' }}>
-                          {itemOrderHistory.reduce((sum, o) => sum + (o.itemQty || 0), 0)}
-                        </div>
-                        <div style={{ fontSize: 12, color: '#666' }}>Units Sold</div>
-                      </div>
-                      <div style={{ background: '#fff3e0', padding: 15, borderRadius: 8, textAlign: 'center' }}>
-                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f57c00' }}>
-                          ${itemOrderHistory.reduce((sum, o) => sum + (o.itemValue || 0), 0).toFixed(2)}
-                        </div>
-                        <div style={{ fontSize: 12, color: '#666' }}>Total Revenue</div>
-                      </div>
+                (() => {
+                  // Filter orders by date range
+                  const filteredOrders = itemOrderHistory.filter(order => {
+                    if (!orderHistoryDateFrom && !orderHistoryDateTo) return true;
+                    const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+                    if (orderHistoryDateFrom) {
+                      const fromDate = new Date(orderHistoryDateFrom);
+                      fromDate.setHours(0, 0, 0, 0);
+                      if (orderDate < fromDate) return false;
+                    }
+                    if (orderHistoryDateTo) {
+                      const toDate = new Date(orderHistoryDateTo);
+                      toDate.setHours(23, 59, 59, 999);
+                      if (orderDate > toDate) return false;
+                    }
+                    return true;
+                  });
+                  
+                  // Calculate stats from filtered orders
+                  const totalOrders = filteredOrders.length;
+                  const totalUnits = filteredOrders.reduce((sum, o) => sum + (o.itemQty || 0), 0);
+                  const totalRevenue = filteredOrders.reduce((sum, o) => sum + (o.itemValue || 0), 0);
+                  
+                  // Paginate
+                  const totalPages = Math.ceil(filteredOrders.length / ordersPerPage);
+                  const paginatedOrders = filteredOrders.slice(
+                    (orderHistoryPage - 1) * ordersPerPage,
+                    orderHistoryPage * ordersPerPage
+                  );
+                  
+                  return itemOrderHistory.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                      No orders found for this item
                     </div>
-                    
-                    {/* Orders list */}
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                      <thead>
-                        <tr style={{ background: '#f5f5f5' }}>
-                          <th style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Order</th>
-                          <th style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th>
-                          <th style={{ padding: 10, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Qty</th>
-                          <th style={{ padding: 10, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Value</th>
-                          <th style={{ padding: 10, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th>
-                          <th style={{ padding: 10, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {itemOrderHistory.map(order => {
-                          const statusColors = {
-                            draft: '#9e9e9e', confirmed: '#2196F3', picking: '#ff9800',
-                            packed: '#9c27b0', shipped: '#4CAF50', paid: '#388e3c'
-                          };
-                          const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
-                          return (
-                            <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
-                              <td style={{ padding: 10 }}>
-                                <strong>{order.poNumber}</strong>
-                              </td>
-                              <td style={{ padding: 10 }}>{order.customerName}</td>
-                              <td style={{ padding: 10, textAlign: 'center', fontWeight: 600 }}>{order.itemQty}</td>
-                              <td style={{ padding: 10, textAlign: 'right', fontWeight: 600, color: '#388e3c' }}>
-                                ${order.itemValue?.toFixed(2)}
-                              </td>
-                              <td style={{ padding: 10, textAlign: 'center' }}>
-                                <span style={{
-                                  padding: '3px 8px',
+                  ) : (
+                    <div>
+                      {/* Summary stats */}
+                      <div style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: 'repeat(3, 1fr)', 
+                        gap: 15, 
+                        marginBottom: 15 
+                      }}>
+                        <div style={{ background: '#e3f2fd', padding: 12, borderRadius: 8, textAlign: 'center' }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: '#1976d2' }}>
+                            {totalOrders}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#666' }}>Orders</div>
+                        </div>
+                        <div style={{ background: '#e8f5e9', padding: 12, borderRadius: 8, textAlign: 'center' }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: '#388e3c' }}>
+                            {totalUnits.toLocaleString()}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#666' }}>Units Sold</div>
+                        </div>
+                        <div style={{ background: '#fff3e0', padding: 12, borderRadius: 8, textAlign: 'center' }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: '#f57c00' }}>
+                            ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#666' }}>Revenue</div>
+                        </div>
+                      </div>
+                      
+                      {/* Date Range Filter */}
+                      <div style={{ 
+                        display: 'flex', 
+                        gap: 10, 
+                        alignItems: 'center', 
+                        marginBottom: 15,
+                        padding: 10,
+                        background: '#f9f9f9',
+                        borderRadius: 6,
+                        flexWrap: 'wrap'
+                      }}>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: '#666' }}>Filter:</span>
+                        <input
+                          type="date"
+                          value={orderHistoryDateFrom}
+                          onChange={e => { setOrderHistoryDateFrom(e.target.value); setOrderHistoryPage(1); }}
+                          style={{ padding: '5px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}
+                        />
+                        <span style={{ color: '#999' }}>to</span>
+                        <input
+                          type="date"
+                          value={orderHistoryDateTo}
+                          onChange={e => { setOrderHistoryDateTo(e.target.value); setOrderHistoryPage(1); }}
+                          style={{ padding: '5px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}
+                        />
+                        {(orderHistoryDateFrom || orderHistoryDateTo) && (
+                          <button
+                            onClick={() => { setOrderHistoryDateFrom(''); setOrderHistoryDateTo(''); setOrderHistoryPage(1); }}
+                            style={{ 
+                              padding: '5px 10px', 
+                              background: '#6c757d', 
+                              color: 'white', 
+                              border: 'none', 
+                              borderRadius: 4, 
+                              fontSize: 11,
+                              cursor: 'pointer'
+                            }}
+                          >
+                            Clear
+                          </button>
+                        )}
+                        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#666' }}>
+                          Showing {paginatedOrders.length} of {filteredOrders.length} orders
+                        </span>
+                      </div>
+                      
+                      {/* Orders list */}
+                      {filteredOrders.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: 30, color: '#666' }}>
+                          No orders match the selected date range
+                        </div>
+                      ) : (
+                        <>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                            <thead>
+                              <tr style={{ background: '#f5f5f5' }}>
+                                <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Order</th>
+                                <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th>
+                                <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Qty</th>
+                                <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Value</th>
+                                <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th>
+                                <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {paginatedOrders.map(order => {
+                                const statusColors = {
+                                  draft: '#9e9e9e', confirmed: '#2196F3', picking: '#ff9800',
+                                  packed: '#9c27b0', shipped: '#4CAF50', paid: '#388e3c'
+                                };
+                                const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+                                return (
+                                  <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
+                                    <td style={{ padding: 8 }}>
+                                      <a
+                                        href={`/orders?po=${order.id}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        style={{ 
+                                          color: '#1976d2', 
+                                          textDecoration: 'none',
+                                          fontWeight: 600,
+                                          cursor: 'pointer'
+                                        }}
+                                        title="Open order in new tab"
+                                        onMouseOver={e => e.target.style.textDecoration = 'underline'}
+                                        onMouseOut={e => e.target.style.textDecoration = 'none'}
+                                      >
+                                        {order.poNumber} ↗
+                                      </a>
+                                    </td>
+                                    <td style={{ padding: 8, fontSize: 12 }}>{order.customerName}</td>
+                                    <td style={{ padding: 8, textAlign: 'center', fontWeight: 600 }}>{order.itemQty}</td>
+                                    <td style={{ padding: 8, textAlign: 'right', fontWeight: 600, color: '#388e3c' }}>
+                                      ${order.itemValue?.toFixed(2)}
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: 'center' }}>
+                                      <span style={{
+                                        padding: '2px 6px',
+                                        borderRadius: 4,
+                                        fontSize: 10,
+                                        fontWeight: 600,
+                                        background: statusColors[order.status] || '#9e9e9e',
+                                        color: 'white'
+                                      }}>
+                                        {order.status || 'draft'}
+                                      </span>
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: 'center', fontSize: 11, color: '#666' }}>
+                                      {orderDate.toLocaleDateString()}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          
+                          {/* Pagination */}
+                          {totalPages > 1 && (
+                            <div style={{ 
+                              display: 'flex', 
+                              justifyContent: 'center', 
+                              alignItems: 'center',
+                              gap: 10,
+                              marginTop: 15,
+                              paddingTop: 15,
+                              borderTop: '1px solid #eee'
+                            }}>
+                              <button
+                                onClick={() => setOrderHistoryPage(p => Math.max(1, p - 1))}
+                                disabled={orderHistoryPage === 1}
+                                style={{
+                                  padding: '6px 12px',
+                                  background: orderHistoryPage === 1 ? '#eee' : '#2d5f3f',
+                                  color: orderHistoryPage === 1 ? '#999' : 'white',
+                                  border: 'none',
                                   borderRadius: 4,
-                                  fontSize: 11,
-                                  fontWeight: 600,
-                                  background: statusColors[order.status] || '#9e9e9e',
-                                  color: 'white'
-                                }}>
-                                  {order.status || 'draft'}
-                                </span>
-                              </td>
-                              <td style={{ padding: 10, textAlign: 'center', fontSize: 12, color: '#666' }}>
-                                {orderDate.toLocaleDateString()}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )
+                                  cursor: orderHistoryPage === 1 ? 'not-allowed' : 'pointer',
+                                  fontSize: 12
+                                }}
+                              >
+                                ← Prev
+                              </button>
+                              <span style={{ fontSize: 13, color: '#666' }}>
+                                Page {orderHistoryPage} of {totalPages}
+                              </span>
+                              <button
+                                onClick={() => setOrderHistoryPage(p => Math.min(totalPages, p + 1))}
+                                disabled={orderHistoryPage === totalPages}
+                                style={{
+                                  padding: '6px 12px',
+                                  background: orderHistoryPage === totalPages ? '#eee' : '#2d5f3f',
+                                  color: orderHistoryPage === totalPages ? '#999' : 'white',
+                                  border: 'none',
+                                  borderRadius: 4,
+                                  cursor: orderHistoryPage === totalPages ? 'not-allowed' : 'pointer',
+                                  fontSize: 12
+                                }}
+                              >
+                                Next →
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })()
               ) : (
                 /* Activity Tab */
                 itemHistory.length === 0 ? (

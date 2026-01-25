@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
 import { COMPANY_LOGO } from '../companyLogo';
 import { useAuth } from '../OrgAuthContext';
 
 export default function PurchaseOrders() {
   const { userRole, organization } = useAuth();
+  const [searchParams] = useSearchParams();
   const isAdmin = userRole === 'admin';
   const isManager = userRole === 'manager';
   const canEdit = isAdmin || isManager;
@@ -44,6 +46,17 @@ export default function PurchaseOrders() {
   });
 
   useEffect(() => { loadData(); }, []);
+
+  // Auto-open order from query param (e.g., /orders?po=abc123)
+  useEffect(() => {
+    const poId = searchParams.get('po');
+    if (poId && orders.length > 0 && !selectedOrder) {
+      const order = orders.find(o => o.id === poId);
+      if (order) {
+        setSelectedOrder(order);
+      }
+    }
+  }, [searchParams, orders, selectedOrder]);
 
   const loadData = async () => {
     setLoading(true);

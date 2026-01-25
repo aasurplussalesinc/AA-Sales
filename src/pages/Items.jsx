@@ -2295,26 +2295,23 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
-                    value={newItem.lowStockThreshold === 0 ? '' : newItem.lowStockThreshold}
-                    onChange={e => setNewItem({ ...newItem, lowStockThreshold: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
+                    value={newItem.lowStockThreshold}
+                    onChange={e => setNewItem({ ...newItem, lowStockThreshold: e.target.value === '' ? 0 : parseInt(e.target.value) })}
                     min="0"
-                    placeholder="0"
-                    title="Alert when stock falls below this number"
+                    title="Alert when stock falls below this number (0 = no alert)"
                   />
-                  <small style={{ color: '#666', fontSize: 11 }}>Alert when below this</small>
+                  <small style={{ color: '#666', fontSize: 11 }}>0 = no alert</small>
                 </div>
                 <div className="form-group">
                   <label>Reorder Point</label>
                   <input
                     type="number"
                     className="form-input"
-                    value={newItem.reorderPoint === 0 ? '' : newItem.reorderPoint}
-                    onChange={e => setNewItem({ ...newItem, reorderPoint: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
+                    value={newItem.reorderPoint}
                     min="0"
-                    placeholder="0"
-                    title="Recommended reorder when stock falls to this level"
+                    title="Recommended reorder when stock falls to this level (0 = no alert)"
                   />
-                  <small style={{ color: '#666', fontSize: 11 }}>Reorder at this level</small>
+                  <small style={{ color: '#666', fontSize: 11 }}>0 = no alert</small>
                 </div>
               </div>
             </div>
@@ -2537,24 +2534,22 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
-                    value={editingItem.lowStockThreshold === 0 ? '' : (editingItem.lowStockThreshold || '')}
-                    onChange={e => setEditingItem({ ...editingItem, lowStockThreshold: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
+                    value={editingItem.lowStockThreshold ?? 0}
+                    onChange={e => setEditingItem({ ...editingItem, lowStockThreshold: e.target.value === '' ? 0 : parseInt(e.target.value) })}
                     min="0"
-                    placeholder="0"
                   />
-                  <small style={{ color: '#666', fontSize: 11 }}>Alert when below this</small>
+                  <small style={{ color: '#666', fontSize: 11 }}>0 = no alert</small>
                 </div>
                 <div className="form-group">
                   <label>Reorder Point</label>
                   <input
                     type="number"
                     className="form-input"
-                    value={editingItem.reorderPoint === 0 ? '' : (editingItem.reorderPoint || '')}
-                    onChange={e => setEditingItem({ ...editingItem, reorderPoint: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
+                    value={editingItem.reorderPoint ?? 0}
+                    onChange={e => setEditingItem({ ...editingItem, reorderPoint: e.target.value === '' ? 0 : parseInt(e.target.value) })}
                     min="0"
-                    placeholder="0"
                   />
-                  <small style={{ color: '#666', fontSize: 11 }}>Reorder at this level</small>
+                  <small style={{ color: '#666', fontSize: 11 }}>0 = no alert</small>
                 </div>
               </div>
             </div>

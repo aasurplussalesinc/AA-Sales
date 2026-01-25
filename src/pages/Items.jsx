@@ -57,8 +57,8 @@ export default function Items() {
     stock: 0,
     price: 0,
     location: '',
-    lowStockThreshold: 10,
-    reorderPoint: 20,
+    lowStockThreshold: 0,
+    reorderPoint: 0,
     locationBreakdown: [{ location: '', quantity: 0 }] // For multi-location
   });
 
@@ -124,8 +124,8 @@ export default function Items() {
       stock: 0,
       price: 0,
       location: '',
-      lowStockThreshold: 10,
-      reorderPoint: 20,
+      lowStockThreshold: 0,
+      reorderPoint: 0,
       locationBreakdown: [{ location: '', quantity: 0 }]
     });
     setUseMultiLocation(false);
@@ -494,8 +494,8 @@ export default function Items() {
         stock: 0,
         price: savedPrice,
         location: '',
-        lowStockThreshold: 10,
-        reorderPoint: 20,
+        lowStockThreshold: 0,
+        reorderPoint: 0,
         locationBreakdown: [{ location: '', quantity: 0 }]
       });
       setUseMultiLocation(false);
@@ -512,8 +512,8 @@ export default function Items() {
         stock: 0,
         price: 0,
         location: '',
-        lowStockThreshold: 10,
-        reorderPoint: 20,
+        lowStockThreshold: 0,
+        reorderPoint: 0,
         locationBreakdown: [{ location: '', quantity: 0 }]
       });
       setUseMultiLocation(false);
@@ -2295,9 +2295,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
-                    value={newItem.lowStockThreshold}
-                    onChange={e => setNewItem({ ...newItem, lowStockThreshold: parseInt(e.target.value) || 0 })}
+                    value={newItem.lowStockThreshold === 0 ? '' : newItem.lowStockThreshold}
+                    onChange={e => setNewItem({ ...newItem, lowStockThreshold: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
                     min="0"
+                    placeholder="0"
                     title="Alert when stock falls below this number"
                   />
                   <small style={{ color: '#666', fontSize: 11 }}>Alert when below this</small>
@@ -2307,9 +2308,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
-                    value={newItem.reorderPoint}
-                    onChange={e => setNewItem({ ...newItem, reorderPoint: parseInt(e.target.value) || 0 })}
+                    value={newItem.reorderPoint === 0 ? '' : newItem.reorderPoint}
+                    onChange={e => setNewItem({ ...newItem, reorderPoint: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
                     min="0"
+                    placeholder="0"
                     title="Recommended reorder when stock falls to this level"
                   />
                   <small style={{ color: '#666', fontSize: 11 }}>Reorder at this level</small>
@@ -2535,9 +2537,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
-                    value={editingItem.lowStockThreshold || 10}
-                    onChange={e => setEditingItem({ ...editingItem, lowStockThreshold: parseInt(e.target.value) || 0 })}
+                    value={editingItem.lowStockThreshold === 0 ? '' : (editingItem.lowStockThreshold || '')}
+                    onChange={e => setEditingItem({ ...editingItem, lowStockThreshold: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
                     min="0"
+                    placeholder="0"
                   />
                   <small style={{ color: '#666', fontSize: 11 }}>Alert when below this</small>
                 </div>
@@ -2546,9 +2549,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
-                    value={editingItem.reorderPoint || 20}
-                    onChange={e => setEditingItem({ ...editingItem, reorderPoint: parseInt(e.target.value) || 0 })}
+                    value={editingItem.reorderPoint === 0 ? '' : (editingItem.reorderPoint || '')}
+                    onChange={e => setEditingItem({ ...editingItem, reorderPoint: e.target.value === '' ? 0 : parseInt(e.target.value) || 0 })}
                     min="0"
+                    placeholder="0"
                   />
                   <small style={{ color: '#666', fontSize: 11 }}>Reorder at this level</small>
                 </div>

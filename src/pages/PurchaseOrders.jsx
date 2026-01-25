@@ -6,7 +6,7 @@ import { useAuth } from '../OrgAuthContext';
 
 export default function PurchaseOrders() {
   const { userRole, organization } = useAuth();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = userRole === 'admin';
   const isManager = userRole === 'manager';
   const canEdit = isAdmin || isManager;
@@ -47,7 +47,7 @@ export default function PurchaseOrders() {
 
   useEffect(() => { loadData(); }, []);
 
-  // Auto-open order from query param (e.g., /orders?po=abc123)
+  // Auto-open order from query param (e.g., /purchase-orders?po=abc123)
   useEffect(() => {
     const poId = searchParams.get('po');
     if (poId && orders.length > 0 && !selectedOrder) {
@@ -56,7 +56,17 @@ export default function PurchaseOrders() {
         setSelectedOrder(order);
       }
     }
-  }, [searchParams, orders, selectedOrder]);
+  }, [searchParams, orders]);
+
+  // Close order modal and clear URL param
+  const closeOrderModal = () => {
+    setSelectedOrder(null);
+    // Clear the ?po= param from URL if present
+    if (searchParams.has('po')) {
+      searchParams.delete('po');
+      setSearchParams(searchParams, { replace: true });
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -192,7 +202,7 @@ export default function PurchaseOrders() {
       customerPhone: order.customerPhone || '', customerAddress: order.customerAddress || '', dueDate: order.dueDate || '',
       notes: order.notes || '', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping,
       estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping });
-    setEditingOrderId(order.id); setEditMode(true); setShowCreate(true); setSelectedOrder(null);
+    setEditingOrderId(order.id); setEditMode(true); setShowCreate(true); closeOrderModal();
   };
 
   const resetForm = () => {
@@ -202,7 +212,7 @@ export default function PurchaseOrders() {
 
   const confirmAndCreatePickList = async (order) => {
     if (!confirm('Confirm PO ' + order.poNumber + ' and create pick list?')) return;
-    try { await DB.confirmPurchaseOrder(order.id); alert('Pick list created!'); loadData(); setSelectedOrder(null); }
+    try { await DB.confirmPurchaseOrder(order.id); alert('Pick list created!'); loadData(); closeOrderModal(); }
     catch (error) { alert('Error: ' + error.message); }
   };
 
@@ -341,7 +351,7 @@ export default function PurchaseOrders() {
         }
       }
     }
-    await DB.markPOShipped(order.id); loadData(); setSelectedOrder(null);
+    await DB.markPOShipped(order.id); loadData(); closeOrderModal();
   };
 
   const markPaid = async (order) => { 
@@ -357,7 +367,7 @@ export default function PurchaseOrders() {
     }
     await DB.markPOPaid(paymentOrder.id, paymentMethod);
     loadData();
-    setSelectedOrder(null);
+    closeOrderModal();
     setShowPaymentModal(false);
     setPaymentOrder(null);
     setPaymentMethod('');
@@ -431,7 +441,7 @@ export default function PurchaseOrders() {
     await DB.deletePurchaseOrder(orderToDelete.id);
     setShowDeleteConfirm(false);
     setOrderToDelete(null);
-    setSelectedOrder(null);
+    closeOrderModal();
     loadData();
   };
 
@@ -850,7 +860,7 @@ export default function PurchaseOrders() {
 
       {/* View Order Modal */}
       {selectedOrder && (
-        <div className="modal-overlay" onClick={() => setSelectedOrder(null)}>
+        <div className="modal-overlay" onClick={closeOrderModal}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
               <div><h3 style={{ margin: 0 }}>{selectedOrder.poNumber}</h3><p style={{ color: '#666', margin: '5px 0 0 0' }}>{selectedOrder.customerName}</p></div>
@@ -914,7 +924,7 @@ export default function PurchaseOrders() {
                 {(selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.packingComplete) && <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: '#4CAF50', color: 'white' }}>🚚 Mark Shipped</button>}
                 {selectedOrder.status === 'shipped' && <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#4CAF50', color: 'white' }}>💰 Mark Paid</button>}
                 <button className="btn" onClick={() => deleteOrder(selectedOrder)} style={{ background: '#f44336', color: 'white' }}>🗑️ Delete</button>
-                <button className="btn" onClick={() => setSelectedOrder(null)} style={{ background: '#6c757d', color: 'white', marginLeft: 'auto' }}>Close</button>
+                <button className="btn" onClick={closeOrderModal} style={{ background: '#6c757d', color: 'white', marginLeft: 'auto' }}>Close</button>
               </div>
             </div>
           </div>

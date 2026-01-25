@@ -2308,6 +2308,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     type="number"
                     className="form-input"
                     value={newItem.reorderPoint}
+                    onChange={e => setNewItem({ ...newItem, reorderPoint: e.target.value === '' ? 0 : parseInt(e.target.value) })}
                     min="0"
                     title="Recommended reorder when stock falls to this level (0 = no alert)"
                   />

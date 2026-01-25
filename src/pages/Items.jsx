@@ -23,6 +23,10 @@ export default function Items() {
   const [showBatchCategory, setShowBatchCategory] = useState(false);
   const [batchCategory, setBatchCategory] = useState('');
   
+  // Batch location state
+  const [showBatchLocation, setShowBatchLocation] = useState(false);
+  const [batchLocation, setBatchLocation] = useState('');
+  
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
@@ -1048,6 +1052,27 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
     alert(`Category "${batchCategory || '(cleared)'}" applied to ${selectedItems.length} items.\n\nDon't forget to Save Changes!`);
   };
 
+  // Apply location to all selected items
+  const applyBatchLocation = () => {
+    if (selectedItems.length === 0) {
+      alert('Select items first');
+      return;
+    }
+    
+    const updatedItems = items.map(item => {
+      if (selectedItems.includes(item.id)) {
+        return { ...item, location: batchLocation };
+      }
+      return item;
+    });
+    
+    setItems(updatedItems);
+    setHasChanges(true);
+    setShowBatchLocation(false);
+    setBatchLocation('');
+    alert(`Location "${batchLocation || '(cleared)'}" applied to ${selectedItems.length} items.\n\nDon't forget to Save Changes!`);
+  };
+
   const printBulkLabels = async (format) => {
     const itemsToPrint = items.filter(i => selectedItems.includes(i.id));
     if (itemsToPrint.length === 0) return alert('Select items first');
@@ -1239,6 +1264,14 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         
         <button 
           className="btn"
+          onClick={() => setShowBatchLocation(true)}
+          style={{ background: '#2196f3', color: 'white' }}
+        >
+          📍 Batch Location
+        </button>
+        
+        <button 
+          className="btn"
           onClick={() => setShowLabelModal(true)}
           style={{ background: '#9c27b0', color: 'white' }}
         >
@@ -1333,6 +1366,98 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 onClick={applyBatchCategory}
                 disabled={selectedItems.length === 0}
                 style={{ flex: 1 }}
+              >
+                Apply to {selectedItems.length} Items
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Location Modal */}
+      {showBatchLocation && (
+        <div className="modal-overlay" style={{ zIndex: 1000 }}>
+          <div className="modal" style={{ maxWidth: 500, padding: 30 }}>
+            <h3 style={{ marginBottom: 20 }}>📍 Batch Assign Location</h3>
+            
+            {/* Selection controls */}
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ marginBottom: 10 }}>
+                <strong>{selectedItems.length}</strong> items selected
+              </p>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button className="btn btn-primary btn-sm" onClick={selectAllFiltered}>
+                  Select All Filtered ({sortedItems.length})
+                </button>
+                <button className="btn btn-sm" onClick={() => setSelectedItems(paginatedItems.map(i => i.id))} style={{ background: '#17a2b8', color: 'white' }}>
+                  Select This Page ({paginatedItems.length})
+                </button>
+                {selectedItems.length > 0 && (
+                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: '#6c757d', color: 'white' }}>
+                    Clear Selection
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Location input */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>Location</label>
+              <select
+                className="form-input"
+                value={batchLocation}
+                onChange={e => setBatchLocation(e.target.value)}
+                style={{ width: '100%', marginBottom: 10 }}
+              >
+                <option value="">-- Select Location --</option>
+                {locationOptions.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
+              </select>
+              <p style={{ fontSize: 12, color: '#666' }}>
+                Select a location to assign to all selected items
+              </p>
+            </div>
+            
+            {/* Quick location buttons */}
+            {locationOptions.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 8, fontWeight: 600, fontSize: 13 }}>Quick Select</label>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', maxHeight: 150, overflowY: 'auto' }}>
+                  {locationOptions.slice(0, 20).map(loc => (
+                    <button
+                      key={loc}
+                      onClick={() => setBatchLocation(loc)}
+                      style={{
+                        padding: '4px 10px',
+                        border: batchLocation === loc ? '2px solid #2196f3' : '1px solid #ddd',
+                        borderRadius: 4,
+                        background: batchLocation === loc ? '#e3f2fd' : '#f5f5f5',
+                        cursor: 'pointer',
+                        fontSize: 12
+                      }}
+                    >
+                      {loc}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="btn"
+                onClick={() => { setShowBatchLocation(false); setBatchLocation(''); }}
+                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn"
+                onClick={applyBatchLocation}
+                disabled={selectedItems.length === 0 || !batchLocation}
+                style={{ flex: 1, background: '#2196f3', color: 'white' }}
               >
                 Apply to {selectedItems.length} Items
               </button>

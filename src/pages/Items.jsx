@@ -37,7 +37,9 @@ export default function Items() {
   // Item history modal state
   const [viewingItemHistory, setViewingItemHistory] = useState(null);
   const [itemHistory, setItemHistory] = useState([]);
+  const [itemOrderHistory, setItemOrderHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historyTab, setHistoryTab] = useState('orders'); // 'orders' or 'activity'
 
   // Add Item modal state
   const [showAddItem, setShowAddItem] = useState(false);
@@ -127,13 +129,45 @@ export default function Items() {
 
   const loadItemHistory = async (item) => {
     setViewingItemHistory(item);
+    setHistoryTab('orders'); // Default to orders tab
     setLoadingHistory(true);
     try {
+      // Load activity history
       const history = await DB.getItemHistory(item.id);
       setItemHistory(history);
+      
+      // Load order history - find all POs containing this item
+      const allOrders = await DB.getPurchaseOrders();
+      const ordersWithItem = allOrders.filter(order => 
+        order.items?.some(orderItem => 
+          orderItem.itemId === item.id || 
+          orderItem.partNumber === item.partNumber
+        )
+      ).map(order => {
+        // Find the specific line item(s) for this item
+        const lineItems = order.items?.filter(orderItem => 
+          orderItem.itemId === item.id || 
+          orderItem.partNumber === item.partNumber
+        ) || [];
+        const totalQty = lineItems.reduce((sum, li) => sum + (li.qtyShipped || li.quantity || 0), 0);
+        const totalValue = lineItems.reduce((sum, li) => sum + (li.lineTotal || li.estTotal || 0), 0);
+        return {
+          ...order,
+          itemQty: totalQty,
+          itemValue: totalValue,
+          lineItems
+        };
+      }).sort((a, b) => {
+        // Sort by date descending
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : new Date(a.createdAt);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : new Date(b.createdAt);
+        return dateB - dateA;
+      });
+      setItemOrderHistory(ordersWithItem);
     } catch (error) {
       console.error('Error loading item history:', error);
       setItemHistory([]);
+      setItemOrderHistory([]);
     }
     setLoadingHistory(false);
   };
@@ -1819,13 +1853,31 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   />
                 </td>
                 <td>
-                  <input
-                    type="text"
-                    value={item.name || ''}
-                    onChange={e => updateItem(item.id, 'name', e.target.value)}
-                    className="item-name-input"
-                    style={{ width: '100%', minWidth: '200px' }}
-                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <input
+                      type="text"
+                      value={item.name || ''}
+                      onChange={e => updateItem(item.id, 'name', e.target.value)}
+                      className="item-name-input"
+                      style={{ width: '100%', minWidth: '180px' }}
+                    />
+                    <button
+                      onClick={() => loadItemHistory(item)}
+                      title="View Order History"
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px 5px',
+                        fontSize: 16,
+                        opacity: 0.6
+                      }}
+                      onMouseOver={e => e.target.style.opacity = 1}
+                      onMouseOut={e => e.target.style.opacity = 0.6}
+                    >
+                      📊
+                    </button>
+                  </div>
                 </td>
                 <td>
                   <input
@@ -2834,10 +2886,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           <div 
             className="modal"
             onClick={e => e.stopPropagation()}
-            style={{ maxWidth: 600, maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
+            style={{ maxWidth: 700, maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
           >
             <div className="modal-header">
-              <h2>📜 Item History</h2>
+              <h2>📦 Item History</h2>
               <button className="modal-close" onClick={() => setViewingItemHistory(null)}>×</button>
             </div>
             
@@ -2849,16 +2901,138 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               </div>
             </div>
             
+            {/* Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #ddd' }}>
+              <button
+                onClick={() => setHistoryTab('orders')}
+                style={{
+                  flex: 1,
+                  padding: '12px 20px',
+                  border: 'none',
+                  background: historyTab === 'orders' ? '#fff' : '#f5f5f5',
+                  borderBottom: historyTab === 'orders' ? '3px solid #2d5f3f' : '3px solid transparent',
+                  cursor: 'pointer',
+                  fontWeight: historyTab === 'orders' ? 600 : 400,
+                  color: historyTab === 'orders' ? '#2d5f3f' : '#666'
+                }}
+              >
+                🧾 Order History ({itemOrderHistory.length})
+              </button>
+              <button
+                onClick={() => setHistoryTab('activity')}
+                style={{
+                  flex: 1,
+                  padding: '12px 20px',
+                  border: 'none',
+                  background: historyTab === 'activity' ? '#fff' : '#f5f5f5',
+                  borderBottom: historyTab === 'activity' ? '3px solid #2d5f3f' : '3px solid transparent',
+                  cursor: 'pointer',
+                  fontWeight: historyTab === 'activity' ? 600 : 400,
+                  color: historyTab === 'activity' ? '#2d5f3f' : '#666'
+                }}
+              >
+                📜 Activity Log ({itemHistory.length})
+              </button>
+            </div>
+            
             <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
               {loadingHistory ? (
                 <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
                   Loading history...
                 </div>
-              ) : itemHistory.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
-                  No history found for this item
-                </div>
+              ) : historyTab === 'orders' ? (
+                /* Orders Tab */
+                itemOrderHistory.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                    No orders found for this item
+                  </div>
+                ) : (
+                  <div>
+                    {/* Summary stats */}
+                    <div style={{ 
+                      display: 'grid', 
+                      gridTemplateColumns: 'repeat(3, 1fr)', 
+                      gap: 15, 
+                      marginBottom: 20 
+                    }}>
+                      <div style={{ background: '#e3f2fd', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#1976d2' }}>
+                          {itemOrderHistory.length}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#666' }}>Total Orders</div>
+                      </div>
+                      <div style={{ background: '#e8f5e9', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#388e3c' }}>
+                          {itemOrderHistory.reduce((sum, o) => sum + (o.itemQty || 0), 0)}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#666' }}>Units Sold</div>
+                      </div>
+                      <div style={{ background: '#fff3e0', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+                        <div style={{ fontSize: 24, fontWeight: 700, color: '#f57c00' }}>
+                          ${itemOrderHistory.reduce((sum, o) => sum + (o.itemValue || 0), 0).toFixed(2)}
+                        </div>
+                        <div style={{ fontSize: 12, color: '#666' }}>Total Revenue</div>
+                      </div>
+                    </div>
+                    
+                    {/* Orders list */}
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#f5f5f5' }}>
+                          <th style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Order</th>
+                          <th style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th>
+                          <th style={{ padding: 10, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Qty</th>
+                          <th style={{ padding: 10, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Value</th>
+                          <th style={{ padding: 10, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th>
+                          <th style={{ padding: 10, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itemOrderHistory.map(order => {
+                          const statusColors = {
+                            draft: '#9e9e9e', confirmed: '#2196F3', picking: '#ff9800',
+                            packed: '#9c27b0', shipped: '#4CAF50', paid: '#388e3c'
+                          };
+                          const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
+                          return (
+                            <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
+                              <td style={{ padding: 10 }}>
+                                <strong>{order.poNumber}</strong>
+                              </td>
+                              <td style={{ padding: 10 }}>{order.customerName}</td>
+                              <td style={{ padding: 10, textAlign: 'center', fontWeight: 600 }}>{order.itemQty}</td>
+                              <td style={{ padding: 10, textAlign: 'right', fontWeight: 600, color: '#388e3c' }}>
+                                ${order.itemValue?.toFixed(2)}
+                              </td>
+                              <td style={{ padding: 10, textAlign: 'center' }}>
+                                <span style={{
+                                  padding: '3px 8px',
+                                  borderRadius: 4,
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                  background: statusColors[order.status] || '#9e9e9e',
+                                  color: 'white'
+                                }}>
+                                  {order.status || 'draft'}
+                                </span>
+                              </td>
+                              <td style={{ padding: 10, textAlign: 'center', fontSize: 12, color: '#666' }}>
+                                {orderDate.toLocaleDateString()}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               ) : (
+                /* Activity Tab */
+                itemHistory.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                    No activity history found for this item
+                  </div>
+                ) : (
                 <div style={{ position: 'relative' }}>
                   {/* Timeline line */}
                   <div style={{
@@ -2925,7 +3099,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     );
                   })}
                 </div>
-              )}
+              ))}
             </div>
             
             <div className="modal-footer">

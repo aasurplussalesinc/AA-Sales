@@ -3089,7 +3089,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                                   <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
                                     <td style={{ padding: 8 }}>
                                       <a
-                                        href={`/orders?po=${order.id}`}
+                                        href={`/purchase-orders?po=${order.id}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         style={{ 

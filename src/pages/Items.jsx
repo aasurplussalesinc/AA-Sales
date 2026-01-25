@@ -2086,8 +2086,8 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
 
       {/* Add Item Modal */}
       {showAddItem && (
-        <div className="modal-overlay" onClick={() => { setShowAddItem(false); setSaveSuccessMsg(''); }}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500 }}>
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowAddItem(false); setSaveSuccessMsg(''); } }}>
+          <div className="modal" style={{ maxWidth: 500 }}>
             <div className="modal-header">
               <h2>Add New Item</h2>
               <button className="modal-close" onClick={() => { setShowAddItem(false); setSaveSuccessMsg(''); }}>×</button>
@@ -2339,11 +2339,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         <div 
           className="modal-overlay"
           style={{ zIndex: 9999 }}
-          onClick={() => setShowEditItem(false)}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setShowEditItem(false); }}
         >
           <div 
             className="modal"
-            onClick={e => e.stopPropagation()} 
             style={{ maxWidth: 550 }}
           >
             <div className="modal-header">
@@ -2592,11 +2591,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         <div 
           className="modal-overlay"
           style={{ zIndex: 9999 }}
-          onClick={() => setAdjustingItem(null)}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setAdjustingItem(null); }}
         >
           <div 
             className="modal"
-            onClick={e => e.stopPropagation()} 
             style={{ width: 340, maxWidth: '95%', padding: 0 }}
           >
             {/* Header */}
@@ -2743,11 +2741,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         <div 
           className="modal-overlay"
           style={{ zIndex: 9999 }}
-          onClick={() => setViewingItemLocations(null)}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setViewingItemLocations(null); }}
         >
           <div 
             className="modal"
-            onClick={e => e.stopPropagation()} 
             style={{ 
               maxWidth: 450,
               maxHeight: '80vh',
@@ -2890,11 +2887,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       {viewingItemHistory && (
         <div 
           className="modal-overlay"
-          onClick={() => setViewingItemHistory(null)}
+          onMouseDown={(e) => { if (e.target === e.currentTarget) setViewingItemHistory(null); }}
         >
           <div 
             className="modal"
-            onClick={e => e.stopPropagation()}
             style={{ maxWidth: 700, maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
           >
             <div className="modal-header">

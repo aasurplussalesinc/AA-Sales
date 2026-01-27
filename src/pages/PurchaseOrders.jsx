@@ -42,8 +42,10 @@ export default function PurchaseOrders() {
 
   const [newPO, setNewPO] = useState({
     customerId: '', customerName: '', customerEmail: '', customerPhone: '', customerAddress: '',
-    dueDate: '', notes: '', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0
+    dueDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0
   });
+
+  const termsOptions = ['Due on Receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60', 'Net 90'];
 
   useEffect(() => { loadData(); }, []);
 
@@ -200,14 +202,14 @@ export default function PurchaseOrders() {
     const tax = parseFloat(order.tax) || 0; const shipping = parseFloat(order.shipping) || 0;
     setNewPO({ customerId: order.customerId || '', customerName: order.customerName || '', customerEmail: order.customerEmail || '',
       customerPhone: order.customerPhone || '', customerAddress: order.customerAddress || '', dueDate: order.dueDate || '',
-      notes: order.notes || '', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping,
+      notes: order.notes || '', terms: order.terms || 'Net 30', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping,
       estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping });
     setEditingOrderId(order.id); setEditMode(true); setShowCreate(true); closeOrderModal();
   };
 
   const resetForm = () => {
     setNewPO({ customerId: '', customerName: '', customerEmail: '', customerPhone: '', customerAddress: '',
-      dueDate: '', notes: '', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0 });
+      dueDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0 });
   };
 
   const confirmAndCreatePickList = async (order) => {
@@ -699,7 +701,7 @@ export default function PurchaseOrders() {
       </style></head><body>
       <div class="header"><div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : '<div style="font-size:18px;font-weight:bold;color:' + accentColor + '">' + (organization?.name || 'Company') + '</div>'}</div><div class="company-details"><strong>${organization?.name || 'AA Surplus Sales'}</strong>2153 Pond Road, Ronkonkoma NY 11779<br>${organization?.phone || '716-496-2451'}</div></div>
       <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${order.poNumber}</div>
-      <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div><div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${formatFullDate(order.createdAt)}</p><p><strong>Due:</strong> ${order.dueDate || 'Upon Receipt'}</p><p><strong>Terms:</strong> Net 30</p></div></div>
+      <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div><div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${formatFullDate(order.createdAt)}</p><p><strong>Due:</strong> ${order.dueDate || 'Upon Receipt'}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p></div></div>
       <table><thead><tr><th style="width:60px">SKU</th><th>Description</th><th style="text-align:center;width:50px">Qty</th><th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${items.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + '</td><td style="text-align:center">' + item.displayQty + '</td><td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
       <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
       ${order.notes ? '<div class="notes"><h3>Notes</h3><p>' + order.notes + '</p></div>' : ''}
@@ -843,11 +845,25 @@ export default function PurchaseOrders() {
                 </div>
               )}
 
-              {/* Notes */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Notes</label>
-                <textarea placeholder="Order notes..." value={newPO.notes} onChange={e => setNewPO({ ...newPO, notes: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd', minHeight: 60 }} />
+              {/* Terms and Notes */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 15, marginBottom: 20 }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Payment Terms</label>
+                  <select
+                    value={newPO.terms || 'Net 30'}
+                    onChange={e => setNewPO({ ...newPO, terms: e.target.value })}
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+                  >
+                    {termsOptions.map(term => (
+                      <option key={term} value={term}>{term}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Notes</label>
+                  <textarea placeholder="Order notes..." value={newPO.notes} onChange={e => setNewPO({ ...newPO, notes: e.target.value })}
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd', minHeight: 60 }} />
+                </div>
               </div>
 
               <div style={{ display: 'flex', gap: 10 }}>
@@ -873,6 +889,7 @@ export default function PurchaseOrders() {
                 {selectedOrder.customerPhone && <p style={{ margin: '3px 0' }}>Phone: {selectedOrder.customerPhone}</p>}
                 {selectedOrder.customerEmail && <p style={{ margin: '3px 0' }}>Email: {selectedOrder.customerEmail}</p>}
                 {selectedOrder.customerAddress && <p style={{ margin: '3px 0' }}>Address: {selectedOrder.customerAddress}</p>}
+                <p style={{ margin: '3px 0' }}><strong>Terms:</strong> {selectedOrder.terms || 'Net 30'}</p>
               </div>
 
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontSize: 13 }}>

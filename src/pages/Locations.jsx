@@ -407,6 +407,10 @@ W2,2,C,3`;
       const qrImage = await QRCode.toDataURL(qrData, { width: 400 });
 
       const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        alert('Please allow popups to print QR codes');
+        return;
+      }
       printWindow.document.write(`
         <html>
           <head>
@@ -438,8 +442,15 @@ W2,2,C,3`;
                 font-size: 14px;
                 color: #666;
               }
+              .print-btn {
+                margin-top: 20px;
+                padding: 10px 30px;
+                font-size: 16px;
+                cursor: pointer;
+              }
               @media print {
                 body { padding: 20px; }
+                .print-btn { display: none; }
               }
             </style>
           </head>
@@ -451,9 +462,8 @@ W2,2,C,3`;
               </div>
               <div class="scan-text">Scan to view inventory at this location</div>
             </div>
-            <script>
-              window.onload = function() { window.print(); window.close(); }
-            </script>
+            <br>
+            <button class="print-btn" onclick="window.print()">🖨️ Print</button>
           </body>
         </html>
       `);
@@ -563,15 +573,18 @@ W2,2,C,3`;
                 </div>
               `).join('')}
             </div>
+            <div style="text-align: center; margin-top: 30px;">
+              <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px; cursor: pointer;">🖨️ Print All</button>
+            </div>
+            <style>
+              @media print {
+                button { display: none; }
+              }
+            </style>
           </body>
         </html>
       `);
       printWindow.document.close();
-      
-      // Auto-print after a short delay
-      setTimeout(() => {
-        printWindow.print();
-      }, 500);
     } catch (error) {
       alert('Print failed: ' + error.message);
     }

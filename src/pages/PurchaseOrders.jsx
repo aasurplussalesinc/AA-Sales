@@ -41,6 +41,10 @@ export default function PurchaseOrders() {
   const [paymentOrder, setPaymentOrder] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState('');
 
+  // One-off item modal state
+  const [showOneOffModal, setShowOneOffModal] = useState(false);
+  const [oneOffItem, setOneOffItem] = useState({ name: '', price: '', category: 'One-Off' });
+
   const [newPO, setNewPO] = useState({
     customerId: '', customerName: '', customerEmail: '', customerPhone: '', customerAddress: '',
     shipToAddress: '', useShipTo: false,
@@ -152,6 +156,56 @@ export default function PurchaseOrders() {
       const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0;
       return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping };
     });
+  };
+
+  // Generate next A-SKU for one-off items
+  const generateOneOffSKU = () => {
+    const aSkus = items
+      .filter(item => item.partNumber && item.partNumber.match(/^A\d{4}$/))
+      .map(item => parseInt(item.partNumber.substring(1)));
+    const maxSku = aSkus.length > 0 ? Math.max(...aSkus) : 999;
+    const nextNum = maxSku + 1;
+    return `A${nextNum.toString().padStart(4, '0')}`;
+  };
+
+  // Create one-off item and add to PO
+  const createOneOffItem = async () => {
+    if (!oneOffItem.name.trim()) {
+      alert('Please enter an item name');
+      return;
+    }
+    
+    const sku = generateOneOffSKU();
+    const price = parseFloat(oneOffItem.price) || 0;
+    
+    try {
+      // Create the item in the database
+      const newItem = {
+        partNumber: sku,
+        name: oneOffItem.name.trim(),
+        category: oneOffItem.category || 'One-Off',
+        price: price,
+        stock: 0,
+        isOneOff: true // Flag to identify one-off items
+      };
+      
+      const itemId = await DB.createItem(newItem);
+      
+      // Add to local items list
+      const createdItem = { id: itemId, ...newItem };
+      setItems(prev => [...prev, createdItem]);
+      
+      // Add to PO
+      addItemToPO(createdItem);
+      
+      // Reset and close modal
+      setOneOffItem({ name: '', price: '', category: 'One-Off' });
+      setShowOneOffModal(false);
+      
+    } catch (error) {
+      console.error('Error creating one-off item:', error);
+      alert('Error creating item: ' + error.message);
+    }
   };
 
   const updatePOTotals = (updatedItems) => {
@@ -840,7 +894,17 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
 
               {/* Add Items */}
               <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Add Items</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                  <label style={{ fontWeight: 600 }}>Add Items</label>
+                  <button
+                    type="button"
+                    onClick={() => setShowOneOffModal(true)}
+                    className="btn btn-sm"
+                    style={{ background: '#ff9800', color: 'white', fontSize: 12 }}
+                  >
+                    + One-Off Item
+                  </button>
+                </div>
                 <input type="text" placeholder="Search items..." value={searchItem} onChange={e => setSearchItem(e.target.value)}
                   style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
                 {filteredItems.length > 0 && (
@@ -1464,6 +1528,77 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
               >
                 ✓ Confirm Payment
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* One-Off Item Modal */}
+      {showOneOffModal && (
+        <div className="modal-overlay" onClick={() => setShowOneOffModal(false)} style={{ zIndex: 1100 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
+            <div className="modal-header">
+              <h3 style={{ margin: 0 }}>➕ Add One-Off Item</h3>
+              <button className="modal-close" onClick={() => setShowOneOffModal(false)}>×</button>
+            </div>
+            <div className="modal-body" style={{ padding: 20 }}>
+              <p style={{ background: '#fff3e0', padding: 12, borderRadius: 6, fontSize: 13, marginBottom: 20, border: '1px solid #ffcc80' }}>
+                <strong>🔸 One-Off Items</strong> get an auto-generated SKU starting with "A" (e.g., A1001). 
+                These items are added to your inventory and can be filtered/cleaned up later.
+              </p>
+              
+              <div style={{ marginBottom: 15 }}>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Item Name *</label>
+                <input
+                  type="text"
+                  placeholder="Enter item name..."
+                  value={oneOffItem.name}
+                  onChange={e => setOneOffItem({ ...oneOffItem, name: e.target.value })}
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+                  autoFocus
+                />
+              </div>
+              
+              <div style={{ marginBottom: 15 }}>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Price</label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={oneOffItem.price}
+                  onChange={e => setOneOffItem({ ...oneOffItem, price: e.target.value })}
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+                  step="0.01"
+                  min="0"
+                />
+              </div>
+              
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Category</label>
+                <input
+                  type="text"
+                  placeholder="One-Off"
+                  value={oneOffItem.category}
+                  onChange={e => setOneOffItem({ ...oneOffItem, category: e.target.value })}
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  onClick={() => { setShowOneOffModal(false); setOneOffItem({ name: '', price: '', category: 'One-Off' }); }}
+                  className="btn"
+                  style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={createOneOffItem}
+                  className="btn btn-primary"
+                  style={{ flex: 1, background: '#ff9800' }}
+                >
+                  Create & Add to PO
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1183,7 +1183,7 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
       {/* Orders Table */}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden' }}>
-          <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th></tr></thead>
+          <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th></tr></thead>
           <tbody>
             {(() => {
               // Filter orders
@@ -1239,7 +1239,7 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
               });
               
               if (filtered.length === 0) {
-                return <tr><td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#999' }}>{orders.length === 0 ? 'No purchase orders yet. Click "+ New Order" to create one.' : 'No orders match your filters.'}</td></tr>;
+                return <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: '#999' }}>{orders.length === 0 ? 'No purchase orders yet. Click "+ New Order" to create one.' : 'No orders match your filters.'}</td></tr>;
               }
               
               return filtered.map(order => (
@@ -1251,7 +1251,13 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
                   <td style={{ padding: 12, textAlign: 'center' }}>
                     <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: getStatusColor(order.status), color: 'white' }}>{order.status || 'draft'}</span>
                     {order.packingComplete && <span style={{ marginLeft: 5, fontSize: 11, color: '#9c27b0' }}>📦</span>}
-                    {order.paymentMethod && <span style={{ marginLeft: 5, fontSize: 10, color: '#388e3c' }}>💵</span>}
+                  </td>
+                  <td style={{ padding: 12, textAlign: 'center' }}>
+                    {order.paymentMethod ? (
+                      <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: '#4CAF50', color: 'white' }}>✓ Paid</span>
+                    ) : (
+                      <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: '#ff9800', color: 'white' }}>Unpaid</span>
+                    )}
                   </td>
                   <td style={{ padding: 12, textAlign: 'center', fontSize: 13 }}>{formatDate(order.createdAt)}</td>
                   <td style={{ padding: 12, textAlign: 'center' }}><button className="btn btn-primary" onClick={() => setSelectedOrder(order)} style={{ padding: '4px 12px', fontSize: 12 }}>View</button></td>

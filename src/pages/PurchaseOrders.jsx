@@ -714,6 +714,34 @@ export default function PurchaseOrders() {
     printWindow.document.write(printContent); printWindow.document.close(); printWindow.print();
   };
 
+  const emailInvoice = (order) => {
+    const total = (order.total || order.subtotal || 0).toFixed(2);
+    const subject = encodeURIComponent(`Invoice ${order.poNumber} from ${organization?.name || 'AA Surplus Sales'}`);
+    const body = encodeURIComponent(
+`Hello ${order.customerName},
+
+Please find your invoice details below:
+
+Invoice #: ${order.poNumber}
+Date: ${new Date(order.createdAt?.toDate ? order.createdAt.toDate() : order.createdAt).toLocaleDateString()}
+Terms: ${order.terms || 'Net 30'}
+
+Total Amount: $${total}
+
+Items:
+${(order.items || []).map(item => `- ${item.itemName}: ${item.qtyShipped || item.quantity} x $${(item.unitPrice || 0).toFixed(2)} = $${(item.lineTotal || item.estTotal || 0).toFixed(2)}`).join('\n')}
+
+${order.notes ? `Notes: ${order.notes}\n` : ''}
+Thank you for your business!
+
+${organization?.name || 'AA Surplus Sales'}
+${organization?.phone || '716-496-2451'}
+${organization?.email || 'aasurplussalesinc@gmail.com'}
+`);
+    const email = order.customerEmail || '';
+    window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_self');
+  };
+
   if (loading) return <div className="container" style={{ padding: 20 }}>Loading...</div>;
 
   return (
@@ -960,6 +988,7 @@ export default function PurchaseOrders() {
                 {canEdit && <button className="btn" onClick={() => openEditOrder(selectedOrder)} style={{ background: '#ff9800', color: 'white' }}>✏️ Edit</button>}
                 <button className="btn" onClick={() => printPO(selectedOrder, 'estimate')} style={{ background: '#1976d2', color: 'white' }}>📋 Estimate</button>
                 <button className="btn" onClick={() => printPO(selectedOrder, 'invoice')} style={{ background: '#388e3c', color: 'white' }}>💵 Invoice</button>
+                <button className="btn" onClick={() => emailInvoice(selectedOrder)} style={{ background: '#7b1fa2', color: 'white' }}>📧 Email</button>
                 {canEdit && (!selectedOrder.status || selectedOrder.status === 'draft') && <button className="btn btn-primary" onClick={() => confirmAndCreatePickList(selectedOrder)}>✓ Confirm & Pick List</button>}
                 {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking') && <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>📦 Pack Order</button>}
                 {selectedOrder.packingComplete && (

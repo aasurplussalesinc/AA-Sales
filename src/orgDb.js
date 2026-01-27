@@ -717,25 +717,34 @@ export const OrgDB = {
     const locations = await this.getLocations();
     console.log('Found', locations.length, 'locations');
     
-    // Check for LOC: prefix (location QR codes)
-    if (code.startsWith('LOC:')) {
-      const locCode = code.replace('LOC:', '').toUpperCase();
-      console.log('Looking for location code:', locCode);
-      const found = locations.find(l => {
-        const locationCode = (l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`).toUpperCase();
-        console.log('Comparing with:', locationCode);
-        return locationCode === locCode;
-      }) || null;
-      console.log('Found location:', found);
-      return found;
-    }
+    // Normalize a location code for comparison (remove extra dashes, uppercase)
+    const normalizeCode = (c) => {
+      if (!c) return '';
+      // Remove LOC: prefix if present, uppercase, and normalize format
+      let normalized = c.replace(/^LOC:/i, '').toUpperCase().trim();
+      // Handle both W1-R1-A1 and W1-R1-A-1 formats by removing dash before single digit at end
+      normalized = normalized.replace(/-(\d)$/, '$1');
+      return normalized;
+    };
     
-    // Also check raw location code format (W1-R1-A1)
-    const upperCode = code.toUpperCase();
-    return locations.find(l => {
-      const locationCode = (l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`).toUpperCase();
-      return locationCode === upperCode;
+    // Get the code to search for
+    let searchCode = code;
+    if (code.startsWith('LOC:')) {
+      searchCode = code.replace('LOC:', '');
+    }
+    const normalizedSearch = normalizeCode(searchCode);
+    console.log('Looking for location code:', normalizedSearch);
+    
+    const found = locations.find(l => {
+      // Build location code from parts if not stored
+      const storedCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
+      const normalizedStored = normalizeCode(storedCode);
+      console.log('Comparing with:', storedCode, '-> normalized:', normalizedStored);
+      return normalizedStored === normalizedSearch;
     }) || null;
+    
+    console.log('Found location:', found);
+    return found;
   },
 
   async addInventoryToLocation(locationId, itemId, quantity) {

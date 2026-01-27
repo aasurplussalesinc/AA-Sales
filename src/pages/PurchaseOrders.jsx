@@ -183,7 +183,32 @@ export default function PurchaseOrders() {
         alert('Item "' + item.itemName + '" needs weight per item.'); return;
       }
     }
-    if (editMode && editingOrderId) { await DB.updatePurchaseOrder(editingOrderId, newPO); }
+    if (editMode && editingOrderId) { 
+      await DB.updatePurchaseOrder(editingOrderId, newPO);
+      
+      // If order has been confirmed, sync the pick list with updated items
+      const linkedPickList = pickLists.find(pl => pl.purchaseOrderId === editingOrderId);
+      if (linkedPickList) {
+        // Build updated pick list items, preserving picked quantities for existing items
+        const updatedPickListItems = newPO.items.map(poItem => {
+          // Find existing pick list item to preserve pickedQty
+          const existingPlItem = linkedPickList.items?.find(pli => pli.itemId === poItem.itemId);
+          return {
+            itemId: poItem.itemId,
+            itemName: poItem.itemName,
+            partNumber: poItem.partNumber,
+            requestedQty: poItem.quantity,
+            pickedQty: existingPlItem?.pickedQty || 0,
+            location: poItem.location || existingPlItem?.location || ''
+          };
+        });
+        
+        await DB.updatePickList(linkedPickList.id, {
+          items: updatedPickListItems,
+          name: `PO: ${newPO.poNumber || linkedPickList.name?.split(' - ')[0]?.replace('PO: ', '')} - ${newPO.customerName}`
+        });
+      }
+    }
     else { await DB.createPurchaseOrder(newPO); }
     resetForm(); setShowCreate(false); setEditMode(false); setEditingOrderId(null); loadData();
   };
@@ -204,7 +229,7 @@ export default function PurchaseOrders() {
     setNewPO({ customerId: order.customerId || '', customerName: order.customerName || '', customerEmail: order.customerEmail || '',
       customerPhone: order.customerPhone || '', customerAddress: order.customerAddress || '', 
       shipToAddress: order.shipToAddress || '', useShipTo: !!order.shipToAddress,
-      dueDate: order.dueDate || '',
+      dueDate: order.dueDate || '', poNumber: order.poNumber || '',
       notes: order.notes || '', terms: order.terms || 'Net 30', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping,
       estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping });
     setEditingOrderId(order.id); setEditMode(true); setShowCreate(true); closeOrderModal();

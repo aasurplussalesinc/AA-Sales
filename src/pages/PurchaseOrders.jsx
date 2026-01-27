@@ -332,6 +332,7 @@ export default function PurchaseOrders() {
       items: updatedItems,
       boxDistributions: boxAssignments,
       packingComplete: true,
+      status: 'packed',
       subtotal: newSubtotal,
       total: newSubtotal + tax + shipping
     });

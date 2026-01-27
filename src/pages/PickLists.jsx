@@ -506,6 +506,7 @@ export default function PickLists() {
       boxDistributions: boxAssignments,
       boxDetails: boxDetails,
       packingComplete: true,
+      status: 'packed',
       subtotal: newSubtotal,
       total: newSubtotal + tax + shipping
     });

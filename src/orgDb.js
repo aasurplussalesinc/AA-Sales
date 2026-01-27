@@ -713,21 +713,28 @@ export const OrgDB = {
   async getLocationByQR(code) {
     if (!currentOrgId) return null;
     
+    console.log('getLocationByQR called with:', code);
     const locations = await this.getLocations();
+    console.log('Found', locations.length, 'locations');
     
     // Check for LOC: prefix (location QR codes)
     if (code.startsWith('LOC:')) {
-      const locCode = code.replace('LOC:', '');
-      return locations.find(l => {
-        const locationCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
+      const locCode = code.replace('LOC:', '').toUpperCase();
+      console.log('Looking for location code:', locCode);
+      const found = locations.find(l => {
+        const locationCode = (l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`).toUpperCase();
+        console.log('Comparing with:', locationCode);
         return locationCode === locCode;
       }) || null;
+      console.log('Found location:', found);
+      return found;
     }
     
     // Also check raw location code format (W1-R1-A1)
+    const upperCode = code.toUpperCase();
     return locations.find(l => {
-      const locationCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
-      return locationCode === code;
+      const locationCode = (l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`).toUpperCase();
+      return locationCode === upperCode;
     }) || null;
   },
 

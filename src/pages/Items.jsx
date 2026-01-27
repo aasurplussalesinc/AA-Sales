@@ -1102,8 +1102,11 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       return;
     }
     
+    console.log('Applying batch location:', batchLocation, 'to', selectedItems.length, 'items');
+    
     const updatedItems = items.map(item => {
       if (selectedItems.includes(item.id)) {
+        console.log('Updating item:', item.id, item.name, 'from', item.location, 'to', batchLocation);
         return { ...item, location: batchLocation };
       }
       return item;
@@ -1113,7 +1116,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
     setHasChanges(true);
     setShowBatchLocation(false);
     setBatchLocation('');
-    alert(`Location "${batchLocation || '(cleared)'}" applied to ${selectedItems.length} items.\n\nDon't forget to Save Changes!`);
+    alert(`Location "${batchLocation || '(cleared)'}" applied to ${selectedItems.length} items.\n\n⚠️ Click the green "Save Changes" button to save to database!`);
   };
 
   const printBulkLabels = async (format) => {

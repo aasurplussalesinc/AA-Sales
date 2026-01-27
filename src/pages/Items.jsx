@@ -1241,7 +1241,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           style={{ display: 'none' }}
         />
 
-        {hasChanges && (
+        {hasChanges && canEdit && (
           <>
             <button 
               className="btn"
@@ -1297,21 +1297,25 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           📥 Export CSV
         </button>
         
-        <button 
-          className="btn"
-          onClick={() => setShowBatchCategory(true)}
-          style={{ background: '#ff9800', color: 'white' }}
-        >
-          📁 Batch Category
-        </button>
+        {canEdit && (
+          <button 
+            className="btn"
+            onClick={() => setShowBatchCategory(true)}
+            style={{ background: '#ff9800', color: 'white' }}
+          >
+            📁 Batch Category
+          </button>
+        )}
         
-        <button 
-          className="btn"
-          onClick={() => setShowBatchLocation(true)}
-          style={{ background: '#2196f3', color: 'white' }}
-        >
-          📍 Batch Location
-        </button>
+        {canEdit && (
+          <button 
+            className="btn"
+            onClick={() => setShowBatchLocation(true)}
+            style={{ background: '#2196f3', color: 'white' }}
+          >
+            📍 Batch Location
+          </button>
+        )}
         
         <button 
           className="btn"
@@ -1854,22 +1858,30 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   />
                 </td>
                 <td>
-                  <input
-                    type="text"
-                    value={item.partNumber || ''}
-                    onChange={e => updateItem(item.id, 'partNumber', e.target.value)}
-                    style={{ width: '70px' }}
-                  />
+                  {canEdit ? (
+                    <input
+                      type="text"
+                      value={item.partNumber || ''}
+                      onChange={e => updateItem(item.id, 'partNumber', e.target.value)}
+                      style={{ width: '70px' }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: 13 }}>{item.partNumber || '-'}</span>
+                  )}
                 </td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <input
-                      type="text"
-                      value={item.name || ''}
-                      onChange={e => updateItem(item.id, 'name', e.target.value)}
-                      className="item-name-input"
-                      style={{ width: '100%', minWidth: '250px' }}
-                    />
+                    {canEdit ? (
+                      <input
+                        type="text"
+                        value={item.name || ''}
+                        onChange={e => updateItem(item.id, 'name', e.target.value)}
+                        className="item-name-input"
+                        style={{ width: '100%', minWidth: '250px' }}
+                      />
+                    ) : (
+                      <span style={{ minWidth: '250px' }}>{item.name || '-'}</span>
+                    )}
                     <button
                       onClick={() => loadItemHistory(item)}
                       title="View Order History"
@@ -1889,12 +1901,16 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   </div>
                 </td>
                 <td>
-                  <input
-                    type="text"
-                    value={item.category || ''}
-                    onChange={e => updateItem(item.id, 'category', e.target.value)}
-                    style={{ width: '90px' }}
-                  />
+                  {canEdit ? (
+                    <input
+                      type="text"
+                      value={item.category || ''}
+                      onChange={e => updateItem(item.id, 'category', e.target.value)}
+                      style={{ width: '90px' }}
+                    />
+                  ) : (
+                    <span style={{ fontSize: 13 }}>{item.category || '-'}</span>
+                  )}
                 </td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1997,38 +2013,46 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   )}
                 </td>
                 <td>
-                  <select
-                    value={normalizeLocationCode(item.location) || ''}
-                    onChange={e => updateItem(item.id, 'location', e.target.value)}
-                    style={{ width: '110px', padding: '4px' }}
-                  >
-                    <option value="">--</option>
-                    {locationOptions.map(loc => (
-                      <option key={loc} value={loc}>{loc}</option>
-                    ))}
-                  </select>
+                  {canEdit ? (
+                    <select
+                      value={normalizeLocationCode(item.location) || ''}
+                      onChange={e => updateItem(item.id, 'location', e.target.value)}
+                      style={{ width: '110px', padding: '4px' }}
+                    >
+                      <option value="">--</option>
+                      {locationOptions.map(loc => (
+                        <option key={loc} value={loc}>{loc}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span style={{ fontSize: 13 }}>{normalizeLocationCode(item.location) || '-'}</span>
+                  )}
                 </td>
                 <td style={{ whiteSpace: 'nowrap', color: '#666', fontSize: 12 }}>
                   {formatDate(item.createdAt)}
                 </td>
                 <td>
                   <div className="action-buttons">
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => openEditItem(item)}
-                      title="Edit Item"
-                      style={{ background: '#ff9800', color: 'white' }}
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => duplicateItem(item)}
-                      title="Duplicate Item"
-                      style={{ background: '#607d8b', color: 'white' }}
-                    >
-                      📋
-                    </button>
+                    {canEdit && (
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => openEditItem(item)}
+                        title="Edit Item"
+                        style={{ background: '#ff9800', color: 'white' }}
+                      >
+                        ✏️
+                      </button>
+                    )}
+                    {canEdit && (
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => duplicateItem(item)}
+                        title="Duplicate Item"
+                        style={{ background: '#607d8b', color: 'white' }}
+                      >
+                        📋
+                      </button>
+                    )}
                     <button
                       className="btn btn-sm"
                       onClick={() => setViewingItemLocations(item)}

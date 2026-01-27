@@ -183,34 +183,48 @@ export default function PurchaseOrders() {
         alert('Item "' + item.itemName + '" needs weight per item.'); return;
       }
     }
-    if (editMode && editingOrderId) { 
-      await DB.updatePurchaseOrder(editingOrderId, newPO);
-      
-      // If order has been confirmed, sync the pick list with updated items
-      const linkedPickList = pickLists.find(pl => pl.purchaseOrderId === editingOrderId);
-      if (linkedPickList) {
-        // Build updated pick list items, preserving picked quantities for existing items
-        const updatedPickListItems = newPO.items.map(poItem => {
-          // Find existing pick list item to preserve pickedQty
-          const existingPlItem = linkedPickList.items?.find(pli => pli.itemId === poItem.itemId);
-          return {
-            itemId: poItem.itemId,
-            itemName: poItem.itemName,
-            partNumber: poItem.partNumber,
-            requestedQty: poItem.quantity,
-            pickedQty: existingPlItem?.pickedQty || 0,
-            location: poItem.location || existingPlItem?.location || ''
-          };
-        });
+    try {
+      if (editMode && editingOrderId) { 
+        console.log('Updating PO:', editingOrderId);
+        await DB.updatePurchaseOrder(editingOrderId, newPO);
         
-        await DB.updatePickList(linkedPickList.id, {
-          items: updatedPickListItems,
-          name: `PO: ${newPO.poNumber || linkedPickList.name?.split(' - ')[0]?.replace('PO: ', '')} - ${newPO.customerName}`
-        });
+        // If order has been confirmed, sync the pick list with updated items
+        console.log('Looking for pick list, pickLists count:', pickLists.length);
+        console.log('editingOrderId:', editingOrderId);
+        const linkedPickList = pickLists.find(pl => pl.purchaseOrderId === editingOrderId);
+        console.log('Found linkedPickList:', linkedPickList);
+        
+        if (linkedPickList) {
+          // Build updated pick list items, preserving picked quantities for existing items
+          const updatedPickListItems = newPO.items.map(poItem => {
+            // Find existing pick list item to preserve pickedQty
+            const existingPlItem = linkedPickList.items?.find(pli => pli.itemId === poItem.itemId);
+            return {
+              itemId: poItem.itemId,
+              itemName: poItem.itemName,
+              partNumber: poItem.partNumber,
+              requestedQty: poItem.quantity,
+              pickedQty: existingPlItem?.pickedQty || 0,
+              location: poItem.location || existingPlItem?.location || ''
+            };
+          });
+          
+          console.log('Updating pick list with items:', updatedPickListItems);
+          await DB.updatePickList(linkedPickList.id, {
+            items: updatedPickListItems,
+            name: `PO: ${newPO.poNumber || linkedPickList.name?.split(' - ')[0]?.replace('PO: ', '')} - ${newPO.customerName}`
+          });
+          console.log('Pick list updated successfully');
+        } else {
+          console.log('No linked pick list found');
+        }
       }
+      else { await DB.createPurchaseOrder(newPO); }
+      resetForm(); setShowCreate(false); setEditMode(false); setEditingOrderId(null); loadData();
+    } catch (error) {
+      console.error('Error saving order:', error);
+      alert('Error saving order: ' + error.message);
     }
-    else { await DB.createPurchaseOrder(newPO); }
-    resetForm(); setShowCreate(false); setEditMode(false); setEditingOrderId(null); loadData();
   };
 
   const openEditOrder = (order) => {

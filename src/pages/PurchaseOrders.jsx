@@ -31,6 +31,7 @@ export default function PurchaseOrders() {
   const [showFilters, setShowFilters] = useState(false);
   const [filterSearch, setFilterSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterPayment, setFilterPayment] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
   const [sortBy, setSortBy] = useState('date-desc');
@@ -1142,7 +1143,7 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
             onClick={() => setShowFilters(!showFilters)}
             style={{ background: showFilters ? '#2d5f3f' : '#f5f5f5', color: showFilters ? 'white' : '#333' }}
           >
-            🔍 Filter {(filterSearch || filterStatus || filterDateFrom || filterDateTo) && '•'}
+            🔍 Filter {(filterSearch || filterStatus || filterPayment || filterDateFrom || filterDateTo) && '•'}
           </button>
           
           <input
@@ -1189,6 +1190,19 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
             </div>
             
             <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Payment</label>
+              <select
+                value={filterPayment}
+                onChange={e => setFilterPayment(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, minWidth: 120 }}
+              >
+                <option value="">All</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+              </select>
+            </div>
+            
+            <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Date From</label>
               <input
                 type="date"
@@ -1210,7 +1224,7 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
             
             <button
               className="btn btn-sm"
-              onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterDateFrom(''); setFilterDateTo(''); }}
+              onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterPayment(''); setFilterDateFrom(''); setFilterDateTo(''); }}
               style={{ background: '#6c757d', color: 'white', padding: '8px 12px' }}
             >
               Clear Filters
@@ -1236,6 +1250,12 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
                 }
                 // Status filter
                 if (filterStatus && order.status !== filterStatus) return false;
+                // Payment filter
+                if (filterPayment) {
+                  const isPaid = !!order.paymentMethod;
+                  if (filterPayment === 'paid' && !isPaid) return false;
+                  if (filterPayment === 'unpaid' && isPaid) return false;
+                }
                 // Date range filter
                 if (filterDateFrom || filterDateTo) {
                   const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);

@@ -12,6 +12,11 @@ export default function PickLists() {
   const [selectedList, setSelectedList] = useState(null);
   const [localPickedQty, setLocalPickedQty] = useState({}); // Local state for picked quantities
   
+  // Filter state
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterSearch, setFilterSearch] = useState('');
+  const [sortBy, setSortBy] = useState('date-desc');
+  
   // Pack Order state
   const [showPackOrder, setShowPackOrder] = useState(false);
   const [packingOrder, setPackingOrder] = useState(null);
@@ -482,6 +487,8 @@ export default function PickLists() {
       return;
     }
     
+    console.log('savePackOrder called for order:', packingOrder.id, packingOrder.poNumber);
+    
     // Calculate qtyShipped from box distributions (what was actually packed)
     const updatedItems = packingOrder.items.map((item, idx) => {
       const distributions = boxAssignments[idx] || [{ box: 1, qty: getItemQty(item) }];
@@ -500,7 +507,7 @@ export default function PickLists() {
     const tax = parseFloat(packingOrder.tax) || 0;
     const shipping = parseFloat(packingOrder.shipping) || 0;
     
-    await DB.updatePurchaseOrder(packingOrder.id, {
+    const updateData = {
       ...packingOrder,
       items: updatedItems,
       boxDistributions: boxAssignments,
@@ -509,7 +516,18 @@ export default function PickLists() {
       status: 'packed',
       subtotal: newSubtotal,
       total: newSubtotal + tax + shipping
-    });
+    };
+    
+    console.log('Updating PO with data:', { id: packingOrder.id, status: updateData.status, packingComplete: updateData.packingComplete });
+    
+    try {
+      await DB.updatePurchaseOrder(packingOrder.id, updateData);
+      console.log('PO updated successfully');
+    } catch (error) {
+      console.error('Error updating PO:', error);
+      alert('Error saving: ' + error.message);
+      return;
+    }
     
     setShowPackOrder(false);
     setPackingOrder(null);
@@ -533,6 +551,46 @@ export default function PickLists() {
         <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
           + New Pick List
         </button>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 15, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
+        <input
+          type="text"
+          placeholder="Search by name or PO#..."
+          value={filterSearch}
+          onChange={e => setFilterSearch(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, minWidth: 200 }}
+        />
+        <select
+          value={filterStatus}
+          onChange={e => setFilterStatus(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+        >
+          <option value="">All Statuses</option>
+          <option value="pending">Pending</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+        </select>
+        <select
+          value={sortBy}
+          onChange={e => setSortBy(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+        >
+          <option value="date-desc">Newest First</option>
+          <option value="date-asc">Oldest First</option>
+          <option value="name-asc">Name A-Z</option>
+          <option value="name-desc">Name Z-A</option>
+        </select>
+        {(filterSearch || filterStatus) && (
+          <button
+            className="btn btn-sm"
+            onClick={() => { setFilterSearch(''); setFilterStatus(''); }}
+            style={{ background: '#6c757d', color: 'white', padding: '8px 12px' }}
+          >
+            Clear Filters
+          </button>
+        )}
       </div>
 
       {/* Create Modal */}
@@ -779,7 +837,45 @@ export default function PickLists() {
             </tr>
           </thead>
           <tbody>
-            {pickLists.map(list => (
+            {(() => {
+              // Filter pick lists
+              let filtered = pickLists.filter(list => {
+                if (filterSearch) {
+                  const search = filterSearch.toLowerCase();
+                  const matchName = list.name?.toLowerCase().includes(search);
+                  if (!matchName) return false;
+                }
+                if (filterStatus && list.status !== filterStatus) return false;
+                return true;
+              });
+              
+              // Sort
+              filtered.sort((a, b) => {
+                switch (sortBy) {
+                  case 'date-asc':
+                    return (a.createdAt || 0) - (b.createdAt || 0);
+                  case 'date-desc':
+                    return (b.createdAt || 0) - (a.createdAt || 0);
+                  case 'name-asc':
+                    return (a.name || '').localeCompare(b.name || '');
+                  case 'name-desc':
+                    return (b.name || '').localeCompare(a.name || '');
+                  default:
+                    return (b.createdAt || 0) - (a.createdAt || 0);
+                }
+              });
+              
+              if (filtered.length === 0) {
+                return (
+                  <tr>
+                    <td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#999' }}>
+                      {pickLists.length === 0 ? 'No pick lists yet.' : 'No pick lists match your filters.'}
+                    </td>
+                  </tr>
+                );
+              }
+              
+              return filtered.map(list => (
               <tr key={list.id}>
                 <td><strong>{list.name}</strong></td>
                 <td>{list.items?.length || 0} items</td>
@@ -826,16 +922,8 @@ export default function PickLists() {
                   </div>
                 </td>
               </tr>
-            ))}
-            {pickLists.length === 0 && (
-              <tr>
-                <td colSpan="6">
-                  <div className="empty-state">
-                    <p>No pick lists yet</p>
-                  </div>
-                </td>
-              </tr>
-            )}
+              ));
+            })()}
           </tbody>
         </table>
       </div>

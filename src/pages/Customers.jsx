@@ -38,7 +38,8 @@ export default function Customers() {
     city: '',
     state: '',
     zipCode: '',
-    country: ''
+    country: '',
+    notes: ''
   });
 
   const phoneTypeOptions = ['Cell', 'Office', 'Store', 'Home', 'Fax'];
@@ -75,7 +76,8 @@ export default function Customers() {
       city: customer.city || '',
       state: customer.state || '',
       zipCode: customer.zipCode || '',
-      country: customer.country || ''
+      country: customer.country || '',
+      notes: customer.notes || ''
     });
     
     // Get customer's orders
@@ -673,6 +675,17 @@ export default function Customers() {
               />
             </div>
 
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Notes</label>
+              <textarea
+                className="form-input"
+                placeholder="Customer notes..."
+                value={editForm.notes}
+                onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                style={{ width: '100%', minHeight: 80, resize: 'vertical' }}
+              />
+            </div>
+
             <button className="btn btn-primary" onClick={saveCustomer} style={{ width: '100%' }}>
               💾 Save Changes
             </button>
@@ -1228,7 +1241,7 @@ export default function Customers() {
               setEditForm({
                 company: '', customerName: '', addressShort: '', email: '',
                 phone: '', phoneType: 'Cell', phone2: '', phone2Type: 'Office',
-                address: '', city: '', state: '', zipCode: '', country: ''
+                address: '', city: '', state: '', zipCode: '', country: '', notes: ''
               });
               setShowCreate(true);
             }}>
@@ -1413,6 +1426,17 @@ export default function Customers() {
                 value={editForm.country}
                 onChange={e => setEditForm({ ...editForm, country: e.target.value })}
                 style={{ width: '100%' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Notes</label>
+              <textarea
+                className="form-input"
+                placeholder="Customer notes..."
+                value={editForm.notes}
+                onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
+                style={{ width: '100%', minHeight: 80, resize: 'vertical' }}
               />
             </div>
 

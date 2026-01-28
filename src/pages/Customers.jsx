@@ -31,12 +31,17 @@ export default function Customers() {
     addressShort: '',
     email: '',
     phone: '',
+    phoneType: 'Cell',
+    phone2: '',
+    phone2Type: 'Office',
     address: '',
     city: '',
     state: '',
     zipCode: '',
     country: ''
   });
+
+  const phoneTypeOptions = ['Cell', 'Office', 'Store', 'Home', 'Fax'];
 
   useEffect(() => {
     loadData();
@@ -63,6 +68,9 @@ export default function Customers() {
       addressShort: customer.addressShort || '',
       email: customer.email || '',
       phone: customer.phone || '',
+      phoneType: customer.phoneType || 'Cell',
+      phone2: customer.phone2 || '',
+      phone2Type: customer.phone2Type || 'Office',
       address: customer.address || '',
       city: customer.city || '',
       state: customer.state || '',
@@ -564,14 +572,49 @@ export default function Customers() {
             </div>
 
             <div style={{ marginBottom: 15 }}>
-              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Phone</label>
-              <input
-                type="text"
-                className="form-input"
-                value={editForm.phone}
-                onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
-                style={{ width: '100%' }}
-              />
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Phone 1</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select
+                  value={editForm.phoneType}
+                  onChange={e => setEditForm({ ...editForm, phoneType: e.target.value })}
+                  style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, minWidth: 90 }}
+                >
+                  {phoneTypeOptions.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Phone number..."
+                  value={editForm.phone}
+                  onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                  style={{ flex: 1 }}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Phone 2</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select
+                  value={editForm.phone2Type}
+                  onChange={e => setEditForm({ ...editForm, phone2Type: e.target.value })}
+                  style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, minWidth: 90 }}
+                >
+                  {phoneTypeOptions.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Phone number..."
+                  value={editForm.phone2}
+                  onChange={e => setEditForm({ ...editForm, phone2: e.target.value })}
+                  style={{ flex: 1 }}
+                />
+              </div>
             </div>
 
             <div style={{ marginBottom: 15 }}>
@@ -1184,7 +1227,8 @@ export default function Customers() {
             <button className="btn btn-primary" onClick={() => {
               setEditForm({
                 company: '', customerName: '', addressShort: '', email: '',
-                phone: '', address: '', city: '', state: '', zipCode: '', country: ''
+                phone: '', phoneType: 'Cell', phone2: '', phone2Type: 'Office',
+                address: '', city: '', state: '', zipCode: '', country: ''
               });
               setShowCreate(true);
             }}>
@@ -1271,14 +1315,49 @@ export default function Customers() {
             </div>
 
             <div style={{ marginBottom: 15 }}>
-              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Phone</label>
-              <input
-                type="text"
-                className="form-input"
-                value={editForm.phone}
-                onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
-                style={{ width: '100%' }}
-              />
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Phone 1</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select
+                  value={editForm.phoneType}
+                  onChange={e => setEditForm({ ...editForm, phoneType: e.target.value })}
+                  style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, minWidth: 90 }}
+                >
+                  {phoneTypeOptions.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Phone number..."
+                  value={editForm.phone}
+                  onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                  style={{ flex: 1 }}
+                />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Phone 2</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <select
+                  value={editForm.phone2Type}
+                  onChange={e => setEditForm({ ...editForm, phone2Type: e.target.value })}
+                  style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, minWidth: 90 }}
+                >
+                  {phoneTypeOptions.map(type => (
+                    <option key={type} value={type}>{type}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Phone number..."
+                  value={editForm.phone2}
+                  onChange={e => setEditForm({ ...editForm, phone2: e.target.value })}
+                  style={{ flex: 1 }}
+                />
+              </div>
             </div>
 
             <div style={{ marginBottom: 15 }}>
@@ -1377,7 +1456,18 @@ export default function Customers() {
                   <td><strong>{customer.company || '-'}</strong></td>
                   <td>{customer.customerName || '-'}</td>
                   <td>{customer.email || '-'}</td>
-                  <td>{customer.phone || '-'}</td>
+                  <td>
+                    {customer.phone ? (
+                      <div>
+                        <span style={{ fontSize: 10, color: '#666' }}>{customer.phoneType || 'Cell'}:</span> {customer.phone}
+                        {customer.phone2 && (
+                          <div style={{ fontSize: 12, marginTop: 2 }}>
+                            <span style={{ fontSize: 10, color: '#666' }}>{customer.phone2Type || 'Office'}:</span> {customer.phone2}
+                          </div>
+                        )}
+                      </div>
+                    ) : '-'}
+                  </td>
                   <td>{locationParts.length > 0 ? locationParts.join(', ') : '-'}</td>
                   <td>
                     <span>{custOrders.length} orders</span>

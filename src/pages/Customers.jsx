@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
 import { COMPANY_LOGO } from '../companyLogo';
 import { useAuth } from '../OrgAuthContext';
@@ -8,6 +9,7 @@ export default function Customers() {
   const isAdmin = userRole === 'admin';
   const isManager = userRole === 'manager';
   const canEdit = isAdmin || isManager;
+  const [searchParams, setSearchParams] = useSearchParams();
   
   const [customers, setCustomers] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -48,6 +50,17 @@ export default function Customers() {
     loadData();
   }, []);
 
+  // Auto-open customer from URL param
+  useEffect(() => {
+    const customerId = searchParams.get('customer');
+    if (customerId && customers.length > 0 && !selectedCustomer) {
+      const customer = customers.find(c => c.id === customerId);
+      if (customer) {
+        selectCustomer(customer);
+      }
+    }
+  }, [customers, searchParams]);
+
   const loadData = async () => {
     setLoading(true);
     const [customersData, ordersData, itemsData] = await Promise.all([
@@ -63,6 +76,7 @@ export default function Customers() {
 
   const selectCustomer = async (customer) => {
     setSelectedCustomer(customer);
+    setSearchParams({ customer: customer.id }); // Update URL
     setEditForm({
       company: customer.company || '',
       customerName: customer.customerName || '',
@@ -126,6 +140,7 @@ export default function Customers() {
     setSelectedCustomer(null);
     setCustomerOrders([]);
     setCustomerStats(null);
+    setSearchParams({}); // Clear URL param
   };
 
   const deleteCustomer = async () => {

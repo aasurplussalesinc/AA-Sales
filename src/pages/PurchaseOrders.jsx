@@ -239,9 +239,12 @@ export default function PurchaseOrders() {
       }
     }
     try {
+      let createdOrderId = null;
+      
       if (editMode && editingOrderId) { 
         console.log('Updating PO:', editingOrderId);
         await DB.updatePurchaseOrder(editingOrderId, newPO);
+        createdOrderId = editingOrderId;
         
         // If order has been confirmed, sync the pick list with updated items
         console.log('Looking for pick list, pickLists count:', pickLists.length);
@@ -274,8 +277,31 @@ export default function PurchaseOrders() {
           console.log('No linked pick list found');
         }
       }
-      else { await DB.createPurchaseOrder(newPO); }
-      resetForm(); setShowCreate(false); setEditMode(false); setEditingOrderId(null); loadData();
+      else { 
+        createdOrderId = await DB.createPurchaseOrder(newPO); 
+      }
+      
+      resetForm(); 
+      setShowCreate(false); 
+      setEditMode(false); 
+      setEditingOrderId(null); 
+      
+      // Reload data and then open the view modal for the created/edited order
+      const [ordersData, itemsData, customersData, contractsData, pickListsData] = await Promise.all([
+        DB.getPurchaseOrders(), DB.getItems(), DB.getCustomers(), DB.getContracts(), DB.getPickLists()
+      ]);
+      setOrders(ordersData); 
+      setItems(itemsData); 
+      setCustomers(customersData); 
+      setContracts(contractsData); 
+      setPickLists(pickListsData);
+      
+      // Find and open the created/edited order
+      const createdOrder = ordersData.find(o => o.id === createdOrderId);
+      if (createdOrder) {
+        setSelectedOrder(createdOrder);
+      }
+      
     } catch (error) {
       console.error('Error saving order:', error);
       alert('Error saving order: ' + error.message);

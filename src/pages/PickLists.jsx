@@ -39,7 +39,8 @@ export default function PickLists() {
     items: []
   });
   const [searchItem, setSearchItem] = useState('');
-
+  const [editMode, setEditMode] = useState(false);
+  const [editingListId, setEditingListId] = useState(null);
   useEffect(() => {
     loadData();
   }, []);
@@ -116,10 +117,42 @@ export default function PickLists() {
       return;
     }
 
-    await DB.createPickList(newList);
+    if (editMode && editingListId) {
+      // Update existing pick list
+      await DB.updatePickList(editingListId, {
+        name: newList.name,
+        notes: newList.notes,
+        items: newList.items
+      });
+    } else {
+      // Create new pick list
+      await DB.createPickList(newList);
+    }
+    
     setNewList({ name: '', notes: '', items: [] });
     setShowCreate(false);
+    setEditMode(false);
+    setEditingListId(null);
     loadData();
+  };
+
+  const openEditPickList = (list) => {
+    setNewList({
+      name: list.name || '',
+      notes: list.notes || '',
+      items: list.items || []
+    });
+    setEditingListId(list.id);
+    setEditMode(true);
+    setShowCreate(true);
+    setSelectedList(null); // Close the view modal
+  };
+
+  const resetPickListForm = () => {
+    setNewList({ name: '', notes: '', items: [] });
+    setShowCreate(false);
+    setEditMode(false);
+    setEditingListId(null);
   };
 
   const updatePickedQty = async (list, itemId, qty) => {
@@ -827,7 +860,10 @@ export default function PickLists() {
             background: 'white', borderRadius: 12, padding: 30,
             maxWidth: 600, width: '100%', maxHeight: '90vh', overflow: 'auto'
           }}>
-            <h3 style={{ marginBottom: 20 }}>Create Pick List</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ margin: 0 }}>{editMode ? 'Edit Pick List' : 'Create Pick List'}</h3>
+              <button onClick={resetPickListForm} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#666' }}>×</button>
+            </div>
             
             <div style={{ marginBottom: 15 }}>
               <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Name</label>
@@ -913,9 +949,9 @@ export default function PickLists() {
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-primary" onClick={createPickList} style={{ flex: 1 }}>
-                Create Pick List
+                {editMode ? 'Save Changes' : 'Create Pick List'}
               </button>
-              <button className="btn" onClick={() => setShowCreate(false)} style={{ flex: 1, background: '#6c757d', color: 'white' }}>
+              <button className="btn" onClick={resetPickListForm} style={{ flex: 1, background: '#6c757d', color: 'white' }}>
                 Cancel
               </button>
             </div>
@@ -951,15 +987,48 @@ export default function PickLists() {
             {/* QR Scanner Section */}
             {selectedList.status !== 'completed' && (
               <div style={{ marginBottom: 20, padding: 15, background: '#e3f2fd', borderRadius: 8 }}>
-                {!scanMode ? (
-                  <button 
-                    className="btn btn-primary"
-                    onClick={startScanner}
-                    style={{ width: '100%' }}
-                  >
-                    📷 Scan Item QR Code
-                  </button>
-                ) : (
+                <div style={{ display: 'flex', gap: 10, marginBottom: scanMode ? 10 : 0 }}>
+                  {!scanMode && (
+                    <>
+                      <button 
+                        className="btn btn-primary"
+                        onClick={startScanner}
+                        style={{ flex: 1 }}
+                      >
+                        📷 Scan Item QR Code
+                      </button>
+                      <button 
+                        className="btn"
+                        onClick={() => {
+                          // Fill all items with their requested qty
+                          const updatedQty = {};
+                          selectedList.items?.forEach(item => {
+                            updatedQty[item.itemId] = item.requestedQty;
+                          });
+                          setLocalPickedQty(updatedQty);
+                          // Save all to database
+                          const updatedItems = selectedList.items?.map(item => ({
+                            ...item,
+                            pickedQty: item.requestedQty
+                          }));
+                          DB.updatePickList(selectedList.id, { items: updatedItems });
+                          setSelectedList(prev => ({ ...prev, items: updatedItems }));
+                        }}
+                        style={{ background: '#4CAF50', color: 'white' }}
+                      >
+                        ✓ Fill All
+                      </button>
+                      <button 
+                        className="btn"
+                        onClick={() => openEditPickList(selectedList)}
+                        style={{ background: '#ff9800', color: 'white' }}
+                      >
+                        ✏️ Edit
+                      </button>
+                    </>
+                  )}
+                </div>
+                {scanMode && (
                   <div>
                     <div style={{ position: 'relative', marginBottom: 10 }}>
                       <video 

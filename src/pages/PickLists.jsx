@@ -22,6 +22,9 @@ export default function PickLists() {
   const [packingOrder, setPackingOrder] = useState(null);
   const [boxAssignments, setBoxAssignments] = useState({});
   const [boxDetails, setBoxDetails] = useState({}); // { boxNumber: { weight: '', length: '', width: '', height: '' } }
+  const [packingMode, setPackingMode] = useState('boxes'); // 'boxes' or 'triwalls'
+  const [triwalls, setTriwalls] = useState([]); // [{ id: 1, length: '', width: '', height: '', weight: '', items: {} }]
+  const [triwallAssignments, setTriwallAssignments] = useState({}); // { itemIndex: [{ triwall: 1, qty: 5 }] }
   
   // QR Scanner state
   const [scanMode, setScanMode] = useState(false);
@@ -399,27 +402,217 @@ export default function PickLists() {
     
     setPackingOrder(orderWithPickedQty);
     
-    // Initialize box distributions based on PICKED quantities
-    const distributions = {};
-    orderWithPickedQty.items.forEach((item, idx) => {
-      const totalQty = item.pickedQty;
-      // Check if we have saved distributions
-      if (order.boxDistributions && order.boxDistributions[idx]) {
-        distributions[idx] = order.boxDistributions[idx];
-      } else if (item.boxNumber) {
-        // Legacy: single box assignment
-        distributions[idx] = [{ box: item.boxNumber, qty: totalQty }];
-      } else {
-        // Default: all in box 1
-        distributions[idx] = [{ box: 1, qty: totalQty }];
-      }
-    });
-    setBoxAssignments(distributions);
+    // Check if order was previously packed with triwalls
+    if (order.triwalls && order.triwalls.length > 0) {
+      setPackingMode('triwalls');
+      setTriwalls(order.triwalls);
+      setTriwallAssignments(order.triwallAssignments || {});
+    } else {
+      setPackingMode('boxes');
+      // Initialize box distributions based on PICKED quantities
+      const distributions = {};
+      orderWithPickedQty.items.forEach((item, idx) => {
+        const totalQty = item.pickedQty;
+        // Check if we have saved distributions
+        if (order.boxDistributions && order.boxDistributions[idx]) {
+          distributions[idx] = order.boxDistributions[idx];
+        } else if (item.boxNumber) {
+          // Legacy: single box assignment
+          distributions[idx] = [{ box: item.boxNumber, qty: totalQty }];
+        } else {
+          // Default: all in box 1
+          distributions[idx] = [{ box: 1, qty: totalQty }];
+        }
+      });
+      setBoxAssignments(distributions);
+      setTriwalls([]);
+      setTriwallAssignments({});
+    }
     
     // Initialize box details from saved data or empty
     setBoxDetails(order.boxDetails || {});
     
     setShowPackOrder(true);
+  };
+
+  // ==================== TRIWALL FUNCTIONS ====================
+  
+  const addTriwall = () => {
+    const newId = triwalls.length > 0 ? Math.max(...triwalls.map(t => t.id)) + 1 : 1;
+    setTriwalls([...triwalls, { id: newId, length: '', width: '', height: '', weight: '' }]);
+    
+    // Initialize all items to go into the first triwall if this is the first one
+    if (triwalls.length === 0) {
+      const assignments = {};
+      packingOrder.items.forEach((item, idx) => {
+        assignments[idx] = [{ triwall: newId, qty: item.pickedQty || 0 }];
+      });
+      setTriwallAssignments(assignments);
+    }
+  };
+
+  const removeTriwall = (triwallId) => {
+    if (triwalls.length <= 1) {
+      alert('Must have at least one triwall');
+      return;
+    }
+    setTriwalls(triwalls.filter(t => t.id !== triwallId));
+    // Remove assignments for this triwall
+    const newAssignments = {};
+    Object.keys(triwallAssignments).forEach(idx => {
+      newAssignments[idx] = triwallAssignments[idx].filter(a => a.triwall !== triwallId);
+    });
+    setTriwallAssignments(newAssignments);
+  };
+
+  const updateTriwallDetail = (triwallId, field, value) => {
+    setTriwalls(triwalls.map(t => 
+      t.id === triwallId ? { ...t, [field]: value } : t
+    ));
+  };
+
+  const updateTriwallAssignment = (itemIndex, triwallId, qty) => {
+    setTriwallAssignments(prev => {
+      const itemAssignments = prev[itemIndex] || [];
+      const existingIdx = itemAssignments.findIndex(a => a.triwall === triwallId);
+      
+      if (existingIdx >= 0) {
+        const updated = [...itemAssignments];
+        updated[existingIdx] = { triwall: triwallId, qty: parseInt(qty) || 0 };
+        return { ...prev, [itemIndex]: updated };
+      } else {
+        return { ...prev, [itemIndex]: [...itemAssignments, { triwall: triwallId, qty: parseInt(qty) || 0 }] };
+      }
+    });
+  };
+
+  const getTriwallAssignmentQty = (itemIndex, triwallId) => {
+    const assignments = triwallAssignments[itemIndex] || [];
+    const assignment = assignments.find(a => a.triwall === triwallId);
+    return assignment ? assignment.qty : 0;
+  };
+
+  const getTriwallItemTotal = (itemIndex) => {
+    const assignments = triwallAssignments[itemIndex] || [];
+    return assignments.reduce((sum, a) => sum + (a.qty || 0), 0);
+  };
+
+  const calculateTriwallWeight = (triwallId) => {
+    let totalWeight = 0;
+    packingOrder?.items?.forEach((item, idx) => {
+      const qty = getTriwallAssignmentQty(idx, triwallId);
+      const itemWeight = parseFloat(item.weight) || parseFloat(item.weightPerItem) || 0;
+      totalWeight += qty * itemWeight;
+    });
+    return totalWeight;
+  };
+
+  const validateTriwallPacking = () => {
+    if (triwalls.length === 0) return false;
+    for (let idx = 0; idx < packingOrder.items.length; idx++) {
+      const item = packingOrder.items[idx];
+      const expected = item.pickedQty || 0;
+      const actual = getTriwallItemTotal(idx);
+      if (actual !== expected) return false;
+    }
+    return true;
+  };
+
+  const printTriwallLabel = (triwallId, triwallIndex) => {
+    const triwall = triwalls.find(t => t.id === triwallId);
+    const order = packingOrder;
+    const totalTriwalls = triwalls.length;
+    const labelNumber = triwallIndex + 1;
+    
+    // Calculate weight
+    const estimatedWeight = calculateTriwallWeight(triwallId);
+    const displayWeight = triwall.weight || estimatedWeight.toFixed(1);
+    
+    const printContent = `<!DOCTYPE html>
+<html><head><title>Shipping Label - ${order.poNumber}</title>
+<style>
+  @page { size: landscape; margin: 0.5in; }
+  body { 
+    font-family: Arial, sans-serif; 
+    margin: 0; 
+    padding: 40px;
+    width: 10in;
+    height: 7.5in;
+    box-sizing: border-box;
+  }
+  .label-container {
+    border: 3px solid #000;
+    padding: 30px;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+  }
+  .from-section {
+    margin-bottom: 40px;
+  }
+  .from-section .label { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+  .from-section .address { font-size: 18px; line-height: 1.4; }
+  .to-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .to-section .company { font-size: 32px; font-weight: bold; margin-bottom: 10px; }
+  .to-section .attention { font-size: 24px; margin-bottom: 10px; }
+  .to-section .address { font-size: 24px; line-height: 1.4; }
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px solid #000;
+  }
+  .box-count { font-size: 48px; font-weight: bold; }
+  .po-number { font-size: 20px; }
+  .dimensions { font-size: 16px; color: #666; }
+  @media print {
+    body { padding: 20px; }
+  }
+</style>
+</head><body>
+<div class="label-container">
+  <div class="from-section">
+    <div class="label">FROM:</div>
+    <div class="address">
+      AA SURPLUS SALES INC<br>
+      2153 POND RD<br>
+      RONKONKOMA, NY 11779<br>
+      USA
+    </div>
+  </div>
+  
+  <div class="to-section">
+    <div class="company">${(order.customerName || '').toUpperCase()}</div>
+    ${order.customerContact ? `<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : ''}
+    <div class="address">
+      ${(order.customerAddress || '').toUpperCase().replace(/, /g, '<br>')}
+    </div>
+  </div>
+  
+  <div class="footer">
+    <div>
+      <div class="po-number">PO: ${order.poNumber}</div>
+      ${triwall.length && triwall.width && triwall.height ? 
+        `<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}" | ${displayWeight} lbs</div>` : 
+        (displayWeight ? `<div class="dimensions">Est. Weight: ${displayWeight} lbs</div>` : '')}
+    </div>
+    <div class="box-count">${labelNumber} OF ${totalTriwalls}</div>
+  </div>
+</div>
+</body></html>`;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   const updateBoxDetail = (boxNum, field, value) => {
@@ -482,22 +675,41 @@ export default function PickLists() {
 
   const savePackOrder = async () => {
     if (!packingOrder) return;
-    if (!validatePacking()) {
-      alert('Please make sure all quantities are distributed correctly across boxes.');
-      return;
+    
+    // Validate based on packing mode
+    if (packingMode === 'triwalls') {
+      if (!validateTriwallPacking()) {
+        alert('Please make sure all quantities are distributed correctly across triwalls.');
+        return;
+      }
+    } else {
+      if (!validatePacking()) {
+        alert('Please make sure all quantities are distributed correctly across boxes.');
+        return;
+      }
     }
     
-    console.log('savePackOrder called for order:', packingOrder.id, packingOrder.poNumber);
+    console.log('savePackOrder called for order:', packingOrder.id, packingOrder.poNumber, 'mode:', packingMode);
     
-    // Calculate qtyShipped from box distributions (what was actually packed)
+    // Calculate qtyShipped based on packing mode
     const updatedItems = packingOrder.items.map((item, idx) => {
-      const distributions = boxAssignments[idx] || [{ box: 1, qty: getItemQty(item) }];
-      const totalPacked = distributions.reduce((sum, d) => sum + (parseInt(d.qty) || 0), 0);
-      return {
-        ...item,
-        qtyShipped: totalPacked, // Update shipped qty based on what was packed
-        boxDistributions: distributions
-      };
+      let totalPacked;
+      if (packingMode === 'triwalls') {
+        totalPacked = getTriwallItemTotal(idx);
+        return {
+          ...item,
+          qtyShipped: totalPacked,
+          triwallAssignments: triwallAssignments[idx] || []
+        };
+      } else {
+        const distributions = boxAssignments[idx] || [{ box: 1, qty: getItemQty(item) }];
+        totalPacked = distributions.reduce((sum, d) => sum + (parseInt(d.qty) || 0), 0);
+        return {
+          ...item,
+          qtyShipped: totalPacked,
+          boxDistributions: distributions
+        };
+      }
     });
     
     // Recalculate order totals based on new qtyShipped values
@@ -510,15 +722,23 @@ export default function PickLists() {
     const updateData = {
       ...packingOrder,
       items: updatedItems,
-      boxDistributions: boxAssignments,
-      boxDetails: boxDetails,
+      packingMode: packingMode,
       packingComplete: true,
       status: 'packed',
       subtotal: newSubtotal,
       total: newSubtotal + tax + shipping
     };
     
-    console.log('Updating PO with data:', { id: packingOrder.id, status: updateData.status, packingComplete: updateData.packingComplete });
+    // Add mode-specific data
+    if (packingMode === 'triwalls') {
+      updateData.triwalls = triwalls;
+      updateData.triwallAssignments = triwallAssignments;
+    } else {
+      updateData.boxDistributions = boxAssignments;
+      updateData.boxDetails = boxDetails;
+    }
+    
+    console.log('Updating PO with data:', { id: packingOrder.id, status: updateData.status, packingMode: updateData.packingMode });
     
     try {
       await DB.updatePurchaseOrder(packingOrder.id, updateData);
@@ -531,6 +751,9 @@ export default function PickLists() {
     
     setShowPackOrder(false);
     setPackingOrder(null);
+    setPackingMode('boxes');
+    setTriwalls([]);
+    setTriwallAssignments({});
     loadData();
     alert('Packing saved! Shipped quantities updated.');
   };
@@ -936,7 +1159,7 @@ export default function PickLists() {
           justifyContent: 'center', zIndex: 1000, padding: 20
         }} onClick={() => setShowPackOrder(false)}>
           <div style={{
-            background: 'white', borderRadius: 12, maxWidth: 700, width: '100%',
+            background: 'white', borderRadius: 12, maxWidth: 800, width: '100%',
             maxHeight: '90vh', overflow: 'auto'
           }} onClick={e => e.stopPropagation()}>
             <div style={{ padding: '15px 20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -944,12 +1167,184 @@ export default function PickLists() {
               <button onClick={() => setShowPackOrder(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#666' }}>×</button>
             </div>
             <div style={{ padding: 20 }}>
+              {/* Packing Mode Toggle */}
+              <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+                <button
+                  onClick={() => setPackingMode('boxes')}
+                  style={{
+                    flex: 1, padding: '12px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: packingMode === 'boxes' ? '#2196F3' : '#e0e0e0',
+                    color: packingMode === 'boxes' ? 'white' : '#333',
+                    fontWeight: 600, fontSize: 14
+                  }}
+                >
+                  📦 Regular Boxes
+                </button>
+                <button
+                  onClick={() => {
+                    setPackingMode('triwalls');
+                    if (triwalls.length === 0) addTriwall();
+                  }}
+                  style={{
+                    flex: 1, padding: '12px 20px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                    background: packingMode === 'triwalls' ? '#9c27b0' : '#e0e0e0',
+                    color: packingMode === 'triwalls' ? 'white' : '#333',
+                    fontWeight: 600, fontSize: 14
+                  }}
+                >
+                  🏗️ Triwalls / Gaylords
+                </button>
+              </div>
+
               <div style={{ background: '#e3f2fd', padding: 12, borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
                 <strong>📋 Quantities from Pick List</strong>
                 <span style={{ color: '#666', marginLeft: 10 }}>Packing quantities are based on what was actually picked.</span>
               </div>
               
-              {(packingOrder.items || []).map((item, idx) => {
+              {/* TRIWALL PACKING MODE */}
+              {packingMode === 'triwalls' && (
+                <>
+                  {/* Triwall Cards */}
+                  <div style={{ marginBottom: 20 }}>
+                    {triwalls.map((triwall, twIdx) => {
+                      const estimatedWeight = calculateTriwallWeight(triwall.id);
+                      return (
+                        <div key={triwall.id} style={{ 
+                          border: '2px solid #9c27b0', borderRadius: 8, padding: 15, marginBottom: 15,
+                          background: '#f3e5f5'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+                            <h4 style={{ margin: 0, color: '#9c27b0' }}>🏗️ Triwall {twIdx + 1}</h4>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button
+                                onClick={() => printTriwallLabel(triwall.id, twIdx)}
+                                style={{ padding: '6px 12px', background: '#607d8b', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                              >
+                                🏷️ Print Label
+                              </button>
+                              {triwalls.length > 1 && (
+                                <button
+                                  onClick={() => removeTriwall(triwall.id)}
+                                  style={{ padding: '6px 12px', background: '#f44336', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+                                >
+                                  ✕ Remove
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Dimensions & Weight */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 15 }}>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, color: '#666', marginBottom: 3 }}>Length (in)</label>
+                              <input
+                                type="number"
+                                value={triwall.length}
+                                onChange={e => updateTriwallDetail(triwall.id, 'length', e.target.value)}
+                                style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
+                                placeholder="L"
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, color: '#666', marginBottom: 3 }}>Width (in)</label>
+                              <input
+                                type="number"
+                                value={triwall.width}
+                                onChange={e => updateTriwallDetail(triwall.id, 'width', e.target.value)}
+                                style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
+                                placeholder="W"
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, color: '#666', marginBottom: 3 }}>Height (in)</label>
+                              <input
+                                type="number"
+                                value={triwall.height}
+                                onChange={e => updateTriwallDetail(triwall.id, 'height', e.target.value)}
+                                style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
+                                placeholder="H"
+                              />
+                            </div>
+                            <div>
+                              <label style={{ display: 'block', fontSize: 11, color: '#666', marginBottom: 3 }}>Weight (lbs)</label>
+                              <input
+                                type="number"
+                                value={triwall.weight}
+                                onChange={e => updateTriwallDetail(triwall.id, 'weight', e.target.value)}
+                                style={{ width: '100%', padding: 8, border: '1px solid #ddd', borderRadius: 4 }}
+                                placeholder={estimatedWeight > 0 ? `Est: ${estimatedWeight.toFixed(1)}` : 'Weight'}
+                              />
+                            </div>
+                          </div>
+                          
+                          {estimatedWeight > 0 && !triwall.weight && (
+                            <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
+                              📊 Estimated weight from items: <strong>{estimatedWeight.toFixed(1)} lbs</strong>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    
+                    <button
+                      onClick={addTriwall}
+                      style={{ 
+                        width: '100%', padding: 12, background: '#9c27b0', color: 'white',
+                        border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600
+                      }}
+                    >
+                      + Add Another Triwall
+                    </button>
+                  </div>
+                  
+                  {/* Item Distribution for Triwalls */}
+                  <h4 style={{ marginBottom: 15 }}>Distribute Items to Triwalls</h4>
+                  {(packingOrder.items || []).map((item, idx) => {
+                    const pickedQty = getItemQty(item);
+                    const distributedQty = getTriwallItemTotal(idx);
+                    const isValid = distributedQty === pickedQty;
+                    
+                    return (
+                      <div key={idx} style={{ 
+                        marginBottom: 15, padding: 15, borderRadius: 8,
+                        background: isValid ? '#f5f5f5' : '#fff3e0',
+                        border: isValid ? '1px solid #ddd' : '2px solid #ff9800'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                          <div>
+                            <strong>{item.itemName}</strong>
+                            {item.partNumber && <span style={{ color: '#666', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <span style={{ fontWeight: 'bold', color: isValid ? '#4CAF50' : '#ff9800' }}>
+                              {distributedQty} / {pickedQty}
+                            </span>
+                            <div style={{ fontSize: 10, color: '#666' }}>packed / picked</div>
+                          </div>
+                        </div>
+                        
+                        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                          {triwalls.map((triwall, twIdx) => (
+                            <div key={triwall.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <label style={{ fontSize: 12, color: '#666' }}>TW{twIdx + 1}:</label>
+                              <input
+                                type="number"
+                                min="0"
+                                value={getTriwallAssignmentQty(idx, triwall.id) || ''}
+                                onChange={e => updateTriwallAssignment(idx, triwall.id, e.target.value)}
+                                style={{ width: 60, padding: 6, border: '1px solid #ddd', borderRadius: 4, textAlign: 'center' }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+              
+              {/* REGULAR BOX PACKING MODE */}
+              {packingMode === 'boxes' && (packingOrder.items || []).map((item, idx) => {
                 const pickedQty = getItemQty(item);
                 const orderedQty = parseInt(item.qtyShipped) || parseInt(item.quantity) || 0;
                 const distributedQty = getDistributionTotal(idx);
@@ -1013,8 +1408,8 @@ export default function PickLists() {
                 );
               })}
               
-              {/* Box Weight & Dimensions Section */}
-              {getUniqueBoxNumbers().length > 0 && (
+              {/* Box Weight & Dimensions Section - only show in boxes mode */}
+              {packingMode === 'boxes' && getUniqueBoxNumbers().length > 0 && (
                 <div style={{ marginTop: 25, padding: 20, background: '#f9f9f9', borderRadius: 8, border: '1px solid #e0e0e0' }}>
                   <h4 style={{ margin: '0 0 15px 0', color: '#333' }}>📐 Box Weight & Dimensions</h4>
                   {getUniqueBoxNumbers().map(boxNum => (
@@ -1097,14 +1492,37 @@ export default function PickLists() {
                 </div>
               )}
               
-              <div style={{ marginTop: 20, padding: 15, background: validatePacking() ? '#e8f5e9' : '#ffebee', borderRadius: 8 }}>
-                <strong>Summary:</strong> {new Set(Object.values(boxAssignments).flatMap(d => d.map(x => x.box))).size} boxes
-                {!validatePacking() && <span style={{ color: '#f44336', marginLeft: 10 }}>⚠️ Fix quantity mismatches before saving</span>}
-              </div>
+              {/* Summary - conditional based on mode */}
+              {packingMode === 'triwalls' ? (
+                <div style={{ marginTop: 20, padding: 15, background: validateTriwallPacking() ? '#e8f5e9' : '#ffebee', borderRadius: 8 }}>
+                  <strong>Summary:</strong> {triwalls.length} triwall{triwalls.length !== 1 ? 's' : ''}
+                  {triwalls.map((tw, i) => {
+                    const weight = tw.weight || calculateTriwallWeight(tw.id).toFixed(1);
+                    return ` | TW${i+1}: ${weight} lbs`;
+                  }).join('')}
+                  {!validateTriwallPacking() && <span style={{ color: '#f44336', marginLeft: 10 }}>⚠️ Fix quantity mismatches before saving</span>}
+                </div>
+              ) : (
+                <div style={{ marginTop: 20, padding: 15, background: validatePacking() ? '#e8f5e9' : '#ffebee', borderRadius: 8 }}>
+                  <strong>Summary:</strong> {new Set(Object.values(boxAssignments).flatMap(d => d.map(x => x.box))).size} boxes
+                  {!validatePacking() && <span style={{ color: '#f44336', marginLeft: 10 }}>⚠️ Fix quantity mismatches before saving</span>}
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: 15, borderTop: '1px solid #eee' }}>
               <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
-              <button onClick={savePackOrder} disabled={!validatePacking()} style={{ padding: '10px 20px', background: validatePacking() ? '#4CAF50' : '#ccc', color: 'white', border: 'none', borderRadius: 6, cursor: validatePacking() ? 'pointer' : 'not-allowed' }}>Save Packing</button>
+              <button 
+                onClick={savePackOrder} 
+                disabled={packingMode === 'triwalls' ? !validateTriwallPacking() : !validatePacking()} 
+                style={{ 
+                  padding: '10px 20px', 
+                  background: (packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) ? '#4CAF50' : '#ccc', 
+                  color: 'white', border: 'none', borderRadius: 6, 
+                  cursor: (packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) ? 'pointer' : 'not-allowed' 
+                }}
+              >
+                Save Packing
+              </button>
             </div>
           </div>
         </div>

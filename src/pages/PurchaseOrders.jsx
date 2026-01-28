@@ -46,7 +46,7 @@ export default function PurchaseOrders() {
   const [oneOffItem, setOneOffItem] = useState({ name: '', price: '', category: 'One-Off' });
 
   const [newPO, setNewPO] = useState({
-    customerId: '', customerName: '', customerEmail: '', customerPhone: '', customerAddress: '',
+    customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
     shipToAddress: '', useShipTo: false,
     dueDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0
   });
@@ -97,7 +97,9 @@ export default function PurchaseOrders() {
 
   const selectCustomerForPO = (customer) => {
     setNewPO({
-      ...newPO, customerId: customer.id, customerName: customer.company || customer.customerName,
+      ...newPO, customerId: customer.id, 
+      customerName: customer.company || customer.customerName,
+      customerContact: customer.company ? customer.customerName : '', // Contact is customerName if company exists
       customerEmail: customer.email || '', customerPhone: customer.phone || '',
       customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', ')
     });
@@ -321,7 +323,8 @@ export default function PurchaseOrders() {
     const estSubtotal = normalizedItems.reduce((sum, i) => sum + (i.estTotal || 0), 0);
     const shipSubtotal = normalizedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
     const tax = parseFloat(order.tax) || 0; const shipping = parseFloat(order.shipping) || 0;
-    setNewPO({ customerId: order.customerId || '', customerName: order.customerName || '', customerEmail: order.customerEmail || '',
+    setNewPO({ customerId: order.customerId || '', customerName: order.customerName || '', 
+      customerContact: order.customerContact || '', customerEmail: order.customerEmail || '',
       customerPhone: order.customerPhone || '', customerAddress: order.customerAddress || '', 
       shipToAddress: order.shipToAddress || '', useShipTo: !!order.shipToAddress,
       dueDate: order.dueDate || '', poNumber: order.poNumber || '',
@@ -331,7 +334,7 @@ export default function PurchaseOrders() {
   };
 
   const resetForm = () => {
-    setNewPO({ customerId: '', customerName: '', customerEmail: '', customerPhone: '', customerAddress: '',
+    setNewPO({ customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
       shipToAddress: '', useShipTo: false,
       dueDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0 });
   };
@@ -825,7 +828,7 @@ export default function PurchaseOrders() {
       </style></head><body>
       <div class="header"><div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : '<div style="font-size:18px;font-weight:bold;color:' + accentColor + '">' + (organization?.name || 'Company') + '</div>'}</div><div class="company-details"><strong>${organization?.name || 'AA Surplus Sales'}</strong>2153 Pond Road, Ronkonkoma NY 11779<br>${organization?.phone || '716-496-2451'}</div></div>
       <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${order.poNumber}</div>
-      <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3><p>' + order.shipToAddress.replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${formatFullDate(order.createdAt)}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p></div></div>
+      <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerContact ? '<p>' + order.customerContact + '</p>' : ''}${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3><p>' + order.shipToAddress.replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${formatFullDate(order.createdAt)}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p></div></div>
       <table><thead><tr><th style="width:60px">SKU</th><th>Description</th><th style="text-align:center;width:50px">Qty</th><th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${items.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + '</td><td style="text-align:center">' + item.displayQty + '</td><td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
       <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
       ${order.notes ? '<div class="notes"><h3>Notes</h3><p>' + order.notes + '</p></div>' : ''}
@@ -836,9 +839,10 @@ export default function PurchaseOrders() {
 
   const emailInvoice = (order) => {
     const total = (order.total || order.subtotal || 0).toFixed(2);
+    const greeting = order.customerContact || order.customerName;
     const subject = encodeURIComponent(`Invoice ${order.poNumber} from ${organization?.name || 'AA Surplus Sales'}`);
     const body = encodeURIComponent(
-`Hello ${order.customerName},
+`Hello ${greeting},
 
 Please find your invoice details below:
 

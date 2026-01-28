@@ -1234,6 +1234,7 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
                 {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking') && <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>📦 Pack Order</button>}
                 {selectedOrder.packingComplete && (
                   <>
+                    <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>📦 Edit Packing</button>
                     <button className="btn" onClick={() => printClientPackingList(selectedOrder)} style={{ background: '#17a2b8', color: 'white' }}>🖨️ Client Packing List</button>
                     <button className="btn" onClick={() => printInternalPackingList(selectedOrder)} style={{ background: '#ff9800', color: 'white' }}>📊 Internal Analysis</button>
                   </>

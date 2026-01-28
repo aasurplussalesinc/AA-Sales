@@ -1232,13 +1232,13 @@ export default function PickLists() {
                     >
                       {list.status === 'completed' ? 'View' : 'Process'}
                     </button>
-                    {list.status === 'completed' && list.purchaseOrderId && !getLinkedOrder(list)?.packingComplete && (
+                    {list.status === 'completed' && list.purchaseOrderId && (
                       <button 
                         className="btn btn-sm"
                         onClick={() => openPackOrder(list)}
                         style={{ background: '#9c27b0', color: 'white' }}
                       >
-                        📦 Pack
+                        {getLinkedOrder(list)?.packingComplete ? '📦 Edit Pack' : '📦 Pack'}
                       </button>
                     )}
                     <button 

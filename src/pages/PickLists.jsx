@@ -1051,6 +1051,53 @@ export default function PickLists() {
                 )}
               </div>
             )}
+            
+            {/* Edit button for COMPLETED lists */}
+            {selectedList.status === 'completed' && (
+              <div style={{ marginBottom: 20, display: 'flex', gap: 10 }}>
+                <button 
+                  className="btn"
+                  onClick={() => {
+                    // Fill all items with their requested qty
+                    const updatedQty = {};
+                    selectedList.items?.forEach(item => {
+                      updatedQty[item.itemId] = item.requestedQty;
+                    });
+                    setLocalPickedQty(updatedQty);
+                    // Save all to database
+                    const updatedItems = selectedList.items?.map(item => ({
+                      ...item,
+                      pickedQty: item.requestedQty
+                    }));
+                    DB.updatePickList(selectedList.id, { items: updatedItems });
+                    setSelectedList(prev => ({ ...prev, items: updatedItems }));
+                  }}
+                  style={{ background: '#4CAF50', color: 'white' }}
+                >
+                  ✓ Fill All
+                </button>
+                <button 
+                  className="btn"
+                  onClick={() => openEditPickList(selectedList)}
+                  style={{ background: '#ff9800', color: 'white' }}
+                >
+                  ✏️ Edit Items
+                </button>
+                <button 
+                  className="btn"
+                  onClick={async () => {
+                    if (confirm('Reopen this pick list? Status will change back to "in progress".')) {
+                      await DB.updatePickList(selectedList.id, { status: 'in_progress' });
+                      setSelectedList(prev => ({ ...prev, status: 'in_progress' }));
+                      loadData();
+                    }
+                  }}
+                  style={{ background: '#2196F3', color: 'white' }}
+                >
+                  🔄 Reopen
+                </button>
+              </div>
+            )}
 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
@@ -1071,19 +1118,15 @@ export default function PickLists() {
                     </td>
                     <td style={{ padding: 10, textAlign: 'center' }}>{item.requestedQty}</td>
                     <td style={{ padding: 10, textAlign: 'center' }}>
-                      {selectedList.status === 'completed' ? (
-                        item.pickedQty
-                      ) : (
-                        <input
-                          type="number"
-                          value={localPickedQty[item.itemId] ?? item.pickedQty ?? 0}
-                          onChange={e => handleLocalQtyChange(item.itemId, e.target.value)}
-                          onBlur={() => handleQtyBlur(item.itemId)}
-                          style={{ width: 60, padding: 5, textAlign: 'center' }}
-                          min="0"
-                          max={item.requestedQty}
-                        />
-                      )}
+                      <input
+                        type="number"
+                        value={localPickedQty[item.itemId] ?? item.pickedQty ?? 0}
+                        onChange={e => handleLocalQtyChange(item.itemId, e.target.value)}
+                        onBlur={() => handleQtyBlur(item.itemId)}
+                        style={{ width: 60, padding: 5, textAlign: 'center' }}
+                        min="0"
+                        max={item.requestedQty}
+                      />
                     </td>
                     <td style={{ padding: 10, textAlign: 'center' }}>
                       {(localPickedQty[item.itemId] ?? item.pickedQty ?? 0) >= item.requestedQty ? '✅' : (localPickedQty[item.itemId] ?? item.pickedQty ?? 0) > 0 ? '🔶' : '⬜'}

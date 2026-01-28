@@ -866,6 +866,113 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
     window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_self');
   };
 
+  const printShippingLabel = (order, triwallIndex = 0) => {
+    const triwalls = order.triwalls || [];
+    const triwall = triwalls[triwallIndex] || {};
+    const totalTriwalls = triwalls.length || 1;
+    const labelNumber = triwallIndex + 1;
+    const displayWeight = triwall.weight || '';
+    
+    const printContent = `<!DOCTYPE html>
+<html><head><title>Shipping Label - ${order.poNumber}</title>
+<style>
+  @page { size: landscape; margin: 0.5in; }
+  body { 
+    font-family: Arial, sans-serif; 
+    margin: 0; 
+    padding: 40px;
+    width: 10in;
+    height: 7.5in;
+    box-sizing: border-box;
+  }
+  .label-container {
+    border: 3px solid #000;
+    padding: 30px;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+  }
+  .from-section {
+    margin-bottom: 40px;
+  }
+  .from-section .label { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+  .from-section .address { font-size: 18px; line-height: 1.4; }
+  .to-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .to-section .company { font-size: 32px; font-weight: bold; margin-bottom: 10px; }
+  .to-section .attention { font-size: 24px; margin-bottom: 10px; }
+  .to-section .address { font-size: 24px; line-height: 1.4; }
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px solid #000;
+  }
+  .box-count { font-size: 48px; font-weight: bold; }
+  .po-number { font-size: 20px; }
+  .dimensions { font-size: 16px; color: #666; }
+  @media print {
+    body { padding: 20px; }
+  }
+</style>
+</head><body>
+<div class="label-container">
+  <div class="from-section">
+    <div class="label">FROM:</div>
+    <div class="address">
+      AA SURPLUS SALES INC<br>
+      2153 POND RD<br>
+      RONKONKOMA, NY 11779<br>
+      USA
+    </div>
+  </div>
+  
+  <div class="to-section">
+    <div class="company">${(order.customerName || '').toUpperCase()}</div>
+    ${order.customerContact ? `<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : ''}
+    <div class="address">
+      ${(order.customerAddress || '').toUpperCase().replace(/, /g, '<br>')}
+    </div>
+  </div>
+  
+  <div class="footer">
+    <div>
+      <div class="po-number">PO: ${order.poNumber}</div>
+      ${triwall.length && triwall.width && triwall.height ? 
+        `<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}"${displayWeight ? ' | ' + displayWeight + ' lbs' : ''}</div>` : 
+        (displayWeight ? `<div class="dimensions">Weight: ${displayWeight} lbs</div>` : '')}
+    </div>
+    <div class="box-count">${labelNumber} OF ${totalTriwalls}</div>
+  </div>
+</div>
+</body></html>`;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  const printAllShippingLabels = (order) => {
+    const triwalls = order.triwalls || [];
+    if (triwalls.length === 0) {
+      // Print single label if no triwall data
+      printShippingLabel(order, 0);
+      return;
+    }
+    // Print each triwall label
+    triwalls.forEach((_, idx) => {
+      setTimeout(() => printShippingLabel(order, idx), idx * 500);
+    });
+  };
+
   if (loading) return <div className="container" style={{ padding: 20 }}>Loading...</div>;
 
   return (
@@ -1130,6 +1237,24 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
                     <button className="btn" onClick={() => printClientPackingList(selectedOrder)} style={{ background: '#17a2b8', color: 'white' }}>🖨️ Client Packing List</button>
                     <button className="btn" onClick={() => printInternalPackingList(selectedOrder)} style={{ background: '#ff9800', color: 'white' }}>📊 Internal Analysis</button>
                   </>
+                )}
+                {selectedOrder.packingComplete && selectedOrder.triwalls && selectedOrder.triwalls.length > 0 && (
+                  <div style={{ display: 'flex', gap: 5 }}>
+                    <button className="btn" onClick={() => printAllShippingLabels(selectedOrder)} style={{ background: '#795548', color: 'white' }}>
+                      🏷️ Print All Labels ({selectedOrder.triwalls.length})
+                    </button>
+                    {selectedOrder.triwalls.length > 1 && (
+                      <select
+                        onChange={e => { if (e.target.value) { printShippingLabel(selectedOrder, parseInt(e.target.value)); e.target.value = ''; } }}
+                        style={{ padding: '8px 12px', border: '1px solid #795548', borderRadius: 4, background: 'white', cursor: 'pointer' }}
+                      >
+                        <option value="">Print Single...</option>
+                        {selectedOrder.triwalls.map((tw, idx) => (
+                          <option key={idx} value={idx}>Label {idx + 1} of {selectedOrder.triwalls.length}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                 )}
                 {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.packingComplete) && <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: '#4CAF50', color: 'white' }}>🚚 Mark Shipped</button>}
                 {canEdit && selectedOrder.status === 'shipped' && <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#4CAF50', color: 'white' }}>💰 Mark Paid</button>}

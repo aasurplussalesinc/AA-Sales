@@ -1234,7 +1234,7 @@ export default function PickLists() {
                           </div>
                           
                           {/* Dimensions & Weight */}
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 15 }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 10 }}>
                             <div>
                               <label style={{ display: 'block', fontSize: 11, color: '#666', marginBottom: 3 }}>Length (in)</label>
                               <input
@@ -1275,6 +1275,46 @@ export default function PickLists() {
                                 placeholder={estimatedWeight > 0 ? `Est: ${estimatedWeight.toFixed(1)}` : 'Weight'}
                               />
                             </div>
+                          </div>
+                          
+                          {/* Quick fill buttons for triwall types */}
+                          <div style={{ display: 'flex', gap: 10, marginBottom: 15 }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateTriwallDetail(triwall.id, 'length', '48');
+                                updateTriwallDetail(triwall.id, 'width', '44');
+                                updateTriwallDetail(triwall.id, 'height', '48');
+                                updateTriwallDetail(triwall.id, 'type', 'brown');
+                                // Add 120 lbs (pallet weight) to estimated item weight
+                                const itemWeight = calculateTriwallWeight(triwall.id);
+                                updateTriwallDetail(triwall.id, 'weight', (itemWeight + 120).toFixed(1));
+                              }}
+                              style={{ 
+                                padding: '8px 16px', background: '#8d6e63', color: 'white', 
+                                border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 
+                              }}
+                            >
+                              🟤 Brown (48×44×48) +120 lbs
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateTriwallDetail(triwall.id, 'length', '46');
+                                updateTriwallDetail(triwall.id, 'width', '39');
+                                updateTriwallDetail(triwall.id, 'height', '45');
+                                updateTriwallDetail(triwall.id, 'type', 'white');
+                                // Add 75 lbs (pallet weight) to estimated item weight
+                                const itemWeight = calculateTriwallWeight(triwall.id);
+                                updateTriwallDetail(triwall.id, 'weight', (itemWeight + 75).toFixed(1));
+                              }}
+                              style={{ 
+                                padding: '8px 16px', background: '#e0e0e0', color: '#333', 
+                                border: '1px solid #999', borderRadius: 4, cursor: 'pointer', fontSize: 12, fontWeight: 600 
+                              }}
+                            >
+                              ⬜ White (46×39×45) +75 lbs
+                            </button>
                           </div>
                           
                           {estimatedWeight > 0 && !triwall.weight && (

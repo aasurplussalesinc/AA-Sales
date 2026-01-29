@@ -767,7 +767,17 @@ export default function PurchaseOrders() {
               <td style="text-align:right">$${revenue.toFixed(2)}</td>
               <td style="text-align:right" class="profit">${margin !== null ? '$' + margin.toFixed(2) : '—'}</td>
             </tr>`;
-          }).join('')}</tbody></table></div>`;
+          }).join('')}
+          <tr style="background:#f5f5f5;font-weight:bold;border-top:2px solid #333">
+            <td colspan="2">Box ${boxNum} Total</td>
+            <td style="text-align:center">${boxItems.reduce((sum, i) => sum + i.qtyInBox, 0)}</td>
+            <td style="text-align:right">${boxItems.reduce((sum, i) => sum + (i.qtyInBox * (parseFloat(i.weightPerItem) || 0)), 0).toFixed(1)} lbs</td>
+            <td style="text-align:right" class="cost">$${boxItems.reduce((sum, i) => { const c = calculatePartialCost(i, i.qtyInBox); return sum + (c || 0); }, 0).toFixed(2)}</td>
+            <td style="text-align:right">—</td>
+            <td style="text-align:right">$${boxItems.reduce((sum, i) => sum + (i.qtyInBox * (parseFloat(i.unitPrice) || 0)), 0).toFixed(2)}</td>
+            <td style="text-align:right" class="profit">$${boxItems.reduce((sum, i) => { const rev = i.qtyInBox * (parseFloat(i.unitPrice) || 0); const cost = calculatePartialCost(i, i.qtyInBox); return sum + (cost !== null ? rev - cost : 0); }, 0).toFixed(2)}</td>
+          </tr>
+          </tbody></table></div>`;
       }).join('')}
       <div class="summary">
         <div class="summary-box costs"><h3 style="margin:0 0 8px 0;color:#c62828;font-size:10px">Cost Summary</h3>

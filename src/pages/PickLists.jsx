@@ -670,7 +670,18 @@ export default function PickLists() {
   const updateBoxDistribution = (itemIndex, distIndex, field, value) => {
     setBoxAssignments(prev => {
       const itemDist = [...(prev[itemIndex] || [])];
-      itemDist[distIndex] = { ...itemDist[distIndex], [field]: field === 'qty' ? (parseInt(value) || 0) : (parseInt(value) || 1) };
+      if (field === 'qty') {
+        itemDist[distIndex] = { ...itemDist[distIndex], [field]: parseInt(value) || 0 };
+      } else if (field === 'box') {
+        // Allow typing any number 1-99, keep the raw value while typing
+        const numValue = parseInt(value);
+        if (value === '' || value === '0') {
+          // Allow empty temporarily while typing, but show empty
+          itemDist[distIndex] = { ...itemDist[distIndex], [field]: value === '' ? '' : 0 };
+        } else if (!isNaN(numValue) && numValue >= 1 && numValue <= 99) {
+          itemDist[distIndex] = { ...itemDist[distIndex], [field]: numValue };
+        }
+      }
       return { ...prev, [itemIndex]: itemDist };
     });
   };

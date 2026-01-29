@@ -25,6 +25,7 @@ export default function PickLists() {
   const [packingMode, setPackingMode] = useState('boxes'); // 'boxes' or 'triwalls'
   const [triwalls, setTriwalls] = useState([]); // [{ id: 1, length: '', width: '', height: '', weight: '', items: {} }]
   const [triwallAssignments, setTriwallAssignments] = useState({}); // { itemIndex: [{ triwall: 1, qty: 5 }] }
+  const [packedItems, setPackedItems] = useState({}); // { itemIndex: true/false } - track which items are checked as packed
   
   // QR Scanner state
   const [scanMode, setScanMode] = useState(false);
@@ -465,6 +466,9 @@ export default function PickLists() {
     // Initialize box details from saved data or empty
     setBoxDetails(order.boxDetails || {});
     
+    // Initialize packed items checkboxes from saved data
+    setPackedItems(order.packedItems || {});
+    
     setShowPackOrder(true);
   };
 
@@ -771,6 +775,9 @@ export default function PickLists() {
       updateData.boxDetails = boxDetails;
     }
     
+    // Save packed items checkboxes
+    updateData.packedItems = packedItems;
+    
     console.log('Updating PO with data:', { id: packingOrder.id, status: updateData.status, packingMode: updateData.packingMode });
     
     try {
@@ -787,6 +794,7 @@ export default function PickLists() {
     setPackingMode('boxes');
     setTriwalls([]);
     setTriwallAssignments({});
+    setPackedItems({});
     loadData();
     alert('Packing saved! Shipped quantities updated.');
   };
@@ -1323,18 +1331,38 @@ export default function PickLists() {
                     const distributedQty = getTriwallItemTotal(idx);
                     const isValid = distributedQty === pickedQty;
                     const hasShortage = pickedQty < orderedQty;
+                    const isChecked = packedItems[idx] || false;
                     
                     return (
-                      <div key={idx} style={{ marginBottom: 20, padding: 15, background: isValid ? '#f5f5f5' : '#fff3e0', borderRadius: 8, border: isValid ? '1px solid #ddd' : '2px solid #ff9800' }}>
+                      <div key={idx} style={{ 
+                        marginBottom: 20, padding: 15, 
+                        background: isChecked ? '#e8f5e9' : (isValid ? '#f5f5f5' : '#fff3e0'), 
+                        borderRadius: 8, 
+                        border: isChecked ? '2px solid #4CAF50' : (isValid ? '1px solid #ddd' : '2px solid #ff9800')
+                      }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                          <div>
-                            <strong>{item.itemName}</strong>
-                            {item.partNumber && <span style={{ color: '#666', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
-                            {hasShortage && (
-                              <div style={{ fontSize: 11, color: '#f57c00', marginTop: 2 }}>
-                                ⚠️ Shortage: Ordered {orderedQty}, Picked {pickedQty}
-                              </div>
-                            )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <button
+                              onClick={() => setPackedItems(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                              style={{
+                                width: 32, height: 32, borderRadius: 4, border: '2px solid #4CAF50',
+                                background: isChecked ? '#4CAF50' : 'white',
+                                color: isChecked ? 'white' : '#4CAF50',
+                                cursor: 'pointer', fontSize: 18, fontWeight: 'bold',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                              }}
+                            >
+                              {isChecked ? '✓' : ''}
+                            </button>
+                            <div>
+                              <strong>{item.itemName}</strong>
+                              {item.partNumber && <span style={{ color: '#666', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
+                              {hasShortage && (
+                                <div style={{ fontSize: 11, color: '#f57c00', marginTop: 2 }}>
+                                  ⚠️ Shortage: Ordered {orderedQty}, Picked {pickedQty}
+                                </div>
+                              )}
+                            </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <span style={{ fontWeight: 'bold', color: isValid ? '#4CAF50' : '#ff9800' }}>
@@ -1508,18 +1536,38 @@ export default function PickLists() {
                 const distributedQty = getDistributionTotal(idx);
                 const isValid = distributedQty === pickedQty;
                 const hasShortage = pickedQty < orderedQty;
+                const isChecked = packedItems[idx] || false;
                 
                 return (
-                  <div key={idx} style={{ marginBottom: 20, padding: 15, background: isValid ? '#f5f5f5' : '#fff3e0', borderRadius: 8, border: isValid ? '1px solid #ddd' : '2px solid #ff9800' }}>
+                  <div key={idx} style={{ 
+                    marginBottom: 20, padding: 15, 
+                    background: isChecked ? '#e8f5e9' : (isValid ? '#f5f5f5' : '#fff3e0'), 
+                    borderRadius: 8, 
+                    border: isChecked ? '2px solid #4CAF50' : (isValid ? '1px solid #ddd' : '2px solid #ff9800')
+                  }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                      <div>
-                        <strong>{item.itemName}</strong>
-                        {item.partNumber && <span style={{ color: '#666', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
-                        {hasShortage && (
-                          <div style={{ fontSize: 11, color: '#f57c00', marginTop: 2 }}>
-                            ⚠️ Shortage: Ordered {orderedQty}, Picked {pickedQty}
-                          </div>
-                        )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <button
+                          onClick={() => setPackedItems(prev => ({ ...prev, [idx]: !prev[idx] }))}
+                          style={{
+                            width: 32, height: 32, borderRadius: 4, border: '2px solid #4CAF50',
+                            background: isChecked ? '#4CAF50' : 'white',
+                            color: isChecked ? 'white' : '#4CAF50',
+                            cursor: 'pointer', fontSize: 18, fontWeight: 'bold',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                          }}
+                        >
+                          {isChecked ? '✓' : ''}
+                        </button>
+                        <div>
+                          <strong>{item.itemName}</strong>
+                          {item.partNumber && <span style={{ color: '#666', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
+                          {hasShortage && (
+                            <div style={{ fontSize: 11, color: '#f57c00', marginTop: 2 }}>
+                              ⚠️ Shortage: Ordered {orderedQty}, Picked {pickedQty}
+                            </div>
+                          )}
+                        </div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <span style={{ fontWeight: 'bold', color: isValid ? '#4CAF50' : '#ff9800' }}>
@@ -1536,9 +1584,10 @@ export default function PickLists() {
                         <input
                           type="number"
                           min="1"
+                          max="99"
                           value={dist.box}
                           onChange={e => updateBoxDistribution(idx, distIdx, 'box', e.target.value)}
-                          style={{ width: 60, padding: 6, textAlign: 'center', fontWeight: 'bold' }}
+                          style={{ width: 60, padding: 6, textAlign: 'center', fontWeight: 'bold', border: '1px solid #ccc', borderRadius: 4 }}
                         />
                         <span style={{ width: 40 }}>Qty:</span>
                         <input
@@ -1547,7 +1596,7 @@ export default function PickLists() {
                           max={pickedQty}
                           value={dist.qty}
                           onChange={e => updateBoxDistribution(idx, distIdx, 'qty', e.target.value)}
-                          style={{ width: 70, padding: 6, textAlign: 'center' }}
+                          style={{ width: 70, padding: 6, textAlign: 'center', border: '1px solid #ccc', borderRadius: 4 }}
                         />
                         {(boxAssignments[idx] || []).length > 1 && (
                           <button

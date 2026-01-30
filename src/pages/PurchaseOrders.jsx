@@ -1143,13 +1143,13 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
                         <input type="number" value={newPO.tax} onChange={e => updateTaxShipping('tax', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" /></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>Shipping:</span>
                         <input type="number" value={newPO.shipping} onChange={e => updateTaxShipping('shipping', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" /></div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>CC Fee 4%:</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>CC Fee 3.5%:</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <button 
                             type="button"
                             onClick={() => {
                               const subtotal = newPO.subtotal || 0;
-                              const fee = (subtotal * 0.04).toFixed(2);
+                              const fee = (subtotal * 0.035).toFixed(2);
                               updateTaxShipping('ccFee', fee);
                             }}
                             style={{ padding: '3px 6px', fontSize: 10, background: '#e3f2fd', border: '1px solid #1976d2', borderRadius: 3, cursor: 'pointer', color: '#1976d2' }}

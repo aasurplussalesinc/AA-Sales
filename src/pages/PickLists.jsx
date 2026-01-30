@@ -309,8 +309,20 @@ export default function PickLists() {
     switch(status) {
       case 'completed': return '#4CAF50';
       case 'in_progress': return '#ff9800';
+      case 'packed': return '#9c27b0';
+      case 'shipped': return '#2196F3';
       default: return '#2196F3';
     }
+  };
+  
+  const getDisplayStatus = (list) => {
+    const linkedOrder = getLinkedOrder(list);
+    // If picked list is completed, check the linked order for packing/shipping status
+    if (list.status === 'completed' && linkedOrder) {
+      if (linkedOrder.status === 'shipped') return 'shipped';
+      if (linkedOrder.status === 'packed' || linkedOrder.packingComplete) return 'packed';
+    }
+    return list.status || 'pending';
   };
 
   const deletePickList = async (list) => {
@@ -1229,16 +1241,18 @@ export default function PickLists() {
                 );
               }
               
-              return filtered.map(list => (
+              return filtered.map(list => {
+              const displayStatus = getDisplayStatus(list);
+              return (
               <tr key={list.id}>
                 <td><strong>{list.name}</strong></td>
                 <td>{list.items?.length || 0} items</td>
                 <td>
                   <span style={{
                     padding: '4px 8px', borderRadius: 4, fontSize: 12,
-                    background: getStatusColor(list.status), color: 'white'
+                    background: getStatusColor(displayStatus), color: 'white'
                   }}>
-                    {list.status}
+                    {displayStatus}
                   </span>
                 </td>
                 <td style={{ fontSize: 13 }}>{formatDate(list.createdAt)}</td>
@@ -1276,7 +1290,8 @@ export default function PickLists() {
                   </div>
                 </td>
               </tr>
-              ));
+              );
+              });
             })()}
           </tbody>
         </table>

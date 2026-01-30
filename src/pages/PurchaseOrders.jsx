@@ -1149,7 +1149,8 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
                             type="button"
                             onClick={() => {
                               const subtotal = newPO.subtotal || 0;
-                              const fee = (subtotal * 0.035).toFixed(2);
+                              const shipping = newPO.shipping || 0;
+                              const fee = ((subtotal + shipping) * 0.035).toFixed(2);
                               updateTaxShipping('ccFee', fee);
                             }}
                             style={{ padding: '3px 6px', fontSize: 10, background: '#e3f2fd', border: '1px solid #1976d2', borderRadius: 3, cursor: 'pointer', color: '#1976d2' }}

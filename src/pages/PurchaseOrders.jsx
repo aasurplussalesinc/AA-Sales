@@ -808,7 +808,8 @@ export default function PurchaseOrders() {
     const subtotal = items.reduce((sum, i) => sum + i.displayTotal, 0);
     const tax = parseFloat(order.tax) || 0;
     const shipping = parseFloat(order.shipping) || 0;
-    const total = subtotal + tax + shipping;
+    const ccFee = parseFloat(order.ccFee) || 0;
+    const total = subtotal + tax + shipping + ccFee;
     const formatFullDate = (ts) => { const d = new Date(ts); const m = ['January','February','March','April','May','June','July','August','September','October','November','December']; return m[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear(); };
     const printContent = `<!DOCTYPE html><html><head><title>${isEstimate ? 'Estimate' : 'Invoice'} - ${order.poNumber}</title>
       <style>

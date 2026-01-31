@@ -598,27 +598,84 @@ export default function PurchaseOrders() {
   };
 
   const printClientPackingList = (order) => {
-    // Build boxes from distributions - items can appear in multiple boxes with different quantities
-    const boxes = {};
-    (order.items || []).forEach((item, idx) => {
-      const distributions = item.boxDistributions || order.boxDistributions?.[idx] || [{ box: item.boxNumber || 1, qty: parseInt(item.qtyShipped) || parseInt(item.quantity) || 0 }];
-      distributions.forEach(dist => {
-        if (dist.qty > 0) {
-          if (!boxes[dist.box]) boxes[dist.box] = [];
-          boxes[dist.box].push({ ...item, qtyInBox: dist.qty });
-        }
-      });
-    });
+    // Check if using triwalls or boxes
+    const isTriwallMode = order.packingMode === 'triwalls' && order.triwalls && order.triwalls.length > 0;
     
-    const boxDets = order.boxDetails || {};
-    const formatBoxDims = (boxNum) => {
-      const d = boxDets[boxNum];
-      if (!d) return '';
-      const dims = (d.length && d.width && d.height) ? `${d.length}"×${d.width}"×${d.height}"` : '';
-      const wt = d.weight ? `${d.weight} lbs` : '';
-      if (dims && wt) return `${wt} | ${dims}`;
-      return dims || wt;
-    };
+    let containersHtml = '';
+    let containerCount = 0;
+    
+    if (isTriwallMode) {
+      // Build triwalls from triwall assignments
+      const triwallContents = {};
+      const triwallList = order.triwalls || [];
+      
+      // Initialize triwall contents
+      triwallList.forEach(tw => {
+        triwallContents[tw.id] = [];
+      });
+      
+      // Distribute items to triwalls
+      (order.items || []).forEach((item, idx) => {
+        const assignments = order.triwallAssignments?.[idx] || item.triwallAssignments || [];
+        assignments.forEach(assign => {
+          if (assign.qty > 0 && triwallContents[assign.triwall]) {
+            triwallContents[assign.triwall].push({ ...item, qtyInContainer: assign.qty });
+          }
+        });
+      });
+      
+      containerCount = triwallList.length;
+      
+      // Generate HTML for each triwall
+      containersHtml = triwallList.map((triwall, idx) => {
+        const items = triwallContents[triwall.id] || [];
+        const dims = (triwall.length && triwall.width && triwall.height) ? `${triwall.length}"×${triwall.width}"×${triwall.height}"` : '';
+        const wt = triwall.weight ? `${triwall.weight} lbs` : '';
+        const dimsDisplay = dims && wt ? `${wt} | ${dims}` : (dims || wt);
+        
+        return `
+          <div class="box-section">
+            <div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div>
+            <table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead>
+            <tbody>${items.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table>
+          </div>`;
+      }).join('');
+      
+    } else {
+      // Build boxes from distributions - items can appear in multiple boxes with different quantities
+      const boxes = {};
+      (order.items || []).forEach((item, idx) => {
+        const distributions = item.boxDistributions || order.boxDistributions?.[idx] || [{ box: item.boxNumber || 1, qty: parseInt(item.qtyShipped) || parseInt(item.quantity) || 0 }];
+        distributions.forEach(dist => {
+          if (dist.qty > 0) {
+            if (!boxes[dist.box]) boxes[dist.box] = [];
+            boxes[dist.box].push({ ...item, qtyInContainer: dist.qty });
+          }
+        });
+      });
+      
+      const boxDets = order.boxDetails || {};
+      const formatBoxDims = (boxNum) => {
+        const d = boxDets[boxNum];
+        if (!d) return '';
+        const dims = (d.length && d.width && d.height) ? `${d.length}"×${d.width}"×${d.height}"` : '';
+        const wt = d.weight ? `${d.weight} lbs` : '';
+        if (dims && wt) return `${wt} | ${dims}`;
+        return dims || wt;
+      };
+      
+      containerCount = Object.keys(boxes).length;
+      
+      // Generate HTML for each box
+      containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => `
+        <div class="box-section">
+          <div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div>
+          <table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead>
+          <tbody>${boxItems.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table>
+        </div>`).join('');
+    }
+    
+    const containerLabel = isTriwallMode ? 'Triwalls' : 'Boxes';
     
     const printContent = `<!DOCTYPE html><html><head><title>Packing List - ${order.poNumber}</title>
       <style>
@@ -647,14 +704,9 @@ export default function PurchaseOrders() {
       </div>
       <div class="info-row">
         <div class="info-box"><h3>Ship To</h3><strong>${order.customerName}</strong><br>${order.customerAddress || ''}</div>
-        <div class="info-box"><h3>Order Details</h3>Date: ${formatDate(order.createdAt)}<br>Items: ${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} | Boxes: ${Object.keys(boxes).length}</div>
+        <div class="info-box"><h3>Order Details</h3>Date: ${formatDate(order.createdAt)}<br>Items: ${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} | ${containerLabel}: ${containerCount}</div>
       </div>
-      ${Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => `
-        <div class="box-section">
-          <div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div>
-          <table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead>
-          <tbody>${boxItems.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInBox}</td></tr>`).join('')}</tbody></table>
-        </div>`).join('')}
+      ${containersHtml}
       ${order.notes ? '<div style="margin-top:10px;padding:8px;background:#fff9e6;border-radius:4px;font-size:10px"><strong>Notes:</strong> ' + order.notes + '</div>' : ''}
       <div class="footer">Thank you for your business!</div></body></html>`;
     const printWindow = window.open('', '_blank');
@@ -662,29 +714,10 @@ export default function PurchaseOrders() {
   };
 
   const printInternalPackingList = (order) => {
-    // Build boxes from distributions - items can appear in multiple boxes with different quantities
-    const boxes = {};
-    (order.items || []).forEach((item, idx) => {
-      const distributions = item.boxDistributions || order.boxDistributions?.[idx] || [{ box: item.boxNumber || 1, qty: parseInt(item.qtyShipped) || parseInt(item.quantity) || 0 }];
-      distributions.forEach(dist => {
-        if (dist.qty > 0) {
-          if (!boxes[dist.box]) boxes[dist.box] = [];
-          boxes[dist.box].push({ ...item, qtyInBox: dist.qty });
-        }
-      });
-    });
+    // Check if using triwalls or boxes
+    const isTriwallMode = order.packingMode === 'triwalls' && order.triwalls && order.triwalls.length > 0;
     
-    const boxDets = order.boxDetails || {};
-    const formatBoxDims = (boxNum) => {
-      const d = boxDets[boxNum];
-      if (!d) return '';
-      const dims = (d.length && d.width && d.height) ? `${d.length}"×${d.width}"×${d.height}"` : '';
-      const wt = d.weight ? `${d.weight} lbs` : '';
-      if (dims && wt) return `${wt} | ${dims}`;
-      return dims || wt;
-    };
-    
-    // Calculate totals based on full item quantities (not per-box)
+    // Calculate totals based on full item quantities (not per-container)
     let totalRevenue = 0, totalKnownCost = 0, unknownCostCount = 0;
     (order.items || []).forEach(item => {
       const qtyShipped = parseInt(item.qtyShipped) || 0;
@@ -706,6 +739,134 @@ export default function PurchaseOrders() {
       }
       return null;
     };
+    
+    let containersHtml = '';
+    let containerCount = 0;
+    let containerLabel = 'boxes';
+    
+    if (isTriwallMode) {
+      // Build triwalls from triwall assignments
+      const triwallContents = {};
+      const triwallList = order.triwalls || [];
+      
+      triwallList.forEach(tw => {
+        triwallContents[tw.id] = [];
+      });
+      
+      (order.items || []).forEach((item, idx) => {
+        const assignments = order.triwallAssignments?.[idx] || item.triwallAssignments || [];
+        assignments.forEach(assign => {
+          if (assign.qty > 0 && triwallContents[assign.triwall]) {
+            triwallContents[assign.triwall].push({ ...item, qtyInContainer: assign.qty });
+          }
+        });
+      });
+      
+      containerCount = triwallList.length;
+      containerLabel = 'triwalls';
+      
+      containersHtml = triwallList.map((triwall, idx) => {
+        const containerItems = triwallContents[triwall.id] || [];
+        const dims = (triwall.length && triwall.width && triwall.height) ? `${triwall.length}"×${triwall.width}"×${triwall.height}"` : '';
+        const wt = triwall.weight ? `${triwall.weight} lbs` : '';
+        const dimsDisplay = dims && wt ? `${wt} | ${dims}` : (dims || wt);
+        
+        return `<div class="box-section">
+          <div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div>
+          <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th></tr></thead>
+          <tbody>${containerItems.map(item => {
+            const qty = item.qtyInContainer;
+            const price = parseFloat(item.unitPrice) || 0;
+            const revenue = qty * price;
+            const cost = calculatePartialCost(item, qty);
+            const margin = cost !== null ? revenue - cost : null;
+            const weight = parseFloat(item.weightPerItem) || 0;
+            const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
+            const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
+            return `<tr>
+              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}</td>
+              <td><span class="src src-${srcClass}">${srcLabel}</span></td>
+              <td style="text-align:center;font-weight:bold">${qty}</td>
+              <td style="text-align:right">${weight ? weight.toFixed(1) : '—'}</td>
+              <td style="text-align:right" class="cost">${cost !== null ? '$' + cost.toFixed(2) : '—'}</td>
+              <td style="text-align:right">$${price.toFixed(2)}</td>
+              <td style="text-align:right">$${revenue.toFixed(2)}</td>
+              <td style="text-align:right" class="profit">${margin !== null ? '$' + margin.toFixed(2) : '—'}</td>
+            </tr>`;
+          }).join('')}
+          <tr style="background:#f3e5f5;font-weight:bold;border-top:2px solid #9c27b0">
+            <td colspan="2">Triwall ${idx + 1} Total</td>
+            <td style="text-align:center">${containerItems.reduce((sum, i) => sum + i.qtyInContainer, 0)}</td>
+            <td style="text-align:right">${containerItems.reduce((sum, i) => sum + (i.qtyInContainer * (parseFloat(i.weightPerItem) || 0)), 0).toFixed(1)} lbs</td>
+            <td style="text-align:right" class="cost">$${containerItems.reduce((sum, i) => { const c = calculatePartialCost(i, i.qtyInContainer); return sum + (c || 0); }, 0).toFixed(2)}</td>
+            <td style="text-align:right">—</td>
+            <td style="text-align:right">$${containerItems.reduce((sum, i) => sum + (i.qtyInContainer * (parseFloat(i.unitPrice) || 0)), 0).toFixed(2)}</td>
+            <td style="text-align:right" class="profit">$${containerItems.reduce((sum, i) => { const rev = i.qtyInContainer * (parseFloat(i.unitPrice) || 0); const cost = calculatePartialCost(i, i.qtyInContainer); return sum + (cost !== null ? rev - cost : 0); }, 0).toFixed(2)}</td>
+          </tr>
+          </tbody></table></div>`;
+      }).join('');
+      
+    } else {
+      // Build boxes from distributions
+      const boxes = {};
+      (order.items || []).forEach((item, idx) => {
+        const distributions = item.boxDistributions || order.boxDistributions?.[idx] || [{ box: item.boxNumber || 1, qty: parseInt(item.qtyShipped) || parseInt(item.quantity) || 0 }];
+        distributions.forEach(dist => {
+          if (dist.qty > 0) {
+            if (!boxes[dist.box]) boxes[dist.box] = [];
+            boxes[dist.box].push({ ...item, qtyInContainer: dist.qty });
+          }
+        });
+      });
+      
+      const boxDets = order.boxDetails || {};
+      const formatBoxDims = (boxNum) => {
+        const d = boxDets[boxNum];
+        if (!d) return '';
+        const dims = (d.length && d.width && d.height) ? `${d.length}"×${d.width}"×${d.height}"` : '';
+        const wt = d.weight ? `${d.weight} lbs` : '';
+        if (dims && wt) return `${wt} | ${dims}`;
+        return dims || wt;
+      };
+      
+      containerCount = Object.keys(boxes).length;
+      
+      containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => {
+        return `<div class="box-section">
+          <div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div>
+          <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th></tr></thead>
+          <tbody>${boxItems.map(item => {
+            const qty = item.qtyInContainer;
+            const price = parseFloat(item.unitPrice) || 0;
+            const revenue = qty * price;
+            const cost = calculatePartialCost(item, qty);
+            const margin = cost !== null ? revenue - cost : null;
+            const weight = parseFloat(item.weightPerItem) || 0;
+            const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
+            const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
+            return `<tr>
+              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}</td>
+              <td><span class="src src-${srcClass}">${srcLabel}</span></td>
+              <td style="text-align:center;font-weight:bold">${qty}</td>
+              <td style="text-align:right">${weight ? weight.toFixed(1) : '—'}</td>
+              <td style="text-align:right" class="cost">${cost !== null ? '$' + cost.toFixed(2) : '—'}</td>
+              <td style="text-align:right">$${price.toFixed(2)}</td>
+              <td style="text-align:right">$${revenue.toFixed(2)}</td>
+              <td style="text-align:right" class="profit">${margin !== null ? '$' + margin.toFixed(2) : '—'}</td>
+            </tr>`;
+          }).join('')}
+          <tr style="background:#f5f5f5;font-weight:bold;border-top:2px solid #333">
+            <td colspan="2">Box ${boxNum} Total</td>
+            <td style="text-align:center">${boxItems.reduce((sum, i) => sum + i.qtyInContainer, 0)}</td>
+            <td style="text-align:right">${boxItems.reduce((sum, i) => sum + (i.qtyInContainer * (parseFloat(i.weightPerItem) || 0)), 0).toFixed(1)} lbs</td>
+            <td style="text-align:right" class="cost">$${boxItems.reduce((sum, i) => { const c = calculatePartialCost(i, i.qtyInContainer); return sum + (c || 0); }, 0).toFixed(2)}</td>
+            <td style="text-align:right">—</td>
+            <td style="text-align:right">$${boxItems.reduce((sum, i) => sum + (i.qtyInContainer * (parseFloat(i.unitPrice) || 0)), 0).toFixed(2)}</td>
+            <td style="text-align:right" class="profit">$${boxItems.reduce((sum, i) => { const rev = i.qtyInContainer * (parseFloat(i.unitPrice) || 0); const cost = calculatePartialCost(i, i.qtyInContainer); return sum + (cost !== null ? rev - cost : 0); }, 0).toFixed(2)}</td>
+          </tr>
+          </tbody></table></div>`;
+      }).join('');
+    }
     
     const printContent = `<!DOCTYPE html><html><head><title>INTERNAL - ${order.poNumber}</title>
       <style>
@@ -743,43 +904,9 @@ export default function PurchaseOrders() {
       <div class="info-row">
         <div class="info-box"><h3>Order</h3><div class="value">${order.poNumber}</div>${formatDate(order.createdAt)}</div>
         <div class="info-box"><h3>Customer</h3><div class="value">${order.customerName}</div></div>
-        <div class="info-box"><h3>Totals</h3><div class="value">${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} items / ${Object.keys(boxes).length} boxes</div></div>
+        <div class="info-box"><h3>Totals</h3><div class="value">${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} items / ${containerCount} ${containerLabel}</div></div>
       </div>
-      ${Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => {
-        return `<div class="box-section">
-          <div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div>
-          <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th></tr></thead>
-          <tbody>${boxItems.map(item => {
-            const qtyInBox = item.qtyInBox;
-            const price = parseFloat(item.unitPrice) || 0;
-            const revenue = qtyInBox * price;
-            const cost = calculatePartialCost(item, qtyInBox);
-            const margin = cost !== null ? revenue - cost : null;
-            const weight = parseFloat(item.weightPerItem) || 0;
-            const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
-            const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
-            return `<tr>
-              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}</td>
-              <td><span class="src src-${srcClass}">${srcLabel}</span></td>
-              <td style="text-align:center;font-weight:bold">${qtyInBox}</td>
-              <td style="text-align:right">${weight ? weight.toFixed(1) : '—'}</td>
-              <td style="text-align:right" class="cost">${cost !== null ? '$' + cost.toFixed(2) : '—'}</td>
-              <td style="text-align:right">$${price.toFixed(2)}</td>
-              <td style="text-align:right">$${revenue.toFixed(2)}</td>
-              <td style="text-align:right" class="profit">${margin !== null ? '$' + margin.toFixed(2) : '—'}</td>
-            </tr>`;
-          }).join('')}
-          <tr style="background:#f5f5f5;font-weight:bold;border-top:2px solid #333">
-            <td colspan="2">Box ${boxNum} Total</td>
-            <td style="text-align:center">${boxItems.reduce((sum, i) => sum + i.qtyInBox, 0)}</td>
-            <td style="text-align:right">${boxItems.reduce((sum, i) => sum + (i.qtyInBox * (parseFloat(i.weightPerItem) || 0)), 0).toFixed(1)} lbs</td>
-            <td style="text-align:right" class="cost">$${boxItems.reduce((sum, i) => { const c = calculatePartialCost(i, i.qtyInBox); return sum + (c || 0); }, 0).toFixed(2)}</td>
-            <td style="text-align:right">—</td>
-            <td style="text-align:right">$${boxItems.reduce((sum, i) => sum + (i.qtyInBox * (parseFloat(i.unitPrice) || 0)), 0).toFixed(2)}</td>
-            <td style="text-align:right" class="profit">$${boxItems.reduce((sum, i) => { const rev = i.qtyInBox * (parseFloat(i.unitPrice) || 0); const cost = calculatePartialCost(i, i.qtyInBox); return sum + (cost !== null ? rev - cost : 0); }, 0).toFixed(2)}</td>
-          </tr>
-          </tbody></table></div>`;
-      }).join('')}
+      ${containersHtml}
       <div class="summary">
         <div class="summary-box costs"><h3 style="margin:0 0 8px 0;color:#c62828;font-size:10px">Cost Summary</h3>
           <div class="summary-row"><span>Known cost items:</span><span>${(order.items || []).length - unknownCostCount}/${(order.items || []).length}</span></div>

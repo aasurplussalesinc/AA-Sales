@@ -633,12 +633,7 @@ export default function PurchaseOrders() {
         const wt = triwall.weight ? `${triwall.weight} lbs` : '';
         const dimsDisplay = dims && wt ? `${wt} | ${dims}` : (dims || wt);
         
-        return `
-          <div class="box-section">
-            <div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div>
-            <table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead>
-            <tbody>${items.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table>
-          </div>`;
+        return `<div class="box-section"><div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${items.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table></div>`;
       }).join('');
       
     } else {
@@ -667,18 +662,14 @@ export default function PurchaseOrders() {
       containerCount = Object.keys(boxes).length;
       
       // Generate HTML for each box
-      containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => `
-        <div class="box-section">
-          <div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div>
-          <table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead>
-          <tbody>${boxItems.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table>
-        </div>`).join('');
+      containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => `<div class="box-section"><div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${boxItems.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table></div>`).join('');
     }
     
     const containerLabel = isTriwallMode ? 'Triwalls' : 'Boxes';
     
     const printContent = `<!DOCTYPE html><html><head><title>Packing List - ${order.poNumber}</title>
       <style>
+        *{margin:0;padding:0;box-sizing:border-box}
         body{font-family:Arial,sans-serif;padding:15px;max-width:800px;margin:0 auto;font-size:11px}
         .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:2px solid #333;padding-bottom:10px}
         .logo{max-width:120px;max-height:60px}
@@ -686,7 +677,7 @@ export default function PurchaseOrders() {
         .info-row{display:flex;justify-content:space-between;margin-bottom:12px;gap:15px}
         .info-box{background:#f5f5f5;padding:8px 10px;border-radius:4px;flex:1}
         .info-box h3{margin:0 0 4px 0;font-size:9px;color:#666;text-transform:uppercase}
-        .box-section{margin-bottom:10px;border:1px solid #333;border-radius:4px;overflow:hidden;page-break-inside:avoid}
+        .box-section{margin-bottom:10px;border:1px solid #333;border-radius:4px;overflow:hidden}
         .box-header{background:#333;color:white;padding:5px 10px;font-weight:bold;font-size:11px;display:flex;justify-content:space-between}
         .box-dims{font-weight:normal;font-size:10px;color:#ccc}
         table{width:100%;border-collapse:collapse}
@@ -696,7 +687,7 @@ export default function PurchaseOrders() {
         .item-sku{color:#666;font-size:9px}
         .qty{text-align:center;font-weight:bold;font-size:12px}
         .footer{margin-top:15px;padding-top:10px;border-top:1px solid #ddd;font-size:10px;color:#666;text-align:center}
-        @media print{body{padding:10px}@page{margin:0.5in}}
+        @media print{body{padding:10px}@page{margin:0.4in}}
       </style></head><body>
       <div class="header">
         <div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : ''}<h1>PACKING LIST</h1><div style="color:#666;font-size:12px">${order.poNumber}</div></div>

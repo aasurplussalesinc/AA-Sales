@@ -1092,15 +1092,110 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
 
   const printAllShippingLabels = (order) => {
     const triwalls = order.triwalls || [];
+    const totalTriwalls = triwalls.length || 1;
+    
+    // If no triwalls, print a single label
     if (triwalls.length === 0) {
-      // Print single label if no triwall data
       printShippingLabel(order, 0);
       return;
     }
-    // Print each triwall label
-    triwalls.forEach((_, idx) => {
-      setTimeout(() => printShippingLabel(order, idx), idx * 500);
-    });
+    
+    // Build all labels in one document
+    const labelsHtml = triwalls.map((triwall, idx) => {
+      const labelNumber = idx + 1;
+      const displayWeight = triwall.weight || '';
+      
+      return `<div class="label-container">
+  <div class="from-section">
+    <div class="label">FROM:</div>
+    <div class="address">
+      AA SURPLUS SALES INC<br>
+      2153 POND RD<br>
+      RONKONKOMA, NY 11779<br>
+      USA
+    </div>
+  </div>
+  
+  <div class="to-section">
+    <div class="company">${(order.customerName || '').toUpperCase()}</div>
+    ${order.customerContact ? `<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : ''}
+    <div class="address">
+      ${(order.customerAddress || '').toUpperCase().replace(/, /g, '<br>')}
+    </div>
+  </div>
+  
+  <div class="footer">
+    <div>
+      <div class="po-number">PO: ${order.poNumber}</div>
+      ${triwall.length && triwall.width && triwall.height ? 
+        `<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}"${displayWeight ? ' | ' + displayWeight + ' lbs' : ''}</div>` : 
+        (displayWeight ? `<div class="dimensions">Weight: ${displayWeight} lbs</div>` : '')}
+    </div>
+    <div class="box-count">${labelNumber} OF ${totalTriwalls}</div>
+  </div>
+</div>`;
+    }).join('\n');
+    
+    const printContent = `<!DOCTYPE html>
+<html><head><title>Shipping Labels - ${order.poNumber}</title>
+<style>
+  @page { size: landscape; margin: 0.5in; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { 
+    font-family: Arial, sans-serif; 
+  }
+  .label-container {
+    border: 3px solid #000;
+    padding: 30px;
+    width: 10in;
+    height: 7.5in;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    page-break-after: always;
+    margin: 0 auto;
+  }
+  .label-container:last-child {
+    page-break-after: auto;
+  }
+  .from-section {
+    margin-bottom: 40px;
+  }
+  .from-section .label { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
+  .from-section .address { font-size: 18px; line-height: 1.4; }
+  .to-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .to-section .company { font-size: 32px; font-weight: bold; margin-bottom: 10px; }
+  .to-section .attention { font-size: 24px; margin-bottom: 10px; }
+  .to-section .address { font-size: 24px; line-height: 1.4; }
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 2px solid #000;
+  }
+  .box-count { font-size: 48px; font-weight: bold; }
+  .po-number { font-size: 20px; }
+  .dimensions { font-size: 16px; color: #666; }
+  @media print {
+    body { padding: 0; }
+    .label-container { margin: 0; }
+  }
+</style>
+</head><body>
+${labelsHtml}
+</body></html>`;
+
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    printWindow.print();
   };
 
   if (loading) return <div className="container" style={{ padding: 20 }}>Loading...</div>;

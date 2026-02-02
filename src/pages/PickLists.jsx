@@ -1254,17 +1254,23 @@ export default function PickLists() {
               
               // Sort
               filtered.sort((a, b) => {
+                const getTime = (ts) => {
+                  if (!ts) return 0;
+                  if (ts.toDate) return ts.toDate().getTime();
+                  if (ts.seconds) return ts.seconds * 1000;
+                  return new Date(ts).getTime() || 0;
+                };
                 switch (sortBy) {
                   case 'date-asc':
-                    return (a.createdAt || 0) - (b.createdAt || 0);
+                    return getTime(a.createdAt) - getTime(b.createdAt);
                   case 'date-desc':
-                    return (b.createdAt || 0) - (a.createdAt || 0);
+                    return getTime(b.createdAt) - getTime(a.createdAt);
                   case 'name-asc':
-                    return (a.name || '').localeCompare(b.name || '');
+                    return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase());
                   case 'name-desc':
-                    return (b.name || '').localeCompare(a.name || '');
+                    return (b.name || '').toLowerCase().localeCompare((a.name || '').toLowerCase());
                   default:
-                    return (b.createdAt || 0) - (a.createdAt || 0);
+                    return getTime(b.createdAt) - getTime(a.createdAt);
                 }
               });
               

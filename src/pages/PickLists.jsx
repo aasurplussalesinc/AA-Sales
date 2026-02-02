@@ -15,6 +15,7 @@ export default function PickLists() {
   // Filter state
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
+  const [filterAssignee, setFilterAssignee] = useState('');
   const [sortBy, setSortBy] = useState('date-desc');
   
   // Pack Order state
@@ -37,11 +38,15 @@ export default function PickLists() {
   const [newList, setNewList] = useState({
     name: '',
     notes: '',
+    assignedTo: '',
     items: []
   });
   const [searchItem, setSearchItem] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editingListId, setEditingListId] = useState(null);
+  
+  const assigneeOptions = ['Alan', 'Nancy', 'Gustavo'];
+  
   useEffect(() => {
     loadData();
   }, []);
@@ -141,6 +146,7 @@ export default function PickLists() {
     setNewList({
       name: list.name || '',
       notes: list.notes || '',
+      assignedTo: list.assignedTo || '',
       items: list.items || []
     });
     setEditingListId(list.id);
@@ -150,7 +156,7 @@ export default function PickLists() {
   };
 
   const resetPickListForm = () => {
-    setNewList({ name: '', notes: '', items: [] });
+    setNewList({ name: '', notes: '', assignedTo: '', items: [] });
     setShowCreate(false);
     setEditMode(false);
     setEditingListId(null);
@@ -871,10 +877,20 @@ export default function PickLists() {
           <option value="name-asc">Name A-Z</option>
           <option value="name-desc">Name Z-A</option>
         </select>
-        {(filterSearch || filterStatus) && (
+        <select
+          value={filterAssignee}
+          onChange={e => setFilterAssignee(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+        >
+          <option value="">All Assignees</option>
+          {assigneeOptions.map(name => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+        </select>
+        {(filterSearch || filterStatus || filterAssignee) && (
           <button
             className="btn btn-sm"
-            onClick={() => { setFilterSearch(''); setFilterStatus(''); }}
+            onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterAssignee(''); }}
             style={{ background: '#6c757d', color: 'white', padding: '8px 12px' }}
           >
             Clear Filters
@@ -919,6 +935,21 @@ export default function PickLists() {
                 onChange={e => setNewList({ ...newList, notes: e.target.value })}
                 style={{ width: '100%', minHeight: 60 }}
               />
+            </div>
+
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Assign To</label>
+              <select
+                className="form-input"
+                value={newList.assignedTo}
+                onChange={e => setNewList({ ...newList, assignedTo: e.target.value })}
+                style={{ width: '100%', padding: 10 }}
+              >
+                <option value="">-- Select --</option>
+                {assigneeOptions.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
             </div>
 
             <div style={{ marginBottom: 15 }}>
@@ -1197,10 +1228,10 @@ export default function PickLists() {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Assigned To</th>
               <th>Items</th>
               <th>Status</th>
               <th>Created</th>
-              <th>Created By</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -1217,6 +1248,7 @@ export default function PickLists() {
                   const displayStatus = getDisplayStatus(list);
                   if (displayStatus !== filterStatus) return false;
                 }
+                if (filterAssignee && list.assignedTo !== filterAssignee) return false;
                 return true;
               });
               
@@ -1239,7 +1271,7 @@ export default function PickLists() {
               if (filtered.length === 0) {
                 return (
                   <tr>
-                    <td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#999' }}>
+                    <td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#999' }}>
                       {pickLists.length === 0 ? 'No pick lists yet.' : 'No pick lists match your filters.'}
                     </td>
                   </tr>
@@ -1251,6 +1283,7 @@ export default function PickLists() {
               return (
               <tr key={list.id}>
                 <td><strong>{list.name}</strong></td>
+                <td style={{ fontSize: 13 }}>{list.assignedTo || <span style={{ color: '#999' }}>—</span>}</td>
                 <td>{list.items?.length || 0} items</td>
                 <td>
                   <span style={{
@@ -1261,7 +1294,6 @@ export default function PickLists() {
                   </span>
                 </td>
                 <td style={{ fontSize: 13 }}>{formatDate(list.createdAt)}</td>
-                <td style={{ fontSize: 13 }}>{list.createdBy}</td>
                 <td>
                   <div className="action-buttons">
                     <button 

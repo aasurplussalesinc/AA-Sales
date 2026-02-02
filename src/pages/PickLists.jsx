@@ -128,6 +128,7 @@ export default function PickLists() {
       await DB.updatePickList(editingListId, {
         name: newList.name,
         notes: newList.notes,
+        assignedTo: newList.assignedTo,
         items: newList.items
       });
     } else {
@@ -135,7 +136,7 @@ export default function PickLists() {
       await DB.createPickList(newList);
     }
     
-    setNewList({ name: '', notes: '', items: [] });
+    setNewList({ name: '', notes: '', assignedTo: '', items: [] });
     setShowCreate(false);
     setEditMode(false);
     setEditingListId(null);

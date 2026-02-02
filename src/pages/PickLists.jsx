@@ -857,7 +857,9 @@ export default function PickLists() {
           <option value="">All Statuses</option>
           <option value="pending">Pending</option>
           <option value="in_progress">In Progress</option>
-          <option value="completed">Completed</option>
+          <option value="completed">Completed (Picked)</option>
+          <option value="packed">Packed</option>
+          <option value="shipped">Shipped</option>
         </select>
         <select
           value={sortBy}
@@ -1211,7 +1213,10 @@ export default function PickLists() {
                   const matchName = list.name?.toLowerCase().includes(search);
                   if (!matchName) return false;
                 }
-                if (filterStatus && list.status !== filterStatus) return false;
+                if (filterStatus) {
+                  const displayStatus = getDisplayStatus(list);
+                  if (displayStatus !== filterStatus) return false;
+                }
                 return true;
               });
               

@@ -318,14 +318,16 @@ export default function PickLists() {
       case 'in_progress': return '#ff9800';
       case 'packed': return '#9c27b0';
       case 'shipped': return '#2196F3';
-      default: return '#2196F3';
+      case 'paid': return '#388e3c';
+      default: return '#607d8b';
     }
   };
   
   const getDisplayStatus = (list) => {
     const linkedOrder = getLinkedOrder(list);
-    // If picked list is completed, check the linked order for packing/shipping status
+    // If picked list is completed, check the linked order for packing/shipping/paid status
     if (list.status === 'completed' && linkedOrder) {
+      if (linkedOrder.status === 'paid') return 'paid';
       if (linkedOrder.status === 'shipped') return 'shipped';
       if (linkedOrder.status === 'packed' || linkedOrder.packingComplete) return 'packed';
     }
@@ -867,6 +869,7 @@ export default function PickLists() {
           <option value="completed">Completed (Picked)</option>
           <option value="packed">Packed</option>
           <option value="shipped">Shipped</option>
+          <option value="paid">Paid</option>
         </select>
         <select
           value={sortBy}

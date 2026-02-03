@@ -107,7 +107,6 @@ export default function PurchaseOrders() {
   };
 
   const addItemToPO = (item) => {
-    if (newPO.items.find(i => i.itemId === item.id)) return;
     const unitPrice = parseFloat(item.price) || 0;
     const newItem = {
       itemId: item.id, itemName: item.name, partNumber: item.partNumber, location: item.location || '',
@@ -120,10 +119,10 @@ export default function PurchaseOrders() {
     setSearchItem('');
   };
 
-  const updatePOItem = (itemId, field, value) => {
+  const updatePOItem = (index, field, value) => {
     setNewPO(prevPO => {
-      const updatedItems = prevPO.items.map(item => {
-        if (item.itemId === itemId) {
+      const updatedItems = prevPO.items.map((item, idx) => {
+        if (idx === index) {
           const updated = { ...item, [field]: value };
           if (field === 'source' && value === 'inventory') {
             updated.contractId = ''; updated.contractNumber = ''; updated.costPerLb = 0;
@@ -150,9 +149,9 @@ export default function PurchaseOrders() {
     });
   };
 
-  const removeItemFromPO = (itemId) => {
+  const removeItemFromPO = (index) => {
     setNewPO(prevPO => {
-      const updatedItems = prevPO.items.filter(i => i.itemId !== itemId);
+      const updatedItems = prevPO.items.filter((_, idx) => idx !== index);
       const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
       const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
       const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0; const ccFee = parseFloat(prevPO.ccFee) || 0;
@@ -1317,14 +1316,14 @@ ${labelsHtml}
                       </tr>
                     </thead>
                     <tbody>
-                      {newPO.items.map(item => (
-                        <tr key={item.itemId} style={{ borderBottom: '1px solid #eee' }}>
+                      {newPO.items.map((item, index) => (
+                        <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
                           <td style={{ padding: 8 }}>
                             <strong>{item.itemName}</strong>
                             <div style={{ fontSize: 11, color: '#666' }}>{item.partNumber}</div>
                           </td>
                           <td style={{ padding: 8 }}>
-                            <select value={item.source || 'inventory'} onChange={e => updatePOItem(item.itemId, 'source', e.target.value)}
+                            <select value={item.source || 'inventory'} onChange={e => updatePOItem(index, 'source', e.target.value)}
                               style={{ width: '100%', padding: 4, fontSize: 11 }}>
                               <option value="inventory">From Inventory</option>
                               <option value="inventory_contract">Inventory (Contract)</option>
@@ -1332,34 +1331,34 @@ ${labelsHtml}
                             </select>
                             {(item.source === 'inventory_contract' || item.source === 'direct_contract') && (
                               <>
-                                <select value={item.contractId || ''} onChange={e => updatePOItem(item.itemId, 'contractId', e.target.value)}
+                                <select value={item.contractId || ''} onChange={e => updatePOItem(index, 'contractId', e.target.value)}
                                   style={{ width: '100%', padding: 4, fontSize: 11, marginTop: 4 }}>
                                   <option value="">Select Contract...</option>
                                   {contracts.map(c => <option key={c.id} value={c.id}>{c.contractNumber} (${c.costPerLb?.toFixed(2)}/lb)</option>)}
                                 </select>
                                 <input type="number" step="0.1" placeholder="Wt/ea (lbs)" value={item.weightPerItem || ''}
-                                  onChange={e => updatePOItem(item.itemId, 'weightPerItem', e.target.value)}
+                                  onChange={e => updatePOItem(index, 'weightPerItem', e.target.value)}
                                   style={{ width: '100%', padding: 4, fontSize: 11, marginTop: 4 }} />
                               </>
                             )}
                           </td>
                           <td style={{ padding: 8 }}>
                             <input type="number" value={item.quantity === '' ? '' : item.quantity}
-                              onChange={e => updatePOItem(item.itemId, 'quantity', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                              onChange={e => updatePOItem(index, 'quantity', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
                               style={{ width: '100%', padding: 4, textAlign: 'center' }} min="0" />
                           </td>
                           <td style={{ padding: 8 }}>
                             <input type="number" value={item.qtyShipped === '' ? '' : item.qtyShipped}
-                              onChange={e => updatePOItem(item.itemId, 'qtyShipped', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
+                              onChange={e => updatePOItem(index, 'qtyShipped', e.target.value === '' ? '' : parseInt(e.target.value) || 0)}
                               style={{ width: '100%', padding: 4, textAlign: 'center' }} min="0" />
                           </td>
                           <td style={{ padding: 8 }}>
-                            <input type="number" value={item.unitPrice} onChange={e => updatePOItem(item.itemId, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            <input type="number" value={item.unitPrice} onChange={e => updatePOItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
                               style={{ width: '100%', padding: 4, textAlign: 'right' }} step="0.01" min="0" />
                           </td>
                           <td style={{ padding: 8, textAlign: 'right', fontWeight: 600, background: '#e8f5e9' }}>${(item.lineTotal || 0).toFixed(2)}</td>
                           <td style={{ padding: 8 }}>
-                            <button onClick={() => removeItemFromPO(item.itemId)}
+                            <button onClick={() => removeItemFromPO(index)}
                               style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}>✕</button>
                           </td>
                         </tr>

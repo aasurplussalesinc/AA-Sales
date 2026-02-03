@@ -770,13 +770,14 @@ export default function PurchaseOrders() {
         
         return `<div class="box-section">
           <div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div>
-          <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th></tr></thead>
+          <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th><th style="text-align:right">%</th></tr></thead>
           <tbody>${containerItems.map(item => {
             const qty = item.qtyInContainer;
             const price = parseFloat(item.unitPrice) || 0;
             const revenue = qty * price;
             const cost = calculatePartialCost(item, qty);
             const margin = cost !== null ? revenue - cost : null;
+            const marginPct = (margin !== null && revenue > 0) ? ((margin / revenue) * 100).toFixed(1) : null;
             const weight = parseFloat(item.weightPerItem) || 0;
             const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
             const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
@@ -789,6 +790,7 @@ export default function PurchaseOrders() {
               <td style="text-align:right">$${price.toFixed(2)}</td>
               <td style="text-align:right">$${revenue.toFixed(2)}</td>
               <td style="text-align:right" class="profit">${margin !== null ? '$' + margin.toFixed(2) : '—'}</td>
+              <td style="text-align:right" class="profit">${marginPct !== null ? marginPct + '%' : '—'}</td>
             </tr>`;
           }).join('')}
           <tr style="background:#f3e5f5;font-weight:bold;border-top:2px solid #9c27b0">
@@ -799,6 +801,7 @@ export default function PurchaseOrders() {
             <td style="text-align:right">—</td>
             <td style="text-align:right">$${containerItems.reduce((sum, i) => sum + (i.qtyInContainer * (parseFloat(i.unitPrice) || 0)), 0).toFixed(2)}</td>
             <td style="text-align:right" class="profit">$${containerItems.reduce((sum, i) => { const rev = i.qtyInContainer * (parseFloat(i.unitPrice) || 0); const cost = calculatePartialCost(i, i.qtyInContainer); return sum + (cost !== null ? rev - cost : 0); }, 0).toFixed(2)}</td>
+            <td style="text-align:right" class="profit">${(() => { const rev = containerItems.reduce((sum, i) => sum + (i.qtyInContainer * (parseFloat(i.unitPrice) || 0)), 0); const cost = containerItems.reduce((sum, i) => { const c = calculatePartialCost(i, i.qtyInContainer); return sum + (c || 0); }, 0); return rev > 0 ? (((rev - cost) / rev) * 100).toFixed(1) + '%' : '—'; })()}</td>
           </tr>
           </tbody></table></div>`;
       }).join('');
@@ -831,13 +834,14 @@ export default function PurchaseOrders() {
       containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => {
         return `<div class="box-section">
           <div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div>
-          <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th></tr></thead>
+          <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th><th style="text-align:right">%</th></tr></thead>
           <tbody>${boxItems.map(item => {
             const qty = item.qtyInContainer;
             const price = parseFloat(item.unitPrice) || 0;
             const revenue = qty * price;
             const cost = calculatePartialCost(item, qty);
             const margin = cost !== null ? revenue - cost : null;
+            const marginPct = (margin !== null && revenue > 0) ? ((margin / revenue) * 100).toFixed(1) : null;
             const weight = parseFloat(item.weightPerItem) || 0;
             const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
             const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
@@ -850,6 +854,7 @@ export default function PurchaseOrders() {
               <td style="text-align:right">$${price.toFixed(2)}</td>
               <td style="text-align:right">$${revenue.toFixed(2)}</td>
               <td style="text-align:right" class="profit">${margin !== null ? '$' + margin.toFixed(2) : '—'}</td>
+              <td style="text-align:right" class="profit">${marginPct !== null ? marginPct + '%' : '—'}</td>
             </tr>`;
           }).join('')}
           <tr style="background:#f5f5f5;font-weight:bold;border-top:2px solid #333">
@@ -860,6 +865,7 @@ export default function PurchaseOrders() {
             <td style="text-align:right">—</td>
             <td style="text-align:right">$${boxItems.reduce((sum, i) => sum + (i.qtyInContainer * (parseFloat(i.unitPrice) || 0)), 0).toFixed(2)}</td>
             <td style="text-align:right" class="profit">$${boxItems.reduce((sum, i) => { const rev = i.qtyInContainer * (parseFloat(i.unitPrice) || 0); const cost = calculatePartialCost(i, i.qtyInContainer); return sum + (cost !== null ? rev - cost : 0); }, 0).toFixed(2)}</td>
+            <td style="text-align:right" class="profit">${(() => { const rev = boxItems.reduce((sum, i) => sum + (i.qtyInContainer * (parseFloat(i.unitPrice) || 0)), 0); const cost = boxItems.reduce((sum, i) => { const c = calculatePartialCost(i, i.qtyInContainer); return sum + (c || 0); }, 0); return rev > 0 ? (((rev - cost) / rev) * 100).toFixed(1) + '%' : '—'; })()}</td>
           </tr>
           </tbody></table></div>`;
       }).join('');
@@ -912,7 +918,7 @@ export default function PurchaseOrders() {
         <div class="summary-box revenue"><h3 style="margin:0 0 8px 0;color:#2e7d32;font-size:10px">Profitability</h3>
           <div class="summary-row"><span>Revenue:</span><span>$${totalRevenue.toFixed(2)}</span></div>
           <div class="summary-row"><span>Cost:</span><span>-$${totalKnownCost.toFixed(2)}</span></div>
-          <div class="summary-row total" style="color:#2e7d32"><span>Margin:</span><span>$${knownMargin.toFixed(2)}</span></div>
+          <div class="summary-row total" style="color:#2e7d32"><span>Margin:</span><span>$${knownMargin.toFixed(2)} (${totalRevenue > 0 ? ((knownMargin / totalRevenue) * 100).toFixed(1) : 0}%)</span></div>
         </div>
       </div>
       ${order.notes ? '<div style="margin-top:10px;padding:6px;background:#f5f5f5;border-radius:4px;font-size:9px"><strong>Notes:</strong> ' + order.notes + '</div>' : ''}

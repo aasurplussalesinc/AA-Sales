@@ -1228,7 +1228,7 @@ ${labelsHtml}
 
       {/* Create/Edit Modal */}
       {showCreate && (
-        <div className="modal-overlay" onClick={() => { setShowCreate(false); setEditMode(false); resetForm(); }}>
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setEditMode(false); resetForm(); } }}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 900, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
               <h3 style={{ margin: 0 }}>{editMode ? 'Edit Purchase Order' : 'New Purchase Order'}</h3>
@@ -1439,7 +1439,7 @@ ${labelsHtml}
 
       {/* View Order Modal */}
       {selectedOrder && (
-        <div className="modal-overlay" onClick={closeOrderModal}>
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) closeOrderModal(); }}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
               <div><h3 style={{ margin: 0 }}>{selectedOrder.poNumber}</h3><p style={{ color: '#666', margin: '5px 0 0 0' }}>{selectedOrder.customerName}</p></div>
@@ -1539,7 +1539,7 @@ ${labelsHtml}
 
       {/* Pack Order Modal */}
       {showPackOrder && packingOrder && (
-        <div className="modal-overlay" onClick={() => setShowPackOrder(false)}>
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowPackOrder(false); }}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header"><h3 style={{ margin: 0 }}>📦 Pack Order - {packingOrder.poNumber}</h3><button className="modal-close" onClick={() => setShowPackOrder(false)}>×</button></div>
             <div className="modal-body" style={{ padding: 20 }}>
@@ -1961,7 +1961,7 @@ ${labelsHtml}
 
       {/* One-Off Item Modal */}
       {showOneOffModal && (
-        <div className="modal-overlay" onClick={() => setShowOneOffModal(false)} style={{ zIndex: 1100 }}>
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowOneOffModal(false); }} style={{ zIndex: 1100 }}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
             <div className="modal-header">
               <h3 style={{ margin: 0 }}>➕ Add One-Off Item</h3>

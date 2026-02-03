@@ -56,6 +56,7 @@ export default function Items() {
     category: '',
     stock: 0,
     price: 0,
+    weight: '',
     location: '',
     lowStockThreshold: 0,
     reorderPoint: 0,
@@ -448,6 +449,7 @@ export default function Items() {
       category: newItem.category,
       stock: totalStock,
       price: parseFloat(newItem.price) || 0,
+      weight: parseFloat(newItem.weight) || 0,
       location: useMultiLocation ? '' : newItem.location,
       lowStockThreshold: newItem.lowStockThreshold,
       reorderPoint: newItem.reorderPoint
@@ -493,6 +495,7 @@ export default function Items() {
         category: savedCategory,
         stock: 0,
         price: savedPrice,
+        weight: '',
         location: '',
         lowStockThreshold: 0,
         reorderPoint: 0,
@@ -511,6 +514,7 @@ export default function Items() {
         category: '',
         stock: 0,
         price: 0,
+        weight: '',
         location: '',
         lowStockThreshold: 0,
         reorderPoint: 0,
@@ -584,6 +588,7 @@ export default function Items() {
           category: editingItem.category,
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
+          weight: parseFloat(editingItem.weight) || 0,
           location: editingItem.location || '',
           lowStockThreshold: editingItem.lowStockThreshold ?? 0,
           reorderPoint: editingItem.reorderPoint ?? 0
@@ -595,6 +600,7 @@ export default function Items() {
           category: editingItem.category,
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
+          weight: parseFloat(editingItem.weight) || 0,
           location: editUseMultiLocation ? '' : (editingItem.location || ''),
           lowStockThreshold: editingItem.lowStockThreshold ?? 0,
           reorderPoint: editingItem.reorderPoint ?? 0
@@ -2171,16 +2177,30 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </datalist>
               </div>
               
-              <div className="form-group">
-                <label>Price</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={newItem.price}
-                  onChange={e => setNewItem({ ...newItem, price: e.target.value })}
-                  min="0"
-                  step="0.01"
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                <div className="form-group">
+                  <label>Price</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newItem.price}
+                    onChange={e => setNewItem({ ...newItem, price: e.target.value })}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Weight (lbs)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newItem.weight}
+                    onChange={e => setNewItem({ ...newItem, weight: e.target.value })}
+                    min="0"
+                    step="0.01"
+                    placeholder="Optional"
+                  />
+                </div>
               </div>
 
               {/* Location Mode Toggle */}
@@ -2414,16 +2434,30 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </datalist>
               </div>
               
-              <div className="form-group">
-                <label>Price</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={editingItem.price || 0}
-                  onChange={e => setEditingItem({ ...editingItem, price: e.target.value })}
-                  min="0"
-                  step="0.01"
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+                <div className="form-group">
+                  <label>Price</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editingItem.price || 0}
+                    onChange={e => setEditingItem({ ...editingItem, price: e.target.value })}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Weight (lbs)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editingItem.weight || ''}
+                    onChange={e => setEditingItem({ ...editingItem, weight: e.target.value })}
+                    min="0"
+                    step="0.01"
+                    placeholder="Optional"
+                  />
+                </div>
               </div>
 
               {/* Location Mode Toggle */}

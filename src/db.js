@@ -883,5 +883,73 @@ export const DB = {
       .reduce((sum, o) => sum + (o.total || 0), 0);
     
     return { paidAmount, unpaidAmount, orderCount: orders.length };
+  },
+
+  // ==================== CONTRACTS ====================
+
+  async getContracts() {
+    try {
+      const snapshot = await getDocs(collection(db, 'contracts'));
+      return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    } catch (error) {
+      console.error('Error getting contracts:', error);
+      return [];
+    }
+  },
+
+  async getContract(id) {
+    try {
+      const docRef = doc(db, 'contracts', id);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        return { id: docSnap.id, ...docSnap.data() };
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting contract:', error);
+      return null;
+    }
+  },
+
+  async createContract(data) {
+    try {
+      const user = auth.currentUser;
+      const docRef = await addDoc(collection(db, 'contracts'), {
+        ...data,
+        createdAt: Date.now(),
+        createdBy: user?.email || 'unknown',
+        updatedAt: Date.now()
+      });
+      await this.logActivity('CONTRACT_CREATED', { contractNumber: data.contractNumber, vendor: data.vendor });
+      return docRef.id;
+    } catch (error) {
+      console.error('Error creating contract:', error);
+      throw error;
+    }
+  },
+
+  async updateContract(id, data) {
+    try {
+      const docRef = doc(db, 'contracts', id);
+      await updateDoc(docRef, {
+        ...data,
+        updatedAt: Date.now()
+      });
+      await this.logActivity('CONTRACT_UPDATED', { contractId: id, contractNumber: data.contractNumber });
+    } catch (error) {
+      console.error('Error updating contract:', error);
+      throw error;
+    }
+  },
+
+  async deleteContract(id) {
+    try {
+      const contract = await this.getContract(id);
+      await deleteDoc(doc(db, 'contracts', id));
+      await this.logActivity('CONTRACT_DELETED', { contractNumber: contract?.contractNumber });
+    } catch (error) {
+      console.error('Error deleting contract:', error);
+      throw error;
+    }
   }
 };

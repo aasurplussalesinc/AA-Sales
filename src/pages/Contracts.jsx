@@ -14,6 +14,7 @@ export default function Contracts() {
   const [selectedContract, setSelectedContract] = useState(null);
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all'); // all, active, expired
+  const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
   const [importing, setImporting] = useState(false);
 
@@ -88,24 +89,33 @@ export default function Contracts() {
       return;
     }
 
-    const contractData = {
-      ...form,
-      costPerLb: parseFloat(form.costPerLb) || 0,
-      truckCount: parseInt(form.truckCount) || 0,
-      totalWeight: parseFloat(form.totalWeight) || 0,
-      totalCost: parseFloat(form.totalCost) || 0
-    };
+    setSaving(true);
+    
+    try {
+      const contractData = {
+        ...form,
+        costPerLb: parseFloat(form.costPerLb) || 0,
+        truckCount: parseInt(form.truckCount) || 0,
+        totalWeight: parseFloat(form.totalWeight) || 0,
+        totalCost: parseFloat(form.totalCost) || 0
+      };
 
-    if (selectedContract) {
-      await DB.updateContract(selectedContract.id, contractData);
-    } else {
-      await DB.createContract(contractData);
+      if (selectedContract) {
+        await DB.updateContract(selectedContract.id, contractData);
+      } else {
+        await DB.createContract(contractData);
+      }
+
+      setShowCreate(false);
+      setSelectedContract(null);
+      resetForm();
+      loadData();
+    } catch (error) {
+      console.error('Error saving contract:', error);
+      alert('Error saving contract: ' + error.message);
+    } finally {
+      setSaving(false);
     }
-
-    setShowCreate(false);
-    setSelectedContract(null);
-    resetForm();
-    loadData();
   };
 
   const deleteContract = async (contract) => {
@@ -559,12 +569,12 @@ export default function Contracts() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn" onClick={() => { setShowCreate(false); setSelectedContract(null); }}>
+                <button className="btn" onClick={() => { setShowCreate(false); setSelectedContract(null); }} disabled={saving}>
                   Cancel
                 </button>
                 {canEdit && (
-                  <button className="btn btn-primary" onClick={saveContract}>
-                    {selectedContract ? 'Save Changes' : 'Create Contract'}
+                  <button className="btn btn-primary" onClick={saveContract} disabled={saving}>
+                    {saving ? 'Saving...' : (selectedContract ? 'Save Changes' : 'Create Contract')}
                   </button>
                 )}
               </div>

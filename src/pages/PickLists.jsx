@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/library';
 import { OrgDB as DB } from '../orgDb';
+import { useAuth } from '../OrgAuthContext';
 
 export default function PickLists() {
+  const { organization } = useAuth();
   const [pickLists, setPickLists] = useState([]);
   const [items, setItems] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -45,7 +47,10 @@ export default function PickLists() {
   const [editMode, setEditMode] = useState(false);
   const [editingListId, setEditingListId] = useState(null);
   
-  const assigneeOptions = ['Alan', 'Nancy', 'Gustavo'];
+  // Get employee list from organization or use defaults
+  const employeeOptions = organization?.employees?.length > 0 
+    ? organization.employees 
+    : ['Alan', 'Nancy', 'Gustavo'];
   
   useEffect(() => {
     loadData();
@@ -193,7 +198,16 @@ export default function PickLists() {
     }
   };
 
-  const completePickList = async (list) => {
+  // State for completed by selection
+  const [pickCompletedBy, setPickCompletedBy] = useState('');
+  const [packCompletedBy, setPackCompletedBy] = useState('');
+
+  const completePickList = async (list, completedBy) => {
+    if (!completedBy) {
+      alert('Please select who completed the pick list');
+      return;
+    }
+    
     // Process each picked item
     for (const item of list.items) {
       if (item.pickedQty > 0) {
@@ -215,8 +229,9 @@ export default function PickLists() {
       }
     }
     
-    await DB.updatePickList(list.id, { status: 'completed' });
+    await DB.updatePickList(list.id, { status: 'completed', completedBy, completedAt: Date.now() });
     setSelectedList(null);
+    setPickCompletedBy('');
     loadData();
   };
 
@@ -489,6 +504,9 @@ export default function PickLists() {
     
     // Initialize packed items checkboxes from saved data
     setPackedItems(order.packedItems || {});
+    
+    // Load packedBy if previously saved
+    setPackCompletedBy(order.packedBy || '');
     
     setShowPackOrder(true);
   };
@@ -793,6 +811,8 @@ export default function PickLists() {
       items: updatedItems,
       packingMode: packingMode,
       packingComplete: true,
+      packedBy: packCompletedBy,
+      packedAt: Date.now(),
       status: 'packed',
       subtotal: newSubtotal,
       total: newSubtotal + tax + shipping
@@ -827,6 +847,7 @@ export default function PickLists() {
     setTriwalls([]);
     setTriwallAssignments({});
     setPackedItems({});
+    setPackCompletedBy('');
     loadData();
     alert('Packing saved! Shipped quantities updated.');
   };
@@ -887,7 +908,7 @@ export default function PickLists() {
           style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
         >
           <option value="">All Assignees</option>
-          {assigneeOptions.map(name => (
+          {employeeOptions.map(name => (
             <option key={name} value={name}>{name}</option>
           ))}
         </select>
@@ -950,7 +971,7 @@ export default function PickLists() {
                 style={{ width: '100%', padding: 10 }}
               >
                 <option value="">-- Select --</option>
-                {assigneeOptions.map(name => (
+                {employeeOptions.map(name => (
                   <option key={name} value={name}>{name}</option>
                 ))}
               </select>
@@ -1204,20 +1225,39 @@ export default function PickLists() {
               </tbody>
             </table>
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, alignItems: 'center' }}>
               {selectedList.status !== 'completed' && (
-                <button 
-                  className="btn btn-primary" 
-                  onClick={() => completePickList(selectedList)}
-                  style={{ flex: 1 }}
-                >
-                  ✓ Complete Pick List
-                </button>
+                <>
+                  <select
+                    value={pickCompletedBy}
+                    onChange={e => setPickCompletedBy(e.target.value)}
+                    style={{ padding: 10, borderRadius: 4, border: '1px solid #ddd', minWidth: 150 }}
+                  >
+                    <option value="">Completed By...</option>
+                    {employeeOptions.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                  <button 
+                    className="btn btn-primary" 
+                    onClick={() => completePickList(selectedList, pickCompletedBy)}
+                    style={{ flex: 1 }}
+                    disabled={!pickCompletedBy}
+                  >
+                    ✓ Complete Pick List
+                  </button>
+                </>
+              )}
+              {selectedList.status === 'completed' && selectedList.completedBy && (
+                <div style={{ flex: 1, padding: 10, background: '#e8f5e9', borderRadius: 4, color: '#2e7d32' }}>
+                  ✓ Completed by <strong>{selectedList.completedBy}</strong>
+                  {selectedList.completedAt && ` on ${new Date(selectedList.completedAt).toLocaleDateString()}`}
+                </div>
               )}
               <button 
                 className="btn" 
                 onClick={() => setSelectedList(null)} 
-                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                style={{ flex: selectedList.status === 'completed' ? 1 : 'none', background: '#6c757d', color: 'white' }}
               >
                 Close
               </button>
@@ -1789,16 +1829,26 @@ export default function PickLists() {
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: 15, borderTop: '1px solid #eee' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: 15, borderTop: '1px solid #eee', alignItems: 'center' }}>
+              <select
+                value={packCompletedBy}
+                onChange={e => setPackCompletedBy(e.target.value)}
+                style={{ padding: 10, borderRadius: 4, border: '1px solid #ddd', minWidth: 150 }}
+              >
+                <option value="">Packed By...</option>
+                {employeeOptions.map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
               <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
               <button 
                 onClick={savePackOrder} 
-                disabled={packingMode === 'triwalls' ? !validateTriwallPacking() : !validatePacking()} 
+                disabled={(packingMode === 'triwalls' ? !validateTriwallPacking() : !validatePacking()) || !packCompletedBy} 
                 style={{ 
                   padding: '10px 20px', 
-                  background: (packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) ? '#4CAF50' : '#ccc', 
+                  background: ((packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) && packCompletedBy) ? '#4CAF50' : '#ccc', 
                   color: 'white', border: 'none', borderRadius: 6, 
-                  cursor: (packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) ? 'pointer' : 'not-allowed' 
+                  cursor: ((packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) && packCompletedBy) ? 'pointer' : 'not-allowed' 
                 }}
               >
                 Save Packing

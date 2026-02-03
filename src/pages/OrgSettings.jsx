@@ -19,6 +19,12 @@ export default function OrgSettings() {
   const [orgEmail, setOrgEmail] = useState('');
   const [orgPhone, setOrgPhone] = useState('');
   const [orgAddress, setOrgAddress] = useState('');
+  
+  // Employee management state
+  const [employees, setEmployees] = useState([]);
+  const [newEmployeeName, setNewEmployeeName] = useState('');
+  const [editingEmployee, setEditingEmployee] = useState(null);
+  const [editEmployeeName, setEditEmployeeName] = useState('');
 
   useEffect(() => {
     loadData();
@@ -39,6 +45,10 @@ export default function OrgSettings() {
       setOrgEmail(organization.email || '');
       setOrgPhone(organization.phone || '');
       setOrgAddress(organization.address || '');
+      
+      // Load employees (default to Alan, Nancy, Gustavo if none set)
+      const empList = organization.employees || ['Alan', 'Nancy', 'Gustavo'];
+      setEmployees(empList);
     } catch (err) {
       console.error('Error loading org data:', err);
     } finally {
@@ -414,6 +424,140 @@ export default function OrgSettings() {
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+      )}
+
+      {/* Employee Management */}
+      {isAdmin && (
+        <div style={{ background: 'white', padding: 20, borderRadius: 8, marginTop: 20 }}>
+          <h3 style={{ marginBottom: 15 }}>👥 Employee Names</h3>
+          <p style={{ marginBottom: 15, color: '#666', fontSize: 14 }}>
+            Manage employee names that appear in "Assigned To" and "Completed By" dropdowns throughout the system.
+          </p>
+          
+          {/* Add new employee */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+            <input
+              type="text"
+              placeholder="Enter employee name..."
+              value={newEmployeeName}
+              onChange={e => setNewEmployeeName(e.target.value)}
+              style={{ flex: 1, padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+              onKeyPress={e => {
+                if (e.key === 'Enter' && newEmployeeName.trim()) {
+                  const updated = [...employees, newEmployeeName.trim()];
+                  setEmployees(updated);
+                  OrgDB.updateOrganization(organization.id, { employees: updated });
+                  setNewEmployeeName('');
+                  refreshOrganization();
+                }
+              }}
+            />
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                if (newEmployeeName.trim()) {
+                  const updated = [...employees, newEmployeeName.trim()];
+                  setEmployees(updated);
+                  OrgDB.updateOrganization(organization.id, { employees: updated });
+                  setNewEmployeeName('');
+                  refreshOrganization();
+                }
+              }}
+              disabled={!newEmployeeName.trim()}
+            >
+              + Add Employee
+            </button>
+          </div>
+          
+          {/* Employee list */}
+          {employees.length === 0 ? (
+            <p style={{ color: '#999', fontStyle: 'italic' }}>No employees added yet.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {employees.map((emp, idx) => (
+                <div key={idx} style={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 10, 
+                  padding: 10, 
+                  background: '#f5f5f5', 
+                  borderRadius: 4 
+                }}>
+                  {editingEmployee === idx ? (
+                    <>
+                      <input
+                        type="text"
+                        value={editEmployeeName}
+                        onChange={e => setEditEmployeeName(e.target.value)}
+                        style={{ flex: 1, padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                        autoFocus
+                        onKeyPress={e => {
+                          if (e.key === 'Enter' && editEmployeeName.trim()) {
+                            const updated = [...employees];
+                            updated[idx] = editEmployeeName.trim();
+                            setEmployees(updated);
+                            OrgDB.updateOrganization(organization.id, { employees: updated });
+                            setEditingEmployee(null);
+                            refreshOrganization();
+                          }
+                        }}
+                      />
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => {
+                          if (editEmployeeName.trim()) {
+                            const updated = [...employees];
+                            updated[idx] = editEmployeeName.trim();
+                            setEmployees(updated);
+                            OrgDB.updateOrganization(organization.id, { employees: updated });
+                            setEditingEmployee(null);
+                            refreshOrganization();
+                          }
+                        }}
+                      >
+                        Save
+                      </button>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => setEditingEmployee(null)}
+                        style={{ background: '#6c757d', color: 'white' }}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span style={{ flex: 1, fontWeight: 500 }}>{emp}</span>
+                      <button
+                        className="btn btn-sm"
+                        onClick={() => {
+                          setEditingEmployee(idx);
+                          setEditEmployeeName(emp);
+                        }}
+                        style={{ background: '#2196F3', color: 'white' }}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        className="btn btn-sm btn-danger"
+                        onClick={() => {
+                          if (confirm(`Remove "${emp}" from employee list?`)) {
+                            const updated = employees.filter((_, i) => i !== idx);
+                            setEmployees(updated);
+                            OrgDB.updateOrganization(organization.id, { employees: updated });
+                            refreshOrganization();
+                          }
+                        }}
+                      >
+                        🗑️
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}

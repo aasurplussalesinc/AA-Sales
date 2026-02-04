@@ -18,6 +18,7 @@ export default function PickLists() {
   const [filterStatus, setFilterStatus] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
   const [sortBy, setSortBy] = useState('date-desc');
   
   // Pack Order state
@@ -41,11 +42,20 @@ export default function PickLists() {
     name: '',
     notes: '',
     assignedTo: '',
+    priority: 'normal',
     items: []
   });
   const [searchItem, setSearchItem] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [editingListId, setEditingListId] = useState(null);
+  
+  // Priority options
+  const priorityOptions = [
+    { value: 'urgent', label: '🔴 Urgent', color: '#f44336' },
+    { value: 'high', label: '🟠 High', color: '#ff9800' },
+    { value: 'normal', label: '🟢 Normal', color: '#4CAF50' },
+    { value: 'low', label: '🔵 Low', color: '#2196F3' }
+  ];
   
   // Get employee list from organization or use defaults
   const employeeOptions = organization?.employees?.length > 0 
@@ -134,14 +144,15 @@ export default function PickLists() {
         name: newList.name,
         notes: newList.notes,
         assignedTo: newList.assignedTo,
+        priority: newList.priority || 'normal',
         items: newList.items
       });
     } else {
       // Create new pick list
-      await DB.createPickList(newList);
+      await DB.createPickList({ ...newList, priority: newList.priority || 'normal' });
     }
     
-    setNewList({ name: '', notes: '', assignedTo: '', items: [] });
+    setNewList({ name: '', notes: '', assignedTo: '', priority: 'normal', items: [] });
     setShowCreate(false);
     setEditMode(false);
     setEditingListId(null);
@@ -153,6 +164,7 @@ export default function PickLists() {
       name: list.name || '',
       notes: list.notes || '',
       assignedTo: list.assignedTo || '',
+      priority: list.priority || 'normal',
       items: list.items || []
     });
     setEditingListId(list.id);
@@ -162,10 +174,22 @@ export default function PickLists() {
   };
 
   const resetPickListForm = () => {
-    setNewList({ name: '', notes: '', assignedTo: '', items: [] });
+    setNewList({ name: '', notes: '', assignedTo: '', priority: 'normal', items: [] });
     setShowCreate(false);
     setEditMode(false);
     setEditingListId(null);
+  };
+  
+  // Quick update assignee from table
+  const updateAssignee = async (listId, assignedTo) => {
+    await DB.updatePickList(listId, { assignedTo });
+    loadData();
+  };
+  
+  // Quick update priority from table
+  const updatePriority = async (listId, priority) => {
+    await DB.updatePickList(listId, { priority });
+    loadData();
   };
 
   const updatePickedQty = async (list, itemId, qty) => {
@@ -912,10 +936,20 @@ export default function PickLists() {
             <option key={name} value={name}>{name}</option>
           ))}
         </select>
-        {(filterSearch || filterStatus || filterAssignee) && (
+        <select
+          value={filterPriority}
+          onChange={e => setFilterPriority(e.target.value)}
+          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+        >
+          <option value="">All Priorities</option>
+          {priorityOptions.map(p => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+        </select>
+        {(filterSearch || filterStatus || filterAssignee || filterPriority) && (
           <button
             className="btn btn-sm"
-            onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterAssignee(''); }}
+            onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterAssignee(''); setFilterPriority(''); }}
             style={{ background: '#6c757d', color: 'white', padding: '8px 12px' }}
           >
             Clear Filters
@@ -962,19 +996,40 @@ export default function PickLists() {
               />
             </div>
 
-            <div style={{ marginBottom: 15 }}>
-              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Assign To</label>
-              <select
-                className="form-input"
-                value={newList.assignedTo}
-                onChange={e => setNewList({ ...newList, assignedTo: e.target.value })}
-                style={{ width: '100%', padding: 10 }}
-              >
-                <option value="">-- Select --</option>
-                {employeeOptions.map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 15 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Assign To</label>
+                <select
+                  className="form-input"
+                  value={newList.assignedTo}
+                  onChange={e => setNewList({ ...newList, assignedTo: e.target.value })}
+                  style={{ width: '100%', padding: 10 }}
+                >
+                  <option value="">-- Select --</option>
+                  {employeeOptions.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Priority</label>
+                <select
+                  className="form-input"
+                  value={newList.priority || 'normal'}
+                  onChange={e => setNewList({ ...newList, priority: e.target.value })}
+                  style={{ 
+                    width: '100%', 
+                    padding: 10,
+                    background: priorityOptions.find(p => p.value === (newList.priority || 'normal'))?.color || '#4CAF50',
+                    color: 'white',
+                    fontWeight: 600
+                  }}
+                >
+                  {priorityOptions.map(p => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div style={{ marginBottom: 15 }}>
@@ -1271,6 +1326,7 @@ export default function PickLists() {
         <table>
           <thead>
             <tr>
+              <th>Priority</th>
               <th>Name</th>
               <th>Assigned To</th>
               <th>Items</th>
@@ -1293,10 +1349,12 @@ export default function PickLists() {
                   if (displayStatus !== filterStatus) return false;
                 }
                 if (filterAssignee && list.assignedTo !== filterAssignee) return false;
+                if (filterPriority && (list.priority || 'normal') !== filterPriority) return false;
                 return true;
               });
               
-              // Sort
+              // Sort - priority first, then by selected sort
+              const priorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
               filtered.sort((a, b) => {
                 const getTime = (ts) => {
                   if (!ts) return 0;
@@ -1304,6 +1362,13 @@ export default function PickLists() {
                   if (ts.seconds) return ts.seconds * 1000;
                   return new Date(ts).getTime() || 0;
                 };
+                
+                // First sort by priority
+                const priorityA = priorityOrder[a.priority] ?? 2;
+                const priorityB = priorityOrder[b.priority] ?? 2;
+                if (priorityA !== priorityB) return priorityA - priorityB;
+                
+                // Then by selected sort
                 switch (sortBy) {
                   case 'date-asc':
                     return getTime(a.createdAt) - getTime(b.createdAt);
@@ -1330,10 +1395,49 @@ export default function PickLists() {
               
               return filtered.map(list => {
               const displayStatus = getDisplayStatus(list);
+              const priorityInfo = priorityOptions.find(p => p.value === (list.priority || 'normal')) || priorityOptions[2];
               return (
               <tr key={list.id}>
+                <td style={{ padding: 8 }}>
+                  <select
+                    value={list.priority || 'normal'}
+                    onChange={e => updatePriority(list.id, e.target.value)}
+                    style={{ 
+                      padding: '4px 8px', 
+                      borderRadius: 4, 
+                      border: '1px solid #ddd',
+                      background: priorityInfo.color,
+                      color: 'white',
+                      fontWeight: 600,
+                      fontSize: 11,
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {priorityOptions.map(p => (
+                      <option key={p.value} value={p.value}>{p.label}</option>
+                    ))}
+                  </select>
+                </td>
                 <td><strong>{list.name}</strong></td>
-                <td style={{ fontSize: 13 }}>{list.assignedTo || <span style={{ color: '#999' }}>—</span>}</td>
+                <td style={{ padding: 8 }}>
+                  <select
+                    value={list.assignedTo || ''}
+                    onChange={e => updateAssignee(list.id, e.target.value)}
+                    style={{ 
+                      padding: '4px 8px', 
+                      borderRadius: 4, 
+                      border: '1px solid #ddd',
+                      fontSize: 12,
+                      minWidth: 100,
+                      background: list.assignedTo ? '#e3f2fd' : '#fff'
+                    }}
+                  >
+                    <option value="">Unassigned</option>
+                    {employeeOptions.map(name => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                  </select>
+                </td>
                 <td>{list.items?.length || 0} items</td>
                 <td>
                   <span style={{

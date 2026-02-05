@@ -48,7 +48,7 @@ export default function PurchaseOrders() {
   const [newPO, setNewPO] = useState({
     customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
     shipToAddress: '', useShipTo: false,
-    dueDate: '', invoiceDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, ccFee: 0, estTotal: 0, total: 0
+    dueDate: '', invoiceDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0
   });
 
   const termsOptions = ['Due on Receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60', 'Net 90'];
@@ -144,8 +144,8 @@ export default function PurchaseOrders() {
       });
       const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
       const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
-      const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0; const ccFee = parseFloat(prevPO.ccFee) || 0;
-      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping + ccFee, total: shipSubtotal + tax + shipping + ccFee };
+      const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0;
+      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping };
     });
   };
 
@@ -154,8 +154,8 @@ export default function PurchaseOrders() {
       const updatedItems = prevPO.items.filter((_, idx) => idx !== index);
       const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
       const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
-      const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0; const ccFee = parseFloat(prevPO.ccFee) || 0;
-      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping + ccFee, total: shipSubtotal + tax + shipping + ccFee };
+      const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0;
+      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping };
     });
   };
 
@@ -213,8 +213,8 @@ export default function PurchaseOrders() {
     setNewPO(prevPO => {
       const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
       const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
-      const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0; const ccFee = parseFloat(prevPO.ccFee) || 0;
-      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping + ccFee, total: shipSubtotal + tax + shipping + ccFee };
+      const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0;
+      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping };
     });
   };
 
@@ -224,8 +224,7 @@ export default function PurchaseOrders() {
       const estSubtotal = prevPO.estSubtotal || 0; const shipSubtotal = prevPO.subtotal || 0;
       const tax = field === 'tax' ? val : (parseFloat(prevPO.tax) || 0);
       const shipping = field === 'shipping' ? val : (parseFloat(prevPO.shipping) || 0);
-      const ccFee = field === 'ccFee' ? val : (parseFloat(prevPO.ccFee) || 0);
-      return { ...prevPO, [field]: val, estTotal: estSubtotal + tax + shipping + ccFee, total: shipSubtotal + tax + shipping + ccFee };
+      return { ...prevPO, [field]: val, estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping };
     });
   };
 
@@ -322,7 +321,7 @@ export default function PurchaseOrders() {
     });
     const estSubtotal = normalizedItems.reduce((sum, i) => sum + (i.estTotal || 0), 0);
     const shipSubtotal = normalizedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
-    const tax = parseFloat(order.tax) || 0; const shipping = parseFloat(order.shipping) || 0; const ccFee = parseFloat(order.ccFee) || 0;
+    const tax = parseFloat(order.tax) || 0; const shipping = parseFloat(order.shipping) || 0;
     // Format invoiceDate for input field
     let invoiceDateStr = '';
     if (order.invoiceDate) {
@@ -334,15 +333,15 @@ export default function PurchaseOrders() {
       customerPhone: order.customerPhone || '', customerAddress: order.customerAddress || '', 
       shipToAddress: order.shipToAddress || '', useShipTo: !!order.shipToAddress,
       dueDate: order.dueDate || '', invoiceDate: invoiceDateStr, poNumber: order.poNumber || '',
-      notes: order.notes || '', terms: order.terms || 'Net 30', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping, ccFee,
-      estTotal: estSubtotal + tax + shipping + ccFee, total: shipSubtotal + tax + shipping + ccFee });
+      notes: order.notes || '', terms: order.terms || 'Net 30', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping,
+      estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping });
     setEditingOrderId(order.id); setEditMode(true); setShowCreate(true); closeOrderModal();
   };
 
   const resetForm = () => {
     setNewPO({ customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
       shipToAddress: '', useShipTo: false,
-      dueDate: '', invoiceDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, ccFee: 0, estTotal: 0, total: 0 });
+      dueDate: '', invoiceDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0 });
   };
 
   const confirmAndCreatePickList = async (order) => {
@@ -595,7 +594,7 @@ export default function PurchaseOrders() {
   const getStatusColor = (status) => {
     switch (status) {
       case 'draft': return '#9e9e9e'; case 'confirmed': return '#2196F3'; case 'picking': return '#ff9800';
-      case 'packed': return '#9c27b0'; case 'shipped': return '#4CAF50'; case 'paid': return '#388e3c'; default: return '#9e9e9e';
+      case 'packing': return '#ff9800'; case 'packed': return '#9c27b0'; case 'shipped': return '#4CAF50'; case 'paid': return '#388e3c'; default: return '#9e9e9e';
     }
   };
   const getSourceLabel = (source) => {
@@ -937,8 +936,7 @@ export default function PurchaseOrders() {
     const subtotal = items.reduce((sum, i) => sum + i.displayTotal, 0);
     const tax = parseFloat(order.tax) || 0;
     const shipping = parseFloat(order.shipping) || 0;
-    const ccFee = parseFloat(order.ccFee) || 0;
-    const total = subtotal + tax + shipping + ccFee;
+    const total = subtotal + tax + shipping;
     const formatFullDate = (ts) => { 
       if (!ts) return '';
       const d = ts.toDate ? ts.toDate() : new Date(ts); 
@@ -976,9 +974,10 @@ export default function PurchaseOrders() {
       </style></head><body>
       <div class="header"><div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : '<div style="font-size:18px;font-weight:bold;color:' + accentColor + '">' + (organization?.name || 'Company') + '</div>'}</div><div class="company-details"><strong>${organization?.name || 'AA Surplus Sales'}</strong>2153 Pond Road, Ronkonkoma NY 11779<br>${organization?.phone || '716-496-2451'}</div></div>
       <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${order.poNumber}</div>
-      <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerContact ? '<p>' + order.customerContact + '</p>' : ''}${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3><p>' + order.shipToAddress.replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${displayDate}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p></div></div>
+      <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerContact ? '<p>Attn: ' + order.customerContact + '</p>' : ''}${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3><p>' + order.shipToAddress.replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${displayDate}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p></div></div>
       <table><thead><tr><th style="width:60px">SKU</th><th>Description</th><th style="text-align:center;width:50px">Qty</th><th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${items.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + '</td><td style="text-align:center">' + item.displayQty + '</td><td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
-      <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : ''}${(order.ccFee || 0) > 0 ? '<div class="totals-row"><span>CC Fee</span><span>$' + (order.ccFee || 0).toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
+      <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
+      <div style="margin-top:10px;font-size:9px;color:#666;font-style:italic;text-align:right">Payments by credit card are subject to a 3.5% processing fee</div>
       ${order.notes ? '<div class="notes"><h3>Notes</h3><p>' + order.notes + '</p></div>' : ''}
       <div class="footer">Thank you for your business!<br>Questions? Contact us at ${organization?.email || 'aasurplussalesinc@gmail.com'}</div></body></html>`;
     const printWindow = window.open('', '_blank');
@@ -1375,22 +1374,8 @@ ${labelsHtml}
                         <input type="number" value={newPO.tax} onChange={e => updateTaxShipping('tax', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" /></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>Shipping:</span>
                         <input type="number" value={newPO.shipping} onChange={e => updateTaxShipping('shipping', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" /></div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>CC Fee 3.5%:</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              const subtotal = newPO.subtotal || 0;
-                              const shipping = newPO.shipping || 0;
-                              const fee = ((subtotal + shipping) * 0.035).toFixed(2);
-                              updateTaxShipping('ccFee', fee);
-                            }}
-                            style={{ padding: '3px 6px', fontSize: 10, background: '#e3f2fd', border: '1px solid #1976d2', borderRadius: 3, cursor: 'pointer', color: '#1976d2' }}
-                          >Calc</button>
-                          <input type="number" value={newPO.ccFee} onChange={e => updateTaxShipping('ccFee', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" />
-                        </div>
-                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #388e3c', fontWeight: 'bold', fontSize: 18, color: '#388e3c' }}><span>Total:</span><span>${(newPO.total || 0).toFixed(2)}</span></div>
+                      <div style={{ fontSize: 9, color: '#888', marginTop: 5, fontStyle: 'italic', textAlign: 'center' }}>Payments by credit card are subject to a 3.5% processing fee</div>
                     </div>
                   </div>
                 </div>
@@ -1478,7 +1463,6 @@ ${labelsHtml}
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Subtotal:</span><span>{formatCurrency(selectedOrder.subtotal)}</span></div>
                   {selectedOrder.tax > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Tax:</span><span>{formatCurrency(selectedOrder.tax)}</span></div>}
                   {selectedOrder.shipping > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Shipping:</span><span>{formatCurrency(selectedOrder.shipping)}</span></div>}
-                  {selectedOrder.ccFee > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>CC Fee:</span><span>{formatCurrency(selectedOrder.ccFee)}</span></div>}
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #333', fontWeight: 'bold', fontSize: 18 }}><span>Total:</span><span>{formatCurrency(selectedOrder.total)}</span></div>
                 </div>
               </div>
@@ -1500,7 +1484,7 @@ ${labelsHtml}
                 <button className="btn" onClick={() => printPO(selectedOrder, 'invoice')} style={{ background: '#388e3c', color: 'white' }}>💵 Invoice</button>
                 <button className="btn" onClick={() => emailInvoice(selectedOrder)} style={{ background: '#7b1fa2', color: 'white' }}>📧 Email</button>
                 {canEdit && (!selectedOrder.status || selectedOrder.status === 'draft') && <button className="btn btn-primary" onClick={() => confirmAndCreatePickList(selectedOrder)}>✓ Confirm & Pick List</button>}
-                {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking') && <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>📦 Pack Order</button>}
+                {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.status === 'packing') && <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>{selectedOrder.status === 'packing' ? '📦 Continue Packing' : '📦 Pack Order'}</button>}
                 {selectedOrder.packingComplete && (
                   <>
                     <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>📦 Edit Packing</button>

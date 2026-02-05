@@ -355,6 +355,7 @@ export default function PickLists() {
     switch(status) {
       case 'completed': return '#4CAF50';
       case 'in_progress': return '#ff9800';
+      case 'packing': return '#ff9800';
       case 'packed': return '#9c27b0';
       case 'shipped': return '#2196F3';
       case 'paid': return '#388e3c';
@@ -369,6 +370,7 @@ export default function PickLists() {
       if (linkedOrder.status === 'paid') return 'paid';
       if (linkedOrder.status === 'shipped') return 'shipped';
       if (linkedOrder.status === 'packed' || linkedOrder.packingComplete) return 'packed';
+      if (linkedOrder.status === 'packing' || linkedOrder.packingDraft) return 'packing';
     }
     return list.status || 'pending';
   };
@@ -784,6 +786,72 @@ export default function PickLists() {
     return true;
   };
 
+  const savePackOrderDraft = async () => {
+    if (!packingOrder) return;
+    
+    // Save current state WITHOUT validation or status change
+    const updatedItems = packingOrder.items.map((item, idx) => {
+      if (packingMode === 'triwalls') {
+        const totalPacked = getTriwallItemTotal(idx);
+        return {
+          ...item,
+          qtyShipped: totalPacked,
+          triwallAssignments: triwallAssignments[idx] || []
+        };
+      } else {
+        const distributions = boxAssignments[idx] || [{ box: 1, qty: getItemQty(item) }];
+        const totalPacked = distributions.reduce((sum, d) => sum + (parseInt(d.qty) || 0), 0);
+        return {
+          ...item,
+          qtyShipped: totalPacked,
+          boxDistributions: distributions
+        };
+      }
+    });
+    
+    const updateData = {
+      ...packingOrder,
+      items: updatedItems,
+      packingMode: packingMode,
+      packingComplete: false,
+      packingDraft: true,
+      packedBy: packCompletedBy || '',
+      packedItems: packedItems
+    };
+    
+    if (packingMode === 'triwalls') {
+      updateData.triwalls = triwalls;
+      updateData.triwallAssignments = triwallAssignments;
+    } else {
+      updateData.boxDistributions = boxAssignments;
+      updateData.boxDetails = boxDetails;
+    }
+    
+    // Don't change status to packed — keep current status
+    // Only set to 'packing' if it's currently 'confirmed' so we know it's in progress
+    if (!updateData.status || updateData.status === 'confirmed') {
+      updateData.status = 'packing';
+    }
+    
+    try {
+      await DB.updatePurchaseOrder(packingOrder.id, updateData);
+    } catch (error) {
+      console.error('Error saving draft:', error);
+      alert('Error saving: ' + error.message);
+      return;
+    }
+    
+    setShowPackOrder(false);
+    setPackingOrder(null);
+    setPackingMode('boxes');
+    setTriwalls([]);
+    setTriwallAssignments({});
+    setPackedItems({});
+    setPackCompletedBy('');
+    loadData();
+    alert('Packing progress saved. You can come back to finish later.');
+  };
+
   const savePackOrder = async () => {
     if (!packingOrder) return;
     
@@ -912,6 +980,7 @@ export default function PickLists() {
           <option value="pending">Pending</option>
           <option value="in_progress">In Progress</option>
           <option value="completed">Completed (Picked)</option>
+          <option value="packing">Packing (In Progress)</option>
           <option value="packed">Packed</option>
           <option value="shipped">Shipped</option>
           <option value="paid">Paid</option>
@@ -1918,18 +1987,18 @@ export default function PickLists() {
               
               {/* Summary - conditional based on mode */}
               {packingMode === 'triwalls' ? (
-                <div style={{ marginTop: 20, padding: 15, background: validateTriwallPacking() ? '#e8f5e9' : '#ffebee', borderRadius: 8 }}>
+                <div style={{ marginTop: 20, padding: 15, background: validateTriwallPacking() ? '#e8f5e9' : '#fff3e0', borderRadius: 8 }}>
                   <strong>Summary:</strong> {triwalls.length} triwall{triwalls.length !== 1 ? 's' : ''}
                   {triwalls.map((tw, i) => {
                     const weight = tw.weight || calculateTriwallWeight(tw.id).toFixed(1);
                     return ` | TW${i+1}: ${weight} lbs`;
                   }).join('')}
-                  {!validateTriwallPacking() && <span style={{ color: '#f44336', marginLeft: 10 }}>⚠️ Fix quantity mismatches before saving</span>}
+                  {!validateTriwallPacking() && <span style={{ color: '#e65100', marginLeft: 10 }}>⚠️ Quantity mismatches — use "Save for Now" to save progress</span>}
                 </div>
               ) : (
-                <div style={{ marginTop: 20, padding: 15, background: validatePacking() ? '#e8f5e9' : '#ffebee', borderRadius: 8 }}>
+                <div style={{ marginTop: 20, padding: 15, background: validatePacking() ? '#e8f5e9' : '#fff3e0', borderRadius: 8 }}>
                   <strong>Summary:</strong> {new Set(Object.values(boxAssignments).flatMap(d => d.map(x => x.box))).size} boxes
-                  {!validatePacking() && <span style={{ color: '#f44336', marginLeft: 10 }}>⚠️ Fix quantity mismatches before saving</span>}
+                  {!validatePacking() && <span style={{ color: '#e65100', marginLeft: 10 }}>⚠️ Quantity mismatches — use "Save for Now" to save progress</span>}
                 </div>
               )}
             </div>
@@ -1946,6 +2015,17 @@ export default function PickLists() {
               </select>
               <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
               <button 
+                onClick={savePackOrderDraft} 
+                style={{ 
+                  padding: '10px 20px', 
+                  background: '#ff9800', 
+                  color: 'white', border: 'none', borderRadius: 6, 
+                  cursor: 'pointer'
+                }}
+              >
+                💾 Save for Now
+              </button>
+              <button 
                 onClick={savePackOrder} 
                 disabled={(packingMode === 'triwalls' ? !validateTriwallPacking() : !validatePacking()) || !packCompletedBy} 
                 style={{ 
@@ -1955,7 +2035,7 @@ export default function PickLists() {
                   cursor: ((packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) && packCompletedBy) ? 'pointer' : 'not-allowed' 
                 }}
               >
-                Save Packing
+                ✅ Save Packing
               </button>
             </div>
           </div>

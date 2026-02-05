@@ -601,6 +601,112 @@ export default function PurchaseOrders() {
     switch(source) { case 'inventory': return 'Inventory'; case 'inventory_contract': return 'Inv (Contract)'; case 'direct_contract': return 'Direct'; default: return 'Inventory'; }
   };
 
+  const printPickList = (order) => {
+    // Find the linked pick list for this order
+    const pickList = pickLists.find(pl => pl.purchaseOrderId === order.id);
+    if (!pickList) {
+      alert('No pick list found for this order.');
+      return;
+    }
+    
+    const formatDate = (ts) => {
+      if (!ts) return '';
+      const d = ts.toDate ? ts.toDate() : new Date(ts);
+      return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    };
+    
+    const getStatusColor = (status) => {
+      switch(status) {
+        case 'completed': return '#4CAF50';
+        case 'in_progress': return '#ff9800';
+        case 'packing': return '#ff9800';
+        case 'packed': return '#9c27b0';
+        default: return '#607d8b';
+      }
+    };
+    
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Pick List - ${pickList.name}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #2d5f3f; padding-bottom: 15px; }
+            .title { font-size: 24px; font-weight: bold; color: #2d5f3f; }
+            .meta { text-align: right; color: #666; font-size: 14px; }
+            .status { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; background: ${getStatusColor(pickList.status)}; color: white; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+            th { background: #2d5f3f; color: white; padding: 12px; text-align: left; }
+            td { padding: 12px; border-bottom: 1px solid #ddd; }
+            .text-center { text-align: center; }
+            .location { font-size: 12px; color: #2d5f3f; margin-top: 4px; }
+            .sku { font-size: 12px; color: #666; }
+            .pick-box { width: 50px; height: 30px; border: 2px solid #333; display: inline-block; }
+            .notes { margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px; }
+            .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; }
+            .signature { margin-top: 40px; display: flex; justify-content: space-between; }
+            .signature-line { width: 200px; border-top: 1px solid #333; padding-top: 5px; text-align: center; }
+            @media print { body { padding: 20px; } }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">📋 PICK LIST: ${pickList.name}</div>
+            <div class="meta">
+              <div class="status">${pickList.status?.toUpperCase()}</div>
+              <div style="margin-top: 8px;">PO: ${order.poNumber}</div>
+              <div>Customer: ${order.customerName}</div>
+              <div style="margin-top: 8px;">Created: ${formatDate(pickList.createdAt)}</div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40px">#</th>
+                <th>Item</th>
+                <th class="text-center" style="width: 100px">Location</th>
+                <th class="text-center" style="width: 80px">Requested</th>
+                <th class="text-center" style="width: 80px">Picked</th>
+                <th class="text-center" style="width: 60px">✓</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${pickList.items?.map((item, idx) => `
+                <tr>
+                  <td class="text-center">${idx + 1}</td>
+                  <td>
+                    <strong>${item.itemName}</strong>
+                    <div class="sku">${item.partNumber || ''}</div>
+                  </td>
+                  <td class="text-center"><strong>${item.location || '-'}</strong></td>
+                  <td class="text-center"><strong>${item.requestedQty}</strong></td>
+                  <td class="text-center">${pickList.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>'}</td>
+                  <td class="text-center">${pickList.status === 'completed' ? (item.pickedQty >= item.requestedQty ? '✅' : '⚠️') : '☐'}</td>
+                </tr>
+              `).join('') || ''}
+            </tbody>
+          </table>
+
+          ${pickList.notes ? `<div class="notes"><strong>Notes:</strong> ${pickList.notes}</div>` : ''}
+
+          <div class="signature">
+            <div class="signature-line">Picker Signature</div>
+            <div class="signature-line">Date</div>
+            <div class="signature-line">Verified By</div>
+          </div>
+
+          <div class="footer">
+            <p>Printed: ${new Date().toLocaleString()}</p>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   const printClientPackingList = (order) => {
     // Check if using triwalls or boxes
     const isTriwallMode = order.packingMode === 'triwalls' && order.triwalls && order.triwalls.length > 0;
@@ -1041,24 +1147,27 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
     flex-direction: column;
   }
   .from-section {
-    margin-bottom: 40px;
+    margin-bottom: 20px;
   }
   .from-section .label { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
-  .from-section .address { font-size: 18px; line-height: 1.4; }
+  .from-section .address { font-size: 16px; line-height: 1.3; }
   .to-section {
     flex: 1;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 20px 0;
   }
-  .to-section .company { font-size: 32px; font-weight: bold; margin-bottom: 10px; }
-  .to-section .attention { font-size: 24px; margin-bottom: 10px; }
-  .to-section .address { font-size: 24px; line-height: 1.4; }
+  .to-section .company { font-size: 52px; font-weight: bold; margin-bottom: 15px; }
+  .to-section .attention { font-size: 36px; margin-bottom: 15px; }
+  .to-section .address { font-size: 36px; line-height: 1.4; }
   .footer {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-top: 30px;
+    margin-top: 20px;
     padding-top: 20px;
     border-top: 2px solid #000;
   }
@@ -1176,24 +1285,27 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
     page-break-after: auto;
   }
   .from-section {
-    margin-bottom: 40px;
+    margin-bottom: 20px;
   }
   .from-section .label { font-size: 14px; font-weight: bold; margin-bottom: 5px; }
-  .from-section .address { font-size: 18px; line-height: 1.4; }
+  .from-section .address { font-size: 16px; line-height: 1.3; }
   .to-section {
     flex: 1;
     display: flex;
     flex-direction: column;
     justify-content: center;
+    align-items: center;
+    text-align: center;
+    padding: 20px 0;
   }
-  .to-section .company { font-size: 32px; font-weight: bold; margin-bottom: 10px; }
-  .to-section .attention { font-size: 24px; margin-bottom: 10px; }
-  .to-section .address { font-size: 24px; line-height: 1.4; }
+  .to-section .company { font-size: 52px; font-weight: bold; margin-bottom: 15px; }
+  .to-section .attention { font-size: 36px; margin-bottom: 15px; }
+  .to-section .address { font-size: 36px; line-height: 1.4; }
   .footer {
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
-    margin-top: 30px;
+    margin-top: 20px;
     padding-top: 20px;
     border-top: 2px solid #000;
   }
@@ -1484,6 +1596,7 @@ ${labelsHtml}
                 <button className="btn" onClick={() => printPO(selectedOrder, 'invoice')} style={{ background: '#388e3c', color: 'white' }}>💵 Invoice</button>
                 <button className="btn" onClick={() => emailInvoice(selectedOrder)} style={{ background: '#7b1fa2', color: 'white' }}>📧 Email</button>
                 {canEdit && (!selectedOrder.status || selectedOrder.status === 'draft') && <button className="btn btn-primary" onClick={() => confirmAndCreatePickList(selectedOrder)}>✓ Confirm & Pick List</button>}
+                {pickLists.find(pl => pl.purchaseOrderId === selectedOrder.id) && <button className="btn" onClick={() => printPickList(selectedOrder)} style={{ background: '#2d5f3f', color: 'white' }}>📋 Print Pick List</button>}
                 {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.status === 'packing') && <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>{selectedOrder.status === 'packing' ? '📦 Continue Packing' : '📦 Pack Order'}</button>}
                 {selectedOrder.packingComplete && (
                   <>

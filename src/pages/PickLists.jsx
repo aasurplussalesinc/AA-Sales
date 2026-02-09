@@ -1429,7 +1429,7 @@ export default function PickLists() {
                     <td style={{ padding: 10, textAlign: 'center' }}>
                       <input
                         type="number"
-                        value={(localPickedQty[item.itemId] ?? item.pickedQty) || ''}
+                        value={(() => { const v = localPickedQty[item.itemId] ?? item.pickedQty; return v === '' || v === undefined || v === null ? '' : v; })()}
                         onChange={e => handleLocalQtyChange(item.itemId, e.target.value)}
                         onBlur={() => handleQtyBlur(item.itemId)}
                         style={{ width: 60, padding: 5, textAlign: 'center' }}
@@ -1968,7 +1968,7 @@ export default function PickLists() {
                           type="number"
                           min="1"
                           max="99"
-                          value={dist.box || ''}
+                          value={dist.box === '' || dist.box === undefined || dist.box === null ? '' : dist.box}
                           onChange={e => updateBoxDistribution(idx, distIdx, 'box', e.target.value)}
                           style={{ width: 60, padding: 6, textAlign: 'center', fontWeight: 'bold', border: '1px solid #ccc', borderRadius: 4 }}
                           placeholder="1"
@@ -1978,7 +1978,7 @@ export default function PickLists() {
                           type="number"
                           min="0"
                           max={pickedQty}
-                          value={dist.qty || ''}
+                          value={dist.qty === '' || dist.qty === undefined || dist.qty === null ? '' : dist.qty}
                           onChange={e => updateBoxDistribution(idx, distIdx, 'qty', e.target.value)}
                           style={{ width: 70, padding: 6, textAlign: 'center', border: '1px solid #ccc', borderRadius: 4 }}
                           placeholder="0"

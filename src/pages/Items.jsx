@@ -2183,7 +2183,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
-                    value={newItem.price || ''}
+                    value={newItem.price === '' || newItem.price === undefined || newItem.price === null ? '' : newItem.price}
                     onChange={e => setNewItem({ ...newItem, price: e.target.value })}
                     min="0"
                     step="0.01"
@@ -2230,7 +2230,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       <input
                         type="number"
                         className="form-input"
-                        value={newItem.stock || ''}
+                        value={newItem.stock === '' || newItem.stock === undefined || newItem.stock === null ? '' : newItem.stock}
                         onChange={e => setNewItem({ ...newItem, stock: e.target.value })}
                         min="0"
                         placeholder="0"
@@ -2276,7 +2276,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         type="number"
                         className="form-input"
                         placeholder="Qty"
-                        value={lb.quantity || ''}
+                        value={lb.quantity === '' || lb.quantity === undefined || lb.quantity === null ? '' : lb.quantity}
                         onChange={e => {
                           const updated = [...newItem.locationBreakdown];
                           updated[idx].quantity = e.target.value === '' ? '' : parseInt(e.target.value) || 0;

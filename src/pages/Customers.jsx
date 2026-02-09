@@ -1058,7 +1058,7 @@ export default function Customers() {
                           <input
                             type="number"
                             className="form-input"
-                            value={item.quantity || ''}
+                            value={item.quantity === '' || item.quantity === undefined || item.quantity === null ? '' : item.quantity}
                             min="1"
                             placeholder="1"
                             onChange={e => {
@@ -1084,7 +1084,7 @@ export default function Customers() {
                           <input
                             type="number"
                             className="form-input"
-                            value={item.unitPrice || ''}
+                            value={item.unitPrice === '' || item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice}
                             step="0.01"
                             min="0"
                             placeholder="0.00"

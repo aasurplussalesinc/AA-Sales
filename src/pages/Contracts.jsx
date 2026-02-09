@@ -440,7 +440,7 @@ export default function Contracts() {
                     <input
                       type="number"
                       step="0.01"
-                      value={form.costPerLb}
+                      value={form.costPerLb || ''}
                       onChange={(e) => setForm({ ...form, costPerLb: e.target.value })}
                       placeholder="0.05"
                       style={{ width: '100%', padding: 8, paddingLeft: 25, borderRadius: 4, border: '1px solid #ddd' }}

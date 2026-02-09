@@ -1058,15 +1058,16 @@ export default function Customers() {
                           <input
                             type="number"
                             className="form-input"
-                            value={item.quantity || 1}
+                            value={item.quantity || ''}
                             min="1"
+                            placeholder="1"
                             onChange={e => {
-                              const qty = parseInt(e.target.value) || 1;
+                              const qty = e.target.value === '' ? '' : parseInt(e.target.value) || 1;
                               const updatedItems = [...editingOrder.items];
                               updatedItems[idx] = { 
                                 ...item, 
                                 quantity: qty,
-                                lineTotal: qty * (item.unitPrice || 0)
+                                lineTotal: (parseInt(qty) || 0) * (item.unitPrice || 0)
                               };
                               const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
                               setEditingOrder({ 
@@ -1083,16 +1084,17 @@ export default function Customers() {
                           <input
                             type="number"
                             className="form-input"
-                            value={item.unitPrice || 0}
+                            value={item.unitPrice || ''}
                             step="0.01"
                             min="0"
+                            placeholder="0.00"
                             onChange={e => {
-                              const price = parseFloat(e.target.value) || 0;
+                              const price = e.target.value === '' ? '' : parseFloat(e.target.value) || 0;
                               const updatedItems = [...editingOrder.items];
                               updatedItems[idx] = { 
                                 ...item, 
                                 unitPrice: price,
-                                lineTotal: (item.quantity || 1) * price
+                                lineTotal: (item.quantity || 1) * (parseFloat(price) || 0)
                               };
                               const subtotal = updatedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
                               setEditingOrder({ 

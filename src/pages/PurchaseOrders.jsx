@@ -1464,8 +1464,8 @@ ${labelsHtml}
                               style={{ width: '100%', padding: 4, textAlign: 'center' }} min="0" />
                           </td>
                           <td style={{ padding: 8 }}>
-                            <input type="number" value={item.unitPrice} onChange={e => updatePOItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                              style={{ width: '100%', padding: 4, textAlign: 'right' }} step="0.01" min="0" />
+                            <input type="number" value={item.unitPrice || ''} onChange={e => updatePOItem(index, 'unitPrice', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
+                              style={{ width: '100%', padding: 4, textAlign: 'right' }} step="0.01" min="0" placeholder="0.00" />
                           </td>
                           <td style={{ padding: 8, textAlign: 'right', fontWeight: 600, background: '#e8f5e9' }}>${(item.lineTotal || 0).toFixed(2)}</td>
                           <td style={{ padding: 8 }}>
@@ -1483,9 +1483,9 @@ ${labelsHtml}
                       <div style={{ fontWeight: 600, color: '#388e3c', marginBottom: 10, fontSize: 14 }}>💵 INVOICE</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Subtotal:</span><span>${(newPO.subtotal || 0).toFixed(2)}</span></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>Tax:</span>
-                        <input type="number" value={newPO.tax} onChange={e => updateTaxShipping('tax', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" /></div>
+                        <input type="number" value={newPO.tax || ''} onChange={e => updateTaxShipping('tax', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" placeholder="0.00" /></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>Shipping:</span>
-                        <input type="number" value={newPO.shipping} onChange={e => updateTaxShipping('shipping', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" /></div>
+                        <input type="number" value={newPO.shipping || ''} onChange={e => updateTaxShipping('shipping', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" placeholder="0.00" /></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #388e3c', fontWeight: 'bold', fontSize: 18, color: '#388e3c' }}><span>Total:</span><span>${(newPO.total || 0).toFixed(2)}</span></div>
                       <div style={{ fontSize: 9, color: '#888', marginTop: 5, fontStyle: 'italic', textAlign: 'center' }}>Payments by credit card are subject to a 3.5% processing fee</div>
                     </div>

@@ -2183,10 +2183,11 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
-                    value={newItem.price}
+                    value={newItem.price || ''}
                     onChange={e => setNewItem({ ...newItem, price: e.target.value })}
                     min="0"
                     step="0.01"
+                    placeholder="0.00"
                   />
                 </div>
                 <div className="form-group">
@@ -2194,7 +2195,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
-                    value={newItem.weight}
+                    value={newItem.weight || ''}
                     onChange={e => setNewItem({ ...newItem, weight: e.target.value })}
                     min="0"
                     step="0.01"
@@ -2229,9 +2230,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       <input
                         type="number"
                         className="form-input"
-                        value={newItem.stock}
+                        value={newItem.stock || ''}
                         onChange={e => setNewItem({ ...newItem, stock: e.target.value })}
                         min="0"
+                        placeholder="0"
                       />
                     </div>
                     <div className="form-group">
@@ -2274,10 +2276,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         type="number"
                         className="form-input"
                         placeholder="Qty"
-                        value={lb.quantity}
+                        value={lb.quantity || ''}
                         onChange={e => {
                           const updated = [...newItem.locationBreakdown];
-                          updated[idx].quantity = parseInt(e.target.value) || 0;
+                          updated[idx].quantity = e.target.value === '' ? '' : parseInt(e.target.value) || 0;
                           setNewItem({ ...newItem, locationBreakdown: updated });
                         }}
                         min="0"

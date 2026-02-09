@@ -1346,8 +1346,8 @@ ${labelsHtml}
             </div>
             <div className="modal-body" style={{ padding: 20 }}>
               {/* Customer */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Customer</label>
+              <div style={{ marginBottom: 15 }}>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Customer / Company</label>
                 <input type="text" placeholder="Search customers..." value={searchCustomer || newPO.customerName}
                   onChange={e => { setSearchCustomer(e.target.value); setNewPO({ ...newPO, customerName: e.target.value }); }}
                   style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
@@ -1356,11 +1356,20 @@ ${labelsHtml}
                     {filteredCustomers.slice(0, 5).map(c => (
                       <div key={c.id} onClick={() => selectCustomerForPO(c)} style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}>
                         <strong>{c.company || c.customerName}</strong>
-                        <span style={{ color: '#666', marginLeft: 10 }}>{c.email}</span>
+                        {c.company && c.customerName && <span style={{ color: '#666', marginLeft: 10 }}>({c.customerName})</span>}
+                        <span style={{ color: '#888', marginLeft: 10, fontSize: 12 }}>{c.email}</span>
                       </div>
                     ))}
                   </div>
                 )}
+              </div>
+
+              {/* Contact Name */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Contact Name <span style={{ fontWeight: 400, color: '#888', fontSize: 12 }}>(Attn: on invoice)</span></label>
+                <input type="text" placeholder="Contact person name..." value={newPO.customerContact || ''}
+                  onChange={e => setNewPO({ ...newPO, customerContact: e.target.value })}
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
               </div>
 
               {/* Ship To Address */}
@@ -1544,6 +1553,7 @@ ${labelsHtml}
             <div className="modal-body" style={{ padding: 20 }}>
               <div style={{ background: '#f9f9f9', padding: 15, borderRadius: 8, marginBottom: 20 }}>
                 <p style={{ margin: '3px 0' }}><strong>Customer:</strong> {selectedOrder.customerName}</p>
+                {selectedOrder.customerContact && <p style={{ margin: '3px 0' }}><strong>Contact:</strong> {selectedOrder.customerContact}</p>}
                 {selectedOrder.customerPhone && <p style={{ margin: '3px 0' }}>Phone: {selectedOrder.customerPhone}</p>}
                 {selectedOrder.customerEmail && <p style={{ margin: '3px 0' }}>Email: {selectedOrder.customerEmail}</p>}
                 {selectedOrder.customerAddress && <p style={{ margin: '3px 0' }}>Address: {selectedOrder.customerAddress}</p>}

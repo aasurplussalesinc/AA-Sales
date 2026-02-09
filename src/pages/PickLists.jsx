@@ -471,6 +471,84 @@ export default function PickLists() {
     return orders.find(o => o.id === pickList.purchaseOrderId);
   };
 
+  const syncFromPO = async (pickList) => {
+    const order = getLinkedOrder(pickList);
+    if (!order) {
+      alert('No linked purchase order found.');
+      return;
+    }
+    
+    // Build a map of existing pick list items by itemId
+    const existingItems = {};
+    (pickList.items || []).forEach(item => {
+      existingItems[item.itemId] = item;
+    });
+    
+    // Build updated items list from PO
+    const updatedItems = (order.items || []).map(poItem => {
+      const existingItem = existingItems[poItem.itemId];
+      if (existingItem) {
+        // Item exists - keep picked qty, update requested qty
+        return {
+          ...existingItem,
+          requestedQty: parseInt(poItem.quantity) || 0,
+          itemName: poItem.itemName,
+          partNumber: poItem.partNumber,
+          unitPrice: poItem.unitPrice
+        };
+      } else {
+        // New item from PO - find its location
+        const itemData = items.find(i => i.id === poItem.itemId);
+        const itemLocation = locations.find(l => l.id === itemData?.locationId);
+        return {
+          itemId: poItem.itemId,
+          itemName: poItem.itemName,
+          partNumber: poItem.partNumber,
+          requestedQty: parseInt(poItem.quantity) || 0,
+          pickedQty: 0,
+          location: itemLocation?.code || '-',
+          unitPrice: poItem.unitPrice
+        };
+      }
+    });
+    
+    // Count changes
+    const newItems = updatedItems.filter(item => !existingItems[item.itemId]);
+    const removedItems = (pickList.items || []).filter(item => 
+      !order.items?.some(poItem => poItem.itemId === item.itemId)
+    );
+    
+    // Confirm with user
+    let message = 'Sync pick list from PO?\n\n';
+    if (newItems.length > 0) {
+      message += `➕ ${newItems.length} new item(s) will be added\n`;
+    }
+    if (removedItems.length > 0) {
+      message += `➖ ${removedItems.length} item(s) no longer on PO (will keep with current picked qty)\n`;
+    }
+    if (newItems.length === 0 && removedItems.length === 0) {
+      message += 'No new items found. Quantities will be updated if changed.';
+    }
+    
+    if (!confirm(message)) return;
+    
+    // Update the pick list
+    await DB.updatePickList(pickList.id, { items: updatedItems });
+    
+    // Update local state
+    setSelectedList(prev => ({ ...prev, items: updatedItems }));
+    
+    // Reinitialize local picked quantities
+    const updatedQty = {};
+    updatedItems.forEach(item => {
+      updatedQty[item.itemId] = item.pickedQty || 0;
+    });
+    setLocalPickedQty(updatedQty);
+    
+    loadData();
+    alert(`Synced! ${newItems.length} new item(s) added.`);
+  };
+
   const openPackOrder = (pickList) => {
     const order = getLinkedOrder(pickList);
     if (!order) {
@@ -1238,6 +1316,15 @@ export default function PickLists() {
                       >
                         ✏️ Edit
                       </button>
+                      {selectedList.purchaseOrderId && (
+                        <button 
+                          className="btn"
+                          onClick={() => syncFromPO(selectedList)}
+                          style={{ background: '#2196F3', color: 'white' }}
+                        >
+                          🔄 Sync from PO
+                        </button>
+                      )}
                     </>
                   )}
                 </div>
@@ -1267,7 +1354,7 @@ export default function PickLists() {
             
             {/* Edit button for COMPLETED lists */}
             {selectedList.status === 'completed' && (
-              <div style={{ marginBottom: 20, display: 'flex', gap: 10 }}>
+              <div style={{ marginBottom: 20, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                 <button 
                   className="btn"
                   onClick={() => {
@@ -1296,6 +1383,15 @@ export default function PickLists() {
                 >
                   ✏️ Edit Items
                 </button>
+                {selectedList.purchaseOrderId && (
+                  <button 
+                    className="btn"
+                    onClick={() => syncFromPO(selectedList)}
+                    style={{ background: '#9c27b0', color: 'white' }}
+                  >
+                    🔄 Sync from PO
+                  </button>
+                )}
                 <button 
                   className="btn"
                   onClick={async () => {
@@ -1307,7 +1403,7 @@ export default function PickLists() {
                   }}
                   style={{ background: '#2196F3', color: 'white' }}
                 >
-                  🔄 Reopen
+                  🔓 Reopen
                 </button>
               </div>
             )}

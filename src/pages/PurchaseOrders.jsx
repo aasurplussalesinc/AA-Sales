@@ -108,7 +108,9 @@ export default function PurchaseOrders() {
 
   const addItemToPO = (item) => {
     const unitPrice = parseFloat(item.price) || 0;
+    const lineId = `line_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const newItem = {
+      lineId: lineId,
       itemId: item.id, itemName: item.name, partNumber: item.partNumber, location: item.location || '',
       quantity: '', qtyShipped: '', unitPrice: unitPrice, estTotal: 0, lineTotal: 0,
       source: 'inventory', contractId: '', contractNumber: '', costPerLb: 0,
@@ -256,15 +258,21 @@ export default function PurchaseOrders() {
         if (linkedPickList) {
           // Build updated pick list items, preserving picked quantities for existing items
           const updatedPickListItems = newPO.items.map(poItem => {
-            // Find existing pick list item to preserve pickedQty
-            const existingPlItem = linkedPickList.items?.find(pli => pli.itemId === poItem.itemId);
+            // Use lineId if available, otherwise fall back to itemId for backwards compatibility
+            const matchKey = poItem.lineId || poItem.itemId;
+            const existingPlItem = linkedPickList.items?.find(pli => 
+              (pli.lineId && pli.lineId === poItem.lineId) || 
+              (!pli.lineId && !poItem.lineId && pli.itemId === poItem.itemId)
+            );
             return {
+              lineId: poItem.lineId || `line_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               itemId: poItem.itemId,
               itemName: poItem.itemName,
               partNumber: poItem.partNumber,
               requestedQty: poItem.quantity,
               pickedQty: existingPlItem?.pickedQty || 0,
-              location: poItem.location || existingPlItem?.location || ''
+              location: poItem.location || existingPlItem?.location || '',
+              unitPrice: poItem.unitPrice
             };
           });
           
@@ -354,11 +362,12 @@ export default function PurchaseOrders() {
     // Find the associated pick list for this order
     const pickList = pickLists.find(pl => pl.purchaseOrderId === order.id);
     
-    // Build a map of picked quantities from the pick list
+    // Build a map of picked quantities from the pick list using lineId
     const pickedQtyMap = {};
     if (pickList && pickList.items) {
       pickList.items.forEach(plItem => {
-        pickedQtyMap[plItem.itemId] = plItem.pickedQty || 0;
+        const key = plItem.lineId || plItem.itemId;
+        pickedQtyMap[key] = plItem.pickedQty || 0;
       });
     }
     
@@ -366,10 +375,13 @@ export default function PurchaseOrders() {
     const orderWithPickedQty = {
       ...order,
       pickListId: pickList?.id,
-      items: (order.items || []).map(item => ({
-        ...item,
-        pickedQty: pickedQtyMap[item.itemId] ?? (parseInt(item.qtyShipped) || parseInt(item.quantity) || 0)
-      }))
+      items: (order.items || []).map(item => {
+        const key = item.lineId || item.itemId;
+        return {
+          ...item,
+          pickedQty: pickedQtyMap[key] ?? (parseInt(item.qtyShipped) || parseInt(item.quantity) || 0)
+        };
+      })
     };
     
     setPackingOrder(orderWithPickedQty);

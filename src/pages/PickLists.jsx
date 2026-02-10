@@ -66,12 +66,15 @@ export default function PickLists() {
     loadData();
   }, []);
 
+  // Helper to get unique key for line items (supports duplicate items with different prices)
+  const getLineKey = (item) => item.lineId || item.itemId;
+
   // Initialize local picked quantities when selectedList changes
   useEffect(() => {
     if (selectedList) {
       const initialQty = {};
       selectedList.items?.forEach(item => {
-        initialQty[item.itemId] = item.pickedQty || 0;
+        initialQty[getLineKey(item)] = item.pickedQty || 0;
       });
       setLocalPickedQty(initialQty);
     }
@@ -192,9 +195,9 @@ export default function PickLists() {
     loadData();
   };
 
-  const updatePickedQty = async (list, itemId, qty) => {
+  const updatePickedQty = async (list, lineKey, qty) => {
     const updatedItems = list.items.map(i =>
-      i.itemId === itemId ? { ...i, pickedQty: parseInt(qty) || 0 } : i
+      getLineKey(i) === lineKey ? { ...i, pickedQty: parseInt(qty) || 0 } : i
     );
     
     await DB.updatePickList(list.id, { items: updatedItems });
@@ -207,18 +210,18 @@ export default function PickLists() {
   };
 
   // Handle local input change (no database call)
-  const handleLocalQtyChange = (itemId, value) => {
+  const handleLocalQtyChange = (lineKey, value) => {
     setLocalPickedQty(prev => ({
       ...prev,
-      [itemId]: value === '' ? '' : (parseInt(value) || 0)
+      [lineKey]: value === '' ? '' : (parseInt(value) || 0)
     }));
   };
 
   // Save to database on blur
-  const handleQtyBlur = async (itemId) => {
-    const qty = localPickedQty[itemId];
+  const handleQtyBlur = async (lineKey) => {
+    const qty = localPickedQty[lineKey];
     if (selectedList) {
-      await updatePickedQty(selectedList, itemId, qty);
+      await updatePickedQty(selectedList, lineKey, qty);
     }
   };
 
@@ -478,19 +481,21 @@ export default function PickLists() {
       return;
     }
     
-    // Build a map of existing pick list items by itemId
+    // Build a map of existing pick list items by lineId (or itemId for backwards compat)
     const existingItems = {};
     (pickList.items || []).forEach(item => {
-      existingItems[item.itemId] = item;
+      existingItems[getLineKey(item)] = item;
     });
     
     // Build updated items list from PO
     const updatedItems = (order.items || []).map(poItem => {
-      const existingItem = existingItems[poItem.itemId];
+      const poLineKey = poItem.lineId || poItem.itemId;
+      const existingItem = existingItems[poLineKey];
       if (existingItem) {
         // Item exists - keep picked qty, update requested qty
         return {
           ...existingItem,
+          lineId: poItem.lineId || existingItem.lineId,
           requestedQty: parseInt(poItem.quantity) || 0,
           itemName: poItem.itemName,
           partNumber: poItem.partNumber,
@@ -501,6 +506,7 @@ export default function PickLists() {
         const itemData = items.find(i => i.id === poItem.itemId);
         const itemLocation = locations.find(l => l.id === itemData?.locationId);
         return {
+          lineId: poItem.lineId || `line_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           itemId: poItem.itemId,
           itemName: poItem.itemName,
           partNumber: poItem.partNumber,
@@ -513,9 +519,9 @@ export default function PickLists() {
     });
     
     // Count changes
-    const newItems = updatedItems.filter(item => !existingItems[item.itemId]);
+    const newItems = updatedItems.filter(item => !existingItems[getLineKey(item)]);
     const removedItems = (pickList.items || []).filter(item => 
-      !order.items?.some(poItem => poItem.itemId === item.itemId)
+      !order.items?.some(poItem => (poItem.lineId || poItem.itemId) === getLineKey(item))
     );
     
     // Confirm with user
@@ -541,7 +547,7 @@ export default function PickLists() {
     // Reinitialize local picked quantities
     const updatedQty = {};
     updatedItems.forEach(item => {
-      updatedQty[item.itemId] = item.pickedQty || 0;
+      updatedQty[getLineKey(item)] = item.pickedQty || 0;
     });
     setLocalPickedQty(updatedQty);
     
@@ -556,11 +562,12 @@ export default function PickLists() {
       return;
     }
     
-    // Build a map of picked quantities from the pick list
+    // Build a map of picked quantities from the pick list using lineId
     const pickedQtyMap = {};
     if (pickList.items) {
       pickList.items.forEach(plItem => {
-        pickedQtyMap[plItem.itemId] = plItem.pickedQty || 0;
+        const key = plItem.lineId || plItem.itemId;
+        pickedQtyMap[key] = plItem.pickedQty || 0;
       });
     }
     
@@ -568,10 +575,13 @@ export default function PickLists() {
     const orderWithPickedQty = {
       ...order,
       pickListId: pickList.id,
-      items: (order.items || []).map(item => ({
-        ...item,
-        pickedQty: pickedQtyMap[item.itemId] ?? (parseInt(item.qtyShipped) || parseInt(item.quantity) || 0)
-      }))
+      items: (order.items || []).map(item => {
+        const key = item.lineId || item.itemId;
+        return {
+          ...item,
+          pickedQty: pickedQtyMap[key] ?? (parseInt(item.qtyShipped) || parseInt(item.quantity) || 0)
+        };
+      })
     };
     
     setPackingOrder(orderWithPickedQty);
@@ -1294,7 +1304,7 @@ export default function PickLists() {
                           // Fill all items with their requested qty
                           const updatedQty = {};
                           selectedList.items?.forEach(item => {
-                            updatedQty[item.itemId] = item.requestedQty;
+                            updatedQty[getLineKey(item)] = item.requestedQty;
                           });
                           setLocalPickedQty(updatedQty);
                           // Save all to database
@@ -1361,7 +1371,7 @@ export default function PickLists() {
                     // Fill all items with their requested qty
                     const updatedQty = {};
                     selectedList.items?.forEach(item => {
-                      updatedQty[item.itemId] = item.requestedQty;
+                      updatedQty[getLineKey(item)] = item.requestedQty;
                     });
                     setLocalPickedQty(updatedQty);
                     // Save all to database
@@ -1418,20 +1428,23 @@ export default function PickLists() {
                 </tr>
               </thead>
               <tbody>
-                {selectedList.items?.map(item => (
-                  <tr key={item.itemId} style={{ borderBottom: '1px solid #eee' }}>
+                {selectedList.items?.map(item => {
+                  const lineKey = getLineKey(item);
+                  return (
+                  <tr key={lineKey} style={{ borderBottom: '1px solid #eee' }}>
                     <td style={{ padding: 10 }}>
                       <strong>{item.itemName}</strong>
                       <div style={{ fontSize: 12, color: '#666' }}>{item.partNumber}</div>
                       {item.location && <div style={{ fontSize: 11, color: '#2d5f3f' }}>📍 {item.location}</div>}
+                      {item.unitPrice > 0 && <div style={{ fontSize: 11, color: '#888' }}>@ ${parseFloat(item.unitPrice).toFixed(2)}</div>}
                     </td>
                     <td style={{ padding: 10, textAlign: 'center' }}>{item.requestedQty}</td>
                     <td style={{ padding: 10, textAlign: 'center' }}>
                       <input
                         type="number"
-                        value={(() => { const v = localPickedQty[item.itemId] ?? item.pickedQty; return v === '' || v === undefined || v === null ? '' : v; })()}
-                        onChange={e => handleLocalQtyChange(item.itemId, e.target.value)}
-                        onBlur={() => handleQtyBlur(item.itemId)}
+                        value={(() => { const v = localPickedQty[lineKey] ?? item.pickedQty; return v === '' || v === undefined || v === null ? '' : v; })()}
+                        onChange={e => handleLocalQtyChange(lineKey, e.target.value)}
+                        onBlur={() => handleQtyBlur(lineKey)}
                         style={{ width: 60, padding: 5, textAlign: 'center' }}
                         min="0"
                         max={item.requestedQty}
@@ -1439,10 +1452,11 @@ export default function PickLists() {
                       />
                     </td>
                     <td style={{ padding: 10, textAlign: 'center' }}>
-                      {(localPickedQty[item.itemId] ?? item.pickedQty ?? 0) >= item.requestedQty ? '✅' : (localPickedQty[item.itemId] ?? item.pickedQty ?? 0) > 0 ? '🔶' : '⬜'}
+                      {(localPickedQty[lineKey] ?? item.pickedQty ?? 0) >= item.requestedQty ? '✅' : (localPickedQty[lineKey] ?? item.pickedQty ?? 0) > 0 ? '🔶' : '⬜'}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
 

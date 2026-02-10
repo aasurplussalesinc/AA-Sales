@@ -723,12 +723,14 @@ export const DB = {
       notes: `Auto-generated from Purchase Order ${po.poNumber}`,
       purchaseOrderId: poId,
       items: po.items.map(item => ({
+        lineId: item.lineId || `line_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         itemId: item.itemId,
         itemName: item.itemName,
         partNumber: item.partNumber,
         requestedQty: item.quantity,
         pickedQty: 0,
-        location: item.location || ''
+        location: item.location || '',
+        unitPrice: item.unitPrice
       }))
     };
     

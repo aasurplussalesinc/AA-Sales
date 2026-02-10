@@ -1594,7 +1594,7 @@ ${labelsHtml}
               {selectedOrder.paymentMethod && (
                 <div style={{ background: '#e8f5e9', padding: 15, borderRadius: 8, marginBottom: 20 }}>
                   <strong>💰 Payment:</strong> {
-                    { cash: '💵 Cash', credit_card: '💳 Credit Card', zelle: '📱 Zelle', venmo: '📲 Venmo', apple_pay: '🍎 Apple Pay', ach: '🏦 ACH', wire: '🔌 Wire Transfer', check: '📝 Check' }[selectedOrder.paymentMethod] || selectedOrder.paymentMethod
+                    { cash: '💵 Cash', credit_card: '💳 Credit Card', paypal: '🅿️ PayPal', squarespace_paylink: '🔗 Squarespace Paylink', zelle: '📱 Zelle', venmo: '📲 Venmo', apple_pay: '🍎 Apple Pay', ach: '🏦 ACH', wire: '🔌 Wire Transfer', check: '📝 Check' }[selectedOrder.paymentMethod] || selectedOrder.paymentMethod
                   }
                   {selectedOrder.paidAt && <span style={{ marginLeft: 15, color: '#666', fontSize: 13 }}>on {formatDate(selectedOrder.paidAt)}</span>}
                 </div>
@@ -2031,6 +2031,8 @@ ${labelsHtml}
                 <option value="">-- Select Payment Method --</option>
                 <option value="cash">💵 Cash</option>
                 <option value="credit_card">💳 Credit Card</option>
+                <option value="paypal">🅿️ PayPal</option>
+                <option value="squarespace_paylink">🔗 Squarespace Paylink</option>
                 <option value="zelle">📱 Zelle</option>
                 <option value="venmo">📲 Venmo</option>
                 <option value="apple_pay">🍎 Apple Pay</option>

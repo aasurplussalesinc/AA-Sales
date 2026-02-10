@@ -874,6 +874,73 @@ export default function PickLists() {
     return true;
   };
 
+  // Reset packing completely from the current pick list
+  const resetPackingFromPickList = () => {
+    if (!packingOrder) return;
+    
+    // Find the linked pick list
+    const pickList = pickLists.find(pl => pl.purchaseOrderId === packingOrder.id);
+    if (!pickList) {
+      alert('No linked pick list found.');
+      return;
+    }
+    
+    if (!confirm('This will RESET all packing data and reload items fresh from the pick list.\n\nAll box assignments, triwall data, and packed checkboxes will be cleared.\n\nContinue?')) {
+      return;
+    }
+    
+    // Build fresh items from pick list
+    const pickedQtyMap = {};
+    if (pickList.items) {
+      pickList.items.forEach(plItem => {
+        const key = plItem.lineId || plItem.itemId;
+        pickedQtyMap[key] = { qty: plItem.pickedQty || 0, item: plItem };
+      });
+    }
+    
+    // Rebuild order items from pick list
+    const freshItems = pickList.items.map(plItem => ({
+      lineId: plItem.lineId,
+      itemId: plItem.itemId,
+      itemName: plItem.itemName,
+      partNumber: plItem.partNumber,
+      quantity: plItem.requestedQty,
+      qtyShipped: 0,
+      pickedQty: plItem.pickedQty || 0,
+      unitPrice: plItem.unitPrice || 0,
+      location: plItem.location || ''
+    }));
+    
+    // Reset packing order with fresh items
+    setPackingOrder(prev => ({
+      ...prev,
+      items: freshItems,
+      packingComplete: false,
+      packingDraft: false,
+      triwalls: [],
+      triwallAssignments: {},
+      boxDistributions: {},
+      boxDetails: {},
+      packedItems: {}
+    }));
+    
+    // Reset all packing state
+    setPackingMode('boxes');
+    setTriwalls([]);
+    setTriwallAssignments({});
+    setPackedItems({});
+    
+    // Initialize fresh box assignments - all items in box 1
+    const freshDistributions = {};
+    freshItems.forEach((item, idx) => {
+      freshDistributions[idx] = [{ box: 1, qty: item.pickedQty || 0 }];
+    });
+    setBoxAssignments(freshDistributions);
+    setBoxDetails({});
+    
+    alert('Packing reset! Items reloaded from pick list.');
+  };
+
   const savePackOrderDraft = async () => {
     if (!packingOrder) return;
     
@@ -2115,41 +2182,54 @@ export default function PickLists() {
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: 15, borderTop: '1px solid #eee', alignItems: 'center' }}>
-              <select
-                value={packCompletedBy}
-                onChange={e => setPackCompletedBy(e.target.value)}
-                style={{ padding: 10, borderRadius: 4, border: '1px solid #ddd', minWidth: 150 }}
-              >
-                <option value="">Packed By...</option>
-                {employeeOptions.map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-              <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: 15, borderTop: '1px solid #eee', alignItems: 'center' }}>
               <button 
-                onClick={savePackOrderDraft} 
+                onClick={resetPackingFromPickList} 
                 style={{ 
                   padding: '10px 20px', 
-                  background: '#ff9800', 
+                  background: '#f44336', 
                   color: 'white', border: 'none', borderRadius: 6, 
                   cursor: 'pointer'
                 }}
               >
-                💾 Save for Now
+                🔄 Reset from Pick List
               </button>
-              <button 
-                onClick={savePackOrder} 
-                disabled={(packingMode === 'triwalls' ? !validateTriwallPacking() : !validatePacking()) || !packCompletedBy} 
-                style={{ 
-                  padding: '10px 20px', 
-                  background: ((packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) && packCompletedBy) ? '#4CAF50' : '#ccc', 
-                  color: 'white', border: 'none', borderRadius: 6, 
-                  cursor: ((packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) && packCompletedBy) ? 'pointer' : 'not-allowed' 
-                }}
-              >
-                ✅ Save Packing
-              </button>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <select
+                  value={packCompletedBy}
+                  onChange={e => setPackCompletedBy(e.target.value)}
+                  style={{ padding: 10, borderRadius: 4, border: '1px solid #ddd', minWidth: 150 }}
+                >
+                  <option value="">Packed By...</option>
+                  {employeeOptions.map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+                <button 
+                  onClick={savePackOrderDraft} 
+                  style={{ 
+                    padding: '10px 20px', 
+                    background: '#ff9800', 
+                    color: 'white', border: 'none', borderRadius: 6, 
+                    cursor: 'pointer'
+                  }}
+                >
+                  💾 Save for Now
+                </button>
+                <button 
+                  onClick={savePackOrder} 
+                  disabled={(packingMode === 'triwalls' ? !validateTriwallPacking() : !validatePacking()) || !packCompletedBy} 
+                  style={{ 
+                    padding: '10px 20px', 
+                    background: ((packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) && packCompletedBy) ? '#4CAF50' : '#ccc', 
+                    color: 'white', border: 'none', borderRadius: 6, 
+                    cursor: ((packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) && packCompletedBy) ? 'pointer' : 'not-allowed' 
+                  }}
+                >
+                  ✅ Save Packing
+                </button>
+              </div>
             </div>
           </div>
         </div>

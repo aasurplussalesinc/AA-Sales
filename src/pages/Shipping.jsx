@@ -21,6 +21,8 @@ export default function Shipping() {
   const [checkMinute, setCheckMinute] = useState(0);
   const [preferredCarrier, setPreferredCarrier] = useState('ups');
   const [autoPurchase, setAutoPurchase] = useState(false);
+  const [shippoApiKey, setShippoApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
   const [fromAddress, setFromAddress] = useState({
     name: '', company: '', street1: '', street2: '', city: '', state: '', zip: '', country: 'US', phone: '', email: ''
   });
@@ -57,6 +59,7 @@ export default function Shipping() {
     setCheckMinute(s.shippingCheckMinute ?? 0);
     setPreferredCarrier(s.preferredCarrier || 'ups');
     setAutoPurchase(s.autoPurchaseLabels || false);
+    setShippoApiKey(s.shippoApiKey || '');
     if (s.shippingFromAddress) {
       setFromAddress({
         name: s.shippingFromAddress.name || '',
@@ -77,6 +80,11 @@ export default function Shipping() {
     setSavingSettings(true);
     setError('');
     try {
+      if (!shippoApiKey) {
+        setError('Shippo API key is required. Get one at goshippo.com');
+        setSavingSettings(false);
+        return;
+      }
       await DB.updateOrganization(organization.id, {
         'settings.shippingEnabled': shippingEnabled,
         'settings.shippingCheckHour': parseInt(checkHour),
@@ -84,6 +92,7 @@ export default function Shipping() {
         'settings.preferredCarrier': preferredCarrier,
         'settings.autoPurchaseLabels': autoPurchase,
         'settings.shippingFromAddress': fromAddress,
+        'settings.shippoApiKey': shippoApiKey,
       });
 
       // Also update via Cloud Function for the scheduler
@@ -253,6 +262,43 @@ export default function Shipping() {
       {showSettings && (
         <div style={{ background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 12, padding: 24, marginBottom: 20 }}>
           <h3 style={{ marginTop: 0 }}>⚙️ Shipping Settings</h3>
+
+          {/* Shippo API Key */}
+          <div style={{ marginBottom: 20, padding: 16, background: 'white', borderRadius: 8, border: '2px solid #1976d2' }}>
+            <h4 style={{ margin: '0 0 10px', color: '#1976d2' }}>🔑 Shippo API Key</h4>
+            <p style={{ margin: '0 0 10px', color: '#666', fontSize: 13 }}>
+              Each organization needs their own Shippo account. 
+              <a href="https://goshippo.com" target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2', marginLeft: 4 }}>
+                Sign up free at goshippo.com →
+              </a>
+            </p>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                type={showApiKey ? 'text' : 'password'}
+                value={shippoApiKey}
+                onChange={e => setShippoApiKey(e.target.value)}
+                placeholder="shippo_live_xxxxxxxxxxxxxxxx"
+                style={{
+                  flex: 1, padding: '10px 12px', borderRadius: 6, border: '1px solid #ccc',
+                  fontSize: 14, fontFamily: 'monospace'
+                }}
+              />
+              <button
+                onClick={() => setShowApiKey(!showApiKey)}
+                style={{
+                  padding: '10px 14px', background: '#f5f5f5', border: '1px solid #ccc',
+                  borderRadius: 6, cursor: 'pointer', fontSize: 13
+                }}
+              >
+                {showApiKey ? '🙈 Hide' : '👁️ Show'}
+              </button>
+            </div>
+            {shippoApiKey && (
+              <div style={{ marginTop: 8, fontSize: 12, color: shippoApiKey.startsWith('shippo_test_') ? '#ff9800' : '#4CAF50' }}>
+                {shippoApiKey.startsWith('shippo_test_') ? '⚠️ Using TEST key — labels won\'t be real' : '✅ Using LIVE key'}
+              </div>
+            )}
+          </div>
 
           {/* Enable/Disable */}
           <div style={{ marginBottom: 20 }}>

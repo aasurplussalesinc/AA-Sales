@@ -31,6 +31,9 @@ export default function Shipping() {
   // Rate selection modal
   const [showRates, setShowRates] = useState(null); // order ID showing rates
   const [selectedRate, setSelectedRate] = useState(null);
+  const [rateSortBy, setRateSortBy] = useState('cheapest'); // cheapest, fastest, carrier
+  const [rateFilterCarrier, setRateFilterCarrier] = useState('all'); // all, ups, usps, fedex, dhl
+  const [rateViewMode, setRateViewMode] = useState('table'); // table, cards
 
   useEffect(() => {
     loadData();
@@ -617,57 +620,244 @@ export default function Shipping() {
             </tbody>
           </table>
 
-          {/* Rates Selection Modal (inline under the order) */}
+          {/* Rates Selection Panel */}
           {showRates && (() => {
             const order = filteredOrders.find(o => o.id === showRates);
             if (!order?.shippingLabel?.rates?.length) return null;
 
+            const allRates = order.shippingLabel.rates;
+            
+            // Get unique carriers for filter
+            const carriers = [...new Set(allRates.map(r => r.provider))];
+
+            // Filter rates
+            const filteredRates = rateFilterCarrier === 'all' 
+              ? allRates 
+              : allRates.filter(r => r.provider.toLowerCase().includes(rateFilterCarrier.toLowerCase()));
+
+            // Sort rates
+            const sortedRates = [...filteredRates].sort((a, b) => {
+              switch (rateSortBy) {
+                case 'cheapest': return parseFloat(a.amount) - parseFloat(b.amount);
+                case 'expensive': return parseFloat(b.amount) - parseFloat(a.amount);
+                case 'fastest': return (a.estimatedDays || 99) - (b.estimatedDays || 99);
+                case 'carrier': return (a.provider || '').localeCompare(b.provider || '');
+                default: return parseFloat(a.amount) - parseFloat(b.amount);
+              }
+            });
+
+            // Find cheapest and fastest for badges
+            const cheapest = [...allRates].sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))[0];
+            const fastest = [...allRates].filter(r => r.estimatedDays).sort((a, b) => a.estimatedDays - b.estimatedDays)[0];
+
             return (
               <div style={{
-                background: '#fff3e0', border: '2px solid #ff9800', borderRadius: 12,
+                background: '#fafafa', border: '2px solid #1976d2', borderRadius: 12,
                 padding: 20, marginTop: 10, marginBottom: 10
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                  <h4 style={{ margin: 0 }}>💰 Available Rates for {order.poNumber}</h4>
-                  <button onClick={() => setShowRates(null)} style={{
-                    background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#999'
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 10 }}>
+                  <div>
+                    <h4 style={{ margin: 0 }}>💰 Shipping Rates for {order.poNumber}</h4>
+                    <span style={{ fontSize: 12, color: '#666' }}>
+                      {allRates.length} rate{allRates.length !== 1 ? 's' : ''} from {carriers.length} carrier{carriers.length !== 1 ? 's' : ''}
+                      {' • '}{order.customerName} → {order.shipToAddress || order.customerAddress || 'N/A'}
+                    </span>
+                  </div>
+                  <button onClick={() => { setShowRates(null); setRateFilterCarrier('all'); }} style={{
+                    background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999', padding: '0 4px'
                   }}>✕</button>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-                  {order.shippingLabel.rates
-                    .sort((a, b) => parseFloat(a.amount) - parseFloat(b.amount))
-                    .map(rate => (
-                      <div
-                        key={rate.rateId}
+
+                {/* Quick Stats */}
+                <div style={{ display: 'flex', gap: 12, marginBottom: 15, flexWrap: 'wrap' }}>
+                  {cheapest && (
+                    <div style={{ padding: '8px 14px', background: '#e8f5e9', borderRadius: 8, fontSize: 13 }}>
+                      💚 Cheapest: <strong>${cheapest.amount}</strong> ({cheapest.provider} {cheapest.servicelevel})
+                    </div>
+                  )}
+                  {fastest && fastest.rateId !== cheapest?.rateId && (
+                    <div style={{ padding: '8px 14px', background: '#e3f2fd', borderRadius: 8, fontSize: 13 }}>
+                      ⚡ Fastest: <strong>{fastest.estimatedDays} day{fastest.estimatedDays !== 1 ? 's' : ''}</strong> — ${fastest.amount} ({fastest.provider} {fastest.servicelevel})
+                    </div>
+                  )}
+                </div>
+
+                {/* Filter & Sort Controls */}
+                <div style={{ display: 'flex', gap: 10, marginBottom: 15, flexWrap: 'wrap', alignItems: 'center' }}>
+                  {/* Sort */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Sort:</span>
+                    {[
+                      { value: 'cheapest', label: '💲 Cheapest' },
+                      { value: 'expensive', label: '💎 Most Expensive' },
+                      { value: 'fastest', label: '⚡ Fastest' },
+                      { value: 'carrier', label: '🏢 Carrier' },
+                    ].map(s => (
+                      <button
+                        key={s.value}
+                        onClick={() => setRateSortBy(s.value)}
                         style={{
-                          background: 'white', borderRadius: 8, padding: 14,
-                          border: selectedRate === rate.rateId ? '2px solid #1976d2' : '1px solid #ddd',
-                          cursor: 'pointer'
+                          padding: '5px 12px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer',
+                          background: rateSortBy === s.value ? '#1976d2' : 'white',
+                          color: rateSortBy === s.value ? 'white' : '#333',
+                          fontWeight: rateSortBy === s.value ? 600 : 400, fontSize: 12
                         }}
-                        onClick={() => setSelectedRate(rate.rateId)}
                       >
-                        <div style={{ fontWeight: 700, fontSize: 18, color: '#1976d2' }}>${rate.amount}</div>
-                        <div style={{ fontWeight: 600, marginTop: 4 }}>{rate.provider}</div>
-                        <div style={{ fontSize: 12, color: '#666' }}>{rate.servicelevel}</div>
-                        {rate.estimatedDays && (
-                          <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
-                            Est. {rate.estimatedDays} day{rate.estimatedDays !== 1 ? 's' : ''}
-                          </div>
-                        )}
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Carrier Filter */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Carrier:</span>
+                    <button
+                      onClick={() => setRateFilterCarrier('all')}
+                      style={{
+                        padding: '5px 12px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer',
+                        background: rateFilterCarrier === 'all' ? '#424242' : 'white',
+                        color: rateFilterCarrier === 'all' ? 'white' : '#333',
+                        fontWeight: rateFilterCarrier === 'all' ? 600 : 400, fontSize: 12
+                      }}
+                    >
+                      All ({allRates.length})
+                    </button>
+                    {carriers.map(c => {
+                      const count = allRates.filter(r => r.provider === c).length;
+                      return (
                         <button
-                          onClick={(e) => { e.stopPropagation(); purchaseRate(order.id, rate.rateId); }}
-                          disabled={processing[order.id]}
+                          key={c}
+                          onClick={() => setRateFilterCarrier(rateFilterCarrier === c.toLowerCase() ? 'all' : c.toLowerCase())}
                           style={{
-                            marginTop: 10, padding: '6px 14px', background: '#4CAF50', color: 'white',
-                            border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
-                            width: '100%'
+                            padding: '5px 12px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer',
+                            background: rateFilterCarrier === c.toLowerCase() ? '#424242' : 'white',
+                            color: rateFilterCarrier === c.toLowerCase() ? 'white' : '#333',
+                            fontWeight: rateFilterCarrier === c.toLowerCase() ? 600 : 400, fontSize: 12
                           }}
                         >
-                          {processing[order.id] ? 'Purchasing...' : '🏷️ Purchase This Rate'}
+                          {c} ({count})
                         </button>
-                      </div>
-                    ))}
+                      );
+                    })}
+                  </div>
+
+                  {/* View Toggle */}
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
+                    <button onClick={() => setRateViewMode('table')} style={{
+                      padding: '5px 10px', border: '1px solid #ddd', borderRadius: '6px 0 0 6px', cursor: 'pointer',
+                      background: rateViewMode === 'table' ? '#424242' : 'white', color: rateViewMode === 'table' ? 'white' : '#333', fontSize: 12
+                    }}>☰ Table</button>
+                    <button onClick={() => setRateViewMode('cards')} style={{
+                      padding: '5px 10px', border: '1px solid #ddd', borderRadius: '0 6px 6px 0', cursor: 'pointer',
+                      background: rateViewMode === 'cards' ? '#424242' : 'white', color: rateViewMode === 'cards' ? 'white' : '#333', fontSize: 12
+                    }}>▦ Cards</button>
+                  </div>
                 </div>
+
+                {/* Table View */}
+                {rateViewMode === 'table' ? (
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: '#e8eaf6', textAlign: 'left' }}>
+                          <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}>Carrier</th>
+                          <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}>Service</th>
+                          <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'right' }}>Price</th>
+                          <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'center' }}>Est. Delivery</th>
+                          <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}></th>
+                          <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'center' }}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedRates.map((rate, idx) => {
+                          const isCheapest = rate.rateId === cheapest?.rateId;
+                          const isFastest = rate.rateId === fastest?.rateId && !isCheapest;
+                          return (
+                            <tr key={rate.rateId} style={{
+                              borderBottom: '1px solid #eee',
+                              background: isCheapest ? '#f1f8e9' : isFastest ? '#e8f4fd' : idx % 2 === 0 ? 'white' : '#fafafa',
+                            }}>
+                              <td style={{ padding: '10px 12px', fontWeight: 600 }}>{rate.provider}</td>
+                              <td style={{ padding: '10px 12px' }}>{rate.servicelevel}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontSize: 15, color: '#1976d2' }}>
+                                ${rate.amount}
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                {rate.estimatedDays
+                                  ? `${rate.estimatedDays} day${rate.estimatedDays !== 1 ? 's' : ''}`
+                                  : <span style={{ color: '#ccc' }}>—</span>
+                                }
+                              </td>
+                              <td style={{ padding: '10px 12px' }}>
+                                {isCheapest && <span style={{ background: '#4CAF50', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 }}>CHEAPEST</span>}
+                                {isFastest && <span style={{ background: '#2196F3', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 }}>FASTEST</span>}
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                <button
+                                  onClick={() => purchaseRate(order.id, rate.rateId)}
+                                  disabled={processing[order.id]}
+                                  style={{
+                                    padding: '6px 16px', background: '#4CAF50', color: 'white',
+                                    border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600
+                                  }}
+                                >
+                                  {processing[order.id] ? '...' : '🏷️ Buy'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {sortedRates.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: 20, color: '#999' }}>No rates match this filter</div>
+                    )}
+                  </div>
+                ) : (
+                  /* Cards View */
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
+                    {sortedRates.map(rate => {
+                      const isCheapest = rate.rateId === cheapest?.rateId;
+                      const isFastest = rate.rateId === fastest?.rateId && !isCheapest;
+                      return (
+                        <div
+                          key={rate.rateId}
+                          style={{
+                            background: 'white', borderRadius: 8, padding: 14,
+                            border: isCheapest ? '2px solid #4CAF50' : isFastest ? '2px solid #2196F3' : '1px solid #ddd',
+                            position: 'relative'
+                          }}
+                        >
+                          {isCheapest && <div style={{ position: 'absolute', top: -8, right: 10, background: '#4CAF50', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>CHEAPEST</div>}
+                          {isFastest && <div style={{ position: 'absolute', top: -8, right: 10, background: '#2196F3', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>FASTEST</div>}
+                          <div style={{ fontWeight: 700, fontSize: 20, color: '#1976d2' }}>${rate.amount}</div>
+                          <div style={{ fontWeight: 600, marginTop: 4 }}>{rate.provider}</div>
+                          <div style={{ fontSize: 12, color: '#666' }}>{rate.servicelevel}</div>
+                          {rate.estimatedDays && (
+                            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                              Est. {rate.estimatedDays} day{rate.estimatedDays !== 1 ? 's' : ''}
+                            </div>
+                          )}
+                          <button
+                            onClick={() => purchaseRate(order.id, rate.rateId)}
+                            disabled={processing[order.id]}
+                            style={{
+                              marginTop: 10, padding: '6px 14px', background: '#4CAF50', color: 'white',
+                              border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                              width: '100%'
+                            }}
+                          >
+                            {processing[order.id] ? 'Purchasing...' : '🏷️ Purchase'}
+                          </button>
+                        </div>
+                      );
+                    })}
+                    {sortedRates.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: 20, color: '#999', gridColumn: '1 / -1' }}>No rates match this filter</div>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })()}

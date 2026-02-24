@@ -192,6 +192,123 @@ export default function Shipping() {
     }
   };
 
+  // ==================== BATCH OPERATIONS ====================
+  const [selectedOrders, setSelectedOrders] = useState({});
+  const [batchProcessing, setBatchProcessing] = useState(false);
+  const [batchResults, setBatchResults] = useState(null);
+
+  const toggleOrderSelection = (orderId) => {
+    setSelectedOrders(prev => {
+      const next = { ...prev };
+      if (next[orderId]) delete next[orderId];
+      else next[orderId] = true;
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    const newSelection = {};
+    filteredOrders.filter(o => o.status === 'packed' && !o.shippingLabel?.trackingNumber).forEach(o => {
+      newSelection[o.id] = true;
+    });
+    setSelectedOrders(newSelection);
+  };
+
+  const clearSelection = () => setSelectedOrders({});
+
+  const selectedCount = Object.keys(selectedOrders).length;
+
+  const batchGetRates = async () => {
+    const ids = Object.keys(selectedOrders);
+    if (ids.length === 0) return;
+    setBatchProcessing(true);
+    setError('');
+    try {
+      const batchFn = httpsCallable(functions, 'batchGenerateLabels');
+      const result = await batchFn({ orderIds: ids, orgId: organization.id, autoPurchase: false });
+      setBatchResults(result.data);
+      setMessage(`✅ Batch complete: ${result.data.success.length} succeeded, ${result.data.failed.length} failed`);
+      setSelectedOrders({});
+      await loadData();
+    } catch (err) {
+      setError(`Batch failed: ${err.message}`);
+    }
+    setBatchProcessing(false);
+  };
+
+  const batchAutoPurchase = async () => {
+    const ids = Object.keys(selectedOrders);
+    if (ids.length === 0) return;
+    if (!window.confirm(`Purchase labels for ${ids.length} order(s) using your preferred carrier? This will charge your Shippo account.`)) return;
+    setBatchProcessing(true);
+    setError('');
+    try {
+      const batchFn = httpsCallable(functions, 'batchGenerateLabels');
+      const result = await batchFn({ orderIds: ids, orgId: organization.id, autoPurchase: true });
+      setBatchResults(result.data);
+      setMessage(`✅ Batch purchase complete: ${result.data.success.length} labels purchased, ${result.data.failed.length} failed`);
+      setSelectedOrders({});
+      await loadData();
+    } catch (err) {
+      setError(`Batch purchase failed: ${err.message}`);
+    }
+    setBatchProcessing(false);
+  };
+
+  // ==================== CUSTOMS MODAL ====================
+  const [showCustoms, setShowCustoms] = useState(null); // orderId
+  const [customsForm, setCustomsForm] = useState({
+    description: 'Military surplus tactical gear and equipment',
+    contentsType: 'MERCHANDISE',
+    nonDeliveryOption: 'RETURN',
+    incoterm: 'DDU',
+    eelPfc: 'NOEEI_30_37_a',
+    destinationCountry: '',
+    defaultTariffNumber: '',
+  });
+  const [savingCustoms, setSavingCustoms] = useState(false);
+
+  const openCustomsModal = (order) => {
+    setCustomsForm({
+      description: order.customsInfo?.description || 'Military surplus tactical gear and equipment',
+      contentsType: order.customsInfo?.contentsType || 'MERCHANDISE',
+      nonDeliveryOption: order.customsInfo?.nonDeliveryOption || 'RETURN',
+      incoterm: order.customsInfo?.incoterm || 'DDU',
+      eelPfc: order.customsInfo?.eelPfc || 'NOEEI_30_37_a',
+      destinationCountry: order.customsInfo?.destinationCountry || detectCountry(order) || '',
+      defaultTariffNumber: order.customsInfo?.defaultTariffNumber || '',
+    });
+    setShowCustoms(order.id);
+  };
+
+  const detectCountry = (order) => {
+    const addr = order.shipToAddress || order.customerAddress || '';
+    if (addr.match(/[A-Z]\d[A-Z]\s?\d[A-Z]\d/i)) return 'CA';
+    if (addr.toLowerCase().includes('canada')) return 'CA';
+    return '';
+  };
+
+  const saveCustomsInfo = async () => {
+    if (!showCustoms) return;
+    setSavingCustoms(true);
+    try {
+      const saveFn = httpsCallable(functions, 'saveCustomsInfo');
+      await saveFn({ orderId: showCustoms, orgId: organization.id, customsInfo: customsForm });
+      setMessage('✅ Customs info saved!');
+      setShowCustoms(null);
+      await loadData();
+    } catch (err) {
+      setError('Failed to save customs info: ' + err.message);
+    }
+    setSavingCustoms(false);
+  };
+
+  const isLikelyInternational = (order) => {
+    const addr = order.shipToAddress || order.customerAddress || '';
+    return !!(addr.match(/[A-Z]\d[A-Z]\s?\d[A-Z]\d/i) || addr.toLowerCase().includes('canada') ||
+      order.customsInfo?.destinationCountry);
+  };
+
   // Filter orders
   const filteredOrders = orders.filter(order => {
     if (filterStatus === 'all') return ['packed', 'shipped'].includes(order.status);
@@ -448,6 +565,147 @@ export default function Shipping() {
         ))}
       </div>
 
+      {/* Batch Controls */}
+      {selectedCount > 0 && (
+        <div style={{
+          display: 'flex', gap: 10, alignItems: 'center', padding: '12px 16px',
+          background: '#e3f2fd', borderRadius: 8, marginBottom: 15, flexWrap: 'wrap'
+        }}>
+          <span style={{ fontWeight: 600 }}>✅ {selectedCount} selected</span>
+          <button onClick={batchGetRates} disabled={batchProcessing}
+            style={{ padding: '6px 16px', background: '#1976d2', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {batchProcessing ? '⏳ Processing...' : '💰 Batch Get Rates'}
+          </button>
+          <button onClick={batchAutoPurchase} disabled={batchProcessing}
+            style={{ padding: '6px 16px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {batchProcessing ? '⏳ Processing...' : '⚡ Batch Auto-Purchase'}
+          </button>
+          <button onClick={clearSelection}
+            style={{ padding: '6px 16px', background: '#757575', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
+            Clear
+          </button>
+        </div>
+      )}
+
+      {/* Batch Results */}
+      {batchResults && (
+        <div style={{
+          padding: '12px 16px', background: '#f1f8e9', borderRadius: 8, marginBottom: 15, fontSize: 13
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>
+              <strong>Batch Results:</strong> {batchResults.success.length} ✅ succeeded, {batchResults.failed.length} ❌ failed out of {batchResults.total} orders
+            </span>
+            <button onClick={() => setBatchResults(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
+          </div>
+          {batchResults.failed.length > 0 && (
+            <div style={{ marginTop: 8, color: '#c62828' }}>
+              {batchResults.failed.map((f, i) => <div key={i}>❌ {f.orderId}: {f.error}</div>)}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Customs Modal */}
+      {showCustoms && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
+        }}>
+          <div style={{ background: 'white', borderRadius: 12, padding: 24, maxWidth: 500, width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>🌍 Customs Declaration</h3>
+              <button onClick={() => setShowCustoms(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Destination Country</label>
+                <select value={customsForm.destinationCountry} onChange={e => setCustomsForm(prev => ({ ...prev, destinationCountry: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  <option value="">Auto-detect from address</option>
+                  <option value="CA">🇨🇦 Canada</option>
+                  <option value="MX">🇲🇽 Mexico</option>
+                  <option value="GB">🇬🇧 United Kingdom</option>
+                  <option value="AU">🇦🇺 Australia</option>
+                  <option value="DE">🇩🇪 Germany</option>
+                  <option value="FR">🇫🇷 France</option>
+                  <option value="JP">🇯🇵 Japan</option>
+                  <option value="IL">🇮🇱 Israel</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Contents Description</label>
+                <input value={customsForm.description} onChange={e => setCustomsForm(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Military surplus tactical gear and equipment"
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Contents Type</label>
+                <select value={customsForm.contentsType} onChange={e => setCustomsForm(prev => ({ ...prev, contentsType: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  <option value="MERCHANDISE">Merchandise</option>
+                  <option value="GIFT">Gift</option>
+                  <option value="SAMPLE">Sample</option>
+                  <option value="RETURN_MERCHANDISE">Return Merchandise</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>If Undeliverable</label>
+                <select value={customsForm.nonDeliveryOption} onChange={e => setCustomsForm(prev => ({ ...prev, nonDeliveryOption: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  <option value="RETURN">Return to Sender</option>
+                  <option value="ABANDON">Abandon</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Incoterm (who pays duties)</label>
+                <select value={customsForm.incoterm} onChange={e => setCustomsForm(prev => ({ ...prev, incoterm: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  <option value="DDU">DDU - Buyer pays duties/taxes</option>
+                  <option value="DDP">DDP - You pay duties/taxes</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>EEL/PFC (export compliance)</label>
+                <select value={customsForm.eelPfc} onChange={e => setCustomsForm(prev => ({ ...prev, eelPfc: e.target.value }))}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  <option value="NOEEI_30_37_a">NOEEI 30.37(a) - Under $2,500</option>
+                  <option value="NOEEI_30_37_h">NOEEI 30.37(h) - Canada</option>
+                  <option value="NOEEI_30_36">NOEEI 30.36 - Exempt</option>
+                  <option value="">Not applicable</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Default HS Tariff Number (optional)</label>
+                <input value={customsForm.defaultTariffNumber} onChange={e => setCustomsForm(prev => ({ ...prev, defaultTariffNumber: e.target.value }))}
+                  placeholder="e.g. 6211.33"
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888' }}>Harmonized System code for your goods. Military surplus clothing is typically 6211.33</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={saveCustomsInfo} disabled={savingCustoms}
+                style={{ flex: 1, padding: '10px 20px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+                {savingCustoms ? 'Saving...' : '💾 Save Customs Info'}
+              </button>
+              <button onClick={() => setShowCustoms(null)}
+                style={{ padding: '10px 20px', background: '#757575', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Orders Table */}
       {filteredOrders.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
@@ -459,6 +717,11 @@ export default function Shipping() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
               <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
+                <th style={{ padding: '12px 6px', borderBottom: '2px solid #ddd', width: 36 }}>
+                  <input type="checkbox" onChange={e => e.target.checked ? selectAllVisible() : clearSelection()}
+                    checked={selectedCount > 0 && selectedCount === filteredOrders.filter(o => o.status === 'packed' && !o.shippingLabel?.trackingNumber).length}
+                    style={{ width: 16, height: 16 }} />
+                </th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>PO #</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Customer</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Ship To</th>
@@ -473,10 +736,21 @@ export default function Shipping() {
               {filteredOrders.map(order => {
                 const badge = getStatusBadge(order);
                 const label = order.shippingLabel;
+                const intl = isLikelyInternational(order);
 
                 return (
-                  <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={{ padding: '12px 10px', fontWeight: 600 }}>{order.poNumber}</td>
+                  <tr key={order.id} style={{ borderBottom: '1px solid #eee', background: intl ? '#fffde7' : 'white' }}>
+                    <td style={{ padding: '12px 6px' }}>
+                      {order.status === 'packed' && !label?.trackingNumber && (
+                        <input type="checkbox" checked={!!selectedOrders[order.id]}
+                          onChange={() => toggleOrderSelection(order.id)}
+                          style={{ width: 16, height: 16 }} />
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 10px', fontWeight: 600 }}>
+                      {order.poNumber}
+                      {intl && <span style={{ marginLeft: 6, fontSize: 11, background: '#ff9800', color: 'white', padding: '1px 6px', borderRadius: 8 }}>🌍 INTL</span>}
+                    </td>
                     <td style={{ padding: '12px 10px' }}>
                       <div>{order.customerName}</div>
                       {order.customerEmail && <div style={{ fontSize: 11, color: '#888' }}>{order.customerEmail}</div>}
@@ -497,6 +771,7 @@ export default function Shipping() {
                       }}>
                         {badge.text}
                       </span>
+                      {label?.international && <div style={{ fontSize: 10, color: '#ff9800', marginTop: 2 }}>International • {label.destinationCountry}</div>}
                       {label?.labelError && (
                         <div style={{ fontSize: 11, color: '#c62828', marginTop: 4 }}>{label.labelError}</div>
                       )}
@@ -610,6 +885,20 @@ export default function Shipping() {
                             }}
                           >
                             {processing[order.id] ? '...' : '⚡ Auto Label'}
+                          </button>
+                        )}
+
+                        {/* Customs - for international orders */}
+                        {order.status === 'packed' && intl && (
+                          <button
+                            onClick={() => openCustomsModal(order)}
+                            title="Edit customs declaration for international shipment"
+                            style={{
+                              padding: '6px 12px', background: order.customsInfo ? '#43a047' : '#ff9800', color: 'white', border: 'none',
+                              borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
+                            }}
+                          >
+                            {order.customsInfo ? '✅ Customs' : '🌍 Customs'}
                           </button>
                         )}
                       </div>

@@ -16,6 +16,7 @@ import Reports from './pages/Reports';
 import PurchaseOrders from './pages/PurchaseOrders';
 import Customers from './pages/Customers';
 import Contracts from './pages/Contracts';
+import Shipping from './pages/Shipping';
 import './App.css';
 
 function NavBar() {
@@ -117,6 +118,9 @@ function NavBar() {
         </Link>
         <Link to="/purchase-orders" className={`nav-tab ${isActive('/purchase-orders') ? 'active' : ''}`}>
           🧾 Orders
+        </Link>
+        <Link to="/shipping" className={`nav-tab ${isActive('/shipping') ? 'active' : ''}`}>
+          🚚 Shipping
         </Link>
         <Link to="/customers" className={`nav-tab ${isActive('/customers') ? 'active' : ''}`}>
           👥 Customers
@@ -275,6 +279,11 @@ function AppRoutes() {
       <Route path="/contracts" element={
         <ProtectedRoute>
           <AppLayout><Contracts /></AppLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/shipping" element={
+        <ProtectedRoute>
+          <AppLayout><Shipping /></AppLayout>
         </ProtectedRoute>
       } />
       <Route path="/receiving" element={

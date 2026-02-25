@@ -890,15 +890,27 @@ export default function Shipping() {
 
                         {/* Rates ready - View & Purchase */}
                         {label?.labelStatus === 'rates_ready' && (
-                          <button
-                            onClick={() => setShowRates(showRates === order.id ? null : order.id)}
-                            style={{
-                              padding: '6px 12px', background: '#ff9800', color: 'white', border: 'none',
-                              borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
-                            }}
-                          >
-                            🏷️ Select Rate
-                          </button>
+                          <>
+                            <button
+                              onClick={() => setShowRates(showRates === order.id ? null : order.id)}
+                              style={{
+                                padding: '6px 12px', background: '#ff9800', color: 'white', border: 'none',
+                                borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
+                              }}
+                            >
+                              🏷️ Select Rate
+                            </button>
+                            <button
+                              onClick={() => getRates(order.id)}
+                              disabled={processing[order.id]}
+                              style={{
+                                padding: '6px 12px', background: '#1976d2', color: 'white', border: 'none',
+                                borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
+                              }}
+                            >
+                              {processing[order.id] ? '...' : '🔄 Refresh'}
+                            </button>
+                          </>
                         )}
 
                         {/* Label purchased - Print & Ship */}

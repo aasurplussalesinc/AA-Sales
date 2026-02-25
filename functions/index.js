@@ -198,7 +198,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     customsDeclarationId = customs.object_id;
   }
 
-  var insuranceAmount = order.insuranceAmount || order.subtotal || order.total || 0;
+  var insuranceAmount = (order.insuranceAmount !== undefined && order.insuranceAmount !== null && order.insuranceAmount !== '') ? parseFloat(order.insuranceAmount) : (order.subtotal || order.total || 0);
   var shipment = await createShipment(apiKey, fromFormatted, toAddressRaw, parcels, customsDeclarationId,
     insuranceAmount > 0 ? { amount: parseFloat(insuranceAmount), currency: 'USD' } : null
   );

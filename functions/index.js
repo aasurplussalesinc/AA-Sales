@@ -81,7 +81,7 @@ async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDe
       insurance: {
         amount: String(insurance.amount),
         currency: insurance.currency || 'USD',
-        provider: 'SHIPPO',
+        provider: 'shippo',
       }
     };
   }

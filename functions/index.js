@@ -71,16 +71,25 @@ async function createCustomsDeclaration(apiKey, order, orgSettings) {
   return shippoRequest(apiKey, '/customs/declarations/', 'POST', declaration);
 }
 
-async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDeclarationId) {
+async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDeclarationId, insurance) {
   var shipmentData = {
     address_from: fromAddress, address_to: toAddress, parcels: parcels, async: false,
   };
   if (customsDeclarationId) shipmentData.customs_declaration = customsDeclarationId;
+  if (insurance && insurance.amount > 0) {
+    shipmentData.extra = {
+      insurance: {
+        amount: String(insurance.amount),
+        currency: insurance.currency || 'USD',
+        provider: 'SHIPPO',
+      }
+    };
+  }
   return shippoRequest(apiKey, '/shipments/', 'POST', shipmentData);
 }
 
 async function purchaseLabel(apiKey, rateId) {
-  return shippoRequest(apiKey, '/transactions/', 'POST', { rate: rateId, label_file_type: 'PDF', async: false });
+  return shippoRequest(apiKey, '/transactions/', 'POST', { rate: rateId, label_file_type: 'PDF_4x6', async: false });
 }
 
 async function validateAddress(apiKey, address) {
@@ -172,12 +181,20 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     customsDeclarationId = customs.object_id;
   }
 
-  var shipment = await createShipment(apiKey, fromFormatted, toAddressRaw, parcels, customsDeclarationId);
+  var insuranceAmount = order.insuranceAmount || order.subtotal || order.total || 0;
+  var shipment = await createShipment(apiKey, fromFormatted, toAddressRaw, parcels, customsDeclarationId,
+    insuranceAmount > 0 ? { amount: parseFloat(insuranceAmount), currency: 'USD' } : null
+  );
   var preferredCarrier = orgSettings.preferredCarrier || 'ups';
   var selectedRate = null;
 
   if (shipment.rates && shipment.rates.length > 0) {
-    selectedRate = shipment.rates.find(function(r) { return r.provider.toLowerCase().indexOf(preferredCarrier.toLowerCase()) >= 0; });
+    // Get all rates from preferred carrier, sorted cheapest first
+    var carrierRates = shipment.rates.filter(function(r) { return r.provider.toLowerCase().indexOf(preferredCarrier.toLowerCase()) >= 0; });
+    if (carrierRates.length > 0) {
+      selectedRate = carrierRates.sort(function(a, b) { return parseFloat(a.amount) - parseFloat(b.amount); })[0];
+    }
+    // Fallback: cheapest rate from any carrier
     if (!selectedRate) selectedRate = shipment.rates.sort(function(a, b) { return parseFloat(a.amount) - parseFloat(b.amount); })[0];
   }
 
@@ -189,6 +206,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     }),
     selectedRate: selectedRate ? { rateId: selectedRate.object_id, provider: selectedRate.provider, servicelevel: (selectedRate.servicelevel && selectedRate.servicelevel.name) || (selectedRate.servicelevel && selectedRate.servicelevel.token) || '', amount: selectedRate.amount, currency: selectedRate.currency } : null,
     parcels: parcels.length, toAddress: toAddressRaw, createdAt: Date.now(),
+    insuranceAmount: insuranceAmount,
   };
 
   if (orgSettings.autoPurchaseLabels && selectedRate) {
@@ -197,11 +215,16 @@ async function processPackedOrder(apiKey, order, orgSettings) {
       result.labelUrl = transaction.label_url; result.trackingNumber = transaction.tracking_number;
       result.trackingUrl = transaction.tracking_url_provider; result.transactionId = transaction.object_id;
       result.labelStatus = 'purchased'; result.purchasedAt = Date.now();
+      // For multi-parcel shipments, label_url PDF contains one page per parcel
+      result.labelPageCount = parcels.length;
     } else {
       result.labelStatus = 'failed';
       result.labelError = (transaction.messages || []).map(function(m) { return m.text; }).join('; ') || 'Unknown error';
     }
-  } else { result.labelStatus = 'rates_ready'; }
+  } else {
+    result.labelStatus = 'rates_ready';
+    result.labelPageCount = parcels.length;
+  }
 
   return result;
 }
@@ -243,12 +266,13 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
 
     if (rateId) {
       var transaction = await purchaseLabel(apiKey, rateId);
+      var parcelCount = (order.boxDetails ? Object.keys(order.boxDetails).length : 0) || (order.triwalls ? order.triwalls.length : 0) || 1;
       var result = Object.assign({}, order.shippingLabel || {}, {
         labelUrl: transaction.label_url, trackingNumber: transaction.tracking_number,
         trackingUrl: transaction.tracking_url_provider, transactionId: transaction.object_id,
         labelStatus: transaction.status === 'SUCCESS' ? 'purchased' : 'failed',
         labelError: transaction.status !== 'SUCCESS' ? (transaction.messages || []).map(function(m) { return m.text; }).join('; ') : null,
-        purchasedAt: Date.now(),
+        purchasedAt: Date.now(), labelPageCount: parcelCount,
       });
       await db.collection('purchaseOrders').doc(orderId).update({ shippingLabel: result, shippingStatus: result.labelStatus, updatedAt: Date.now() });
       return result;
@@ -298,6 +322,16 @@ exports.saveCustomsInfo = functions.https.onCall(async function(data, context) {
   if (!orderId || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderId and orgId required');
   try {
     await db.collection('purchaseOrders').doc(orderId).update({ customsInfo: customsInfo, updatedAt: Date.now() });
+    return { success: true };
+  } catch (error) { throw new functions.https.HttpsError('internal', error.message); }
+});
+
+exports.saveInsurance = functions.https.onCall(async function(data, context) {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  var orderId = data.orderId, orgId = data.orgId, insuranceAmount = data.insuranceAmount;
+  if (!orderId || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderId and orgId required');
+  try {
+    await db.collection('purchaseOrders').doc(orderId).update({ insuranceAmount: parseFloat(insuranceAmount) || 0, updatedAt: Date.now() });
     return { success: true };
   } catch (error) { throw new functions.https.HttpsError('internal', error.message); }
 });

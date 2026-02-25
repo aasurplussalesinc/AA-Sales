@@ -309,6 +309,30 @@ export default function Shipping() {
       order.customsInfo?.destinationCountry);
   };
 
+  // ==================== INSURANCE ====================
+  const [insuranceEditing, setInsuranceEditing] = useState(null); // orderId being edited
+  const [insuranceValue, setInsuranceValue] = useState('');
+  const [savingInsurance, setSavingInsurance] = useState(false);
+
+  const startInsuranceEdit = (order) => {
+    setInsuranceEditing(order.id);
+    setInsuranceValue(order.insuranceAmount || order.subtotal || order.total || '');
+  };
+
+  const saveInsurance = async (orderId) => {
+    setSavingInsurance(true);
+    try {
+      const saveFn = httpsCallable(functions, 'saveInsurance');
+      await saveFn({ orderId, orgId: organization.id, insuranceAmount: insuranceValue });
+      setMessage('✅ Insurance value saved! Get Rates again to include insurance.');
+      setInsuranceEditing(null);
+      await loadData();
+    } catch (err) {
+      setError('Failed to save insurance: ' + err.message);
+    }
+    setSavingInsurance(false);
+  };
+
   // Filter orders
   const filteredOrders = orders.filter(order => {
     if (filterStatus === 'all') return ['packed', 'shipped'].includes(order.status);
@@ -726,6 +750,7 @@ export default function Shipping() {
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Customer</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Ship To</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Packages</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Insurance</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Label Status</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Tracking</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Cost</th>
@@ -763,6 +788,45 @@ export default function Shipping() {
                         ? `${order.triwalls?.length || 0} triwall${(order.triwalls?.length || 0) !== 1 ? 's' : ''}`
                         : `${Object.keys(order.boxDetails || {}).length || 1} box${Object.keys(order.boxDetails || {}).length !== 1 ? 'es' : ''}`
                       }
+                    </td>
+                    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                      {insuranceEditing === order.id ? (
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <span style={{ fontSize: 13, fontWeight: 600 }}>$</span>
+                          <input
+                            type="number" value={insuranceValue}
+                            onChange={e => setInsuranceValue(e.target.value)}
+                            style={{ width: 70, padding: '4px 6px', borderRadius: 4, border: '1px solid #ccc', fontSize: 12 }}
+                            autoFocus
+                          />
+                          <button onClick={() => saveInsurance(order.id)} disabled={savingInsurance}
+                            style={{ padding: '3px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
+                            ✓
+                          </button>
+                          <button onClick={() => setInsuranceEditing(null)}
+                            style={{ padding: '3px 6px', background: '#999', color: 'white', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          onClick={() => order.status === 'packed' && !label?.trackingNumber && startInsuranceEdit(order)}
+                          style={{ cursor: order.status === 'packed' && !label?.trackingNumber ? 'pointer' : 'default' }}
+                          title={order.status === 'packed' && !label?.trackingNumber ? 'Click to set insurance value' : ''}
+                        >
+                          {(order.insuranceAmount > 0 || label?.insuranceAmount > 0) ? (
+                            <span style={{ padding: '3px 8px', borderRadius: 8, background: '#e8f5e9', color: '#2e7d32', fontSize: 12, fontWeight: 600 }}>
+                              🛡️ ${parseFloat(order.insuranceAmount || label?.insuranceAmount).toFixed(0)}
+                            </span>
+                          ) : (
+                            order.status === 'packed' && !label?.trackingNumber ? (
+                              <span style={{ fontSize: 11, color: '#aaa', textDecoration: 'underline' }}>+ Add</span>
+                            ) : (
+                              <span style={{ color: '#ccc', fontSize: 12 }}>—</span>
+                            )
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
                       <span style={{
@@ -843,7 +907,7 @@ export default function Shipping() {
                                 display: 'inline-block', whiteSpace: 'nowrap'
                               }}
                             >
-                              🖨️ Print Label
+                              🖨️ Print {label.labelPageCount > 1 ? `${label.labelPageCount} Labels` : 'Label'}
                             </a>
                             {order.status === 'packed' && (
                               <button

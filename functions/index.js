@@ -13,6 +13,7 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
+const { PDFDocument } = require('pdf-lib');
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -85,7 +86,16 @@ async function purchaseLabel(apiKey, rateId) {
   var masterTransaction = await shippoRequest(apiKey, '/transactions/', 'POST', { rate: rateId, label_file_type: 'PDF_4x6', async: false });
 
   // For multi-parcel: fetch ALL transactions for this rate to get every parcel's label
+  // Wait briefly for Shippo to generate all parcel labels
+  await new Promise(function(resolve) { setTimeout(resolve, 3000); });
   var allTransactions = await shippoRequest(apiKey, '/transactions/?rate=' + rateId, 'GET');
+  
+  // Retry once if we only got 1 result (labels may still be generating)
+  if (!allTransactions.results || allTransactions.results.filter(function(t) { return t.status === 'SUCCESS'; }).length <= 1) {
+    await new Promise(function(resolve) { setTimeout(resolve, 5000); });
+    allTransactions = await shippoRequest(apiKey, '/transactions/?rate=' + rateId, 'GET');
+  }
+
   if (allTransactions.results && allTransactions.results.length > 1) {
     masterTransaction.allLabels = allTransactions.results
       .filter(function(t) { return t.status === 'SUCCESS'; })
@@ -407,4 +417,24 @@ exports.getShippingRates = functions.https.onCall(async function(data, context) 
     await db.collection('purchaseOrders').doc(data.orderId).update({ shippingLabel: result, shippingStatus: 'rates_ready', updatedAt: Date.now() });
     return result;
   } catch (error) { throw new functions.https.HttpsError('internal', error.message); }
+});
+
+// Merge multiple label PDFs into a single PDF - returns base64
+exports.mergeLabelPdfs = functions.runWith({ timeoutSeconds: 60, memory: '512MB' }).https.onCall(async function(data, context) {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  var urls = data.urls;
+  if (!urls || !Array.isArray(urls) || urls.length === 0) throw new functions.https.HttpsError('invalid-argument', 'No label URLs provided');
+  try {
+    var mergedPdf = await PDFDocument.create();
+    for (var i = 0; i < urls.length; i++) {
+      var response = await fetch(urls[i]);
+      var pdfBytes = await response.arrayBuffer();
+      var srcPdf = await PDFDocument.load(pdfBytes);
+      var pages = await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+      pages.forEach(function(p) { mergedPdf.addPage(p); });
+    }
+    var mergedBytes = await mergedPdf.save();
+    var base64 = Buffer.from(mergedBytes).toString('base64');
+    return { pdf: base64, pageCount: mergedPdf.getPageCount() };
+  } catch (error) { throw new functions.https.HttpsError('internal', 'Failed to merge PDFs: ' + error.message); }
 });

@@ -922,44 +922,18 @@ export default function Shipping() {
                                 <button
                                   onClick={async () => {
                                     try {
-                                      // Load pdf-lib from CDN if not already loaded
-                                      if (!window.PDFLib) {
-                                        const script = document.createElement('script');
-                                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
-                                        document.head.appendChild(script);
-                                        await new Promise((resolve, reject) => { script.onload = resolve; script.onerror = reject; });
-                                      }
-                                      const { PDFDocument } = window.PDFLib;
-                                      const mergedPdf = await PDFDocument.create();
-                                      for (const lbl of label.allLabels) {
-                                        const pdfBytes = await fetch(lbl.labelUrl).then(r => r.arrayBuffer());
-                                        const srcPdf = await PDFDocument.load(pdfBytes);
-                                        const pages = await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
-                                        pages.forEach(p => mergedPdf.addPage(p));
-                                      }
-                                      const mergedBytes = await mergedPdf.save();
-                                      const blob = new Blob([mergedBytes], { type: 'application/pdf' });
+                                      const urls = label.allLabels.map(lbl => lbl.labelUrl);
+                                      const mergeFn = httpsCallable(functions, 'mergeLabelPdfs');
+                                      const result = await mergeFn({ urls });
+                                      const byteChars = atob(result.data.pdf);
+                                      const byteArray = new Uint8Array(byteChars.length);
+                                      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+                                      const blob = new Blob([byteArray], { type: 'application/pdf' });
                                       const url = URL.createObjectURL(blob);
                                       window.open(url, '_blank');
                                     } catch (err) {
                                       console.error('PDF merge failed:', err);
-                                      // Fallback: open individual labels page
-                                      const w = window.open('', '_blank');
-                                      if (w) {
-                                        const html = `<html><head><title>Labels - ${order.poNumber}</title><style>
-                                          body { font-family: Arial; margin: 20px; }
-                                          iframe { width: 4in; height: 6in; border: 1px solid #ccc; margin: 10px; }
-                                          .label-container { display: flex; flex-wrap: wrap; }
-                                          h3 { margin: 5px 10px; }
-                                          a { display: inline-block; margin: 10px; padding: 10px 20px; background: #2e7d32; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
-                                        </style></head><body>
-                                          <h2>Labels for ${order.poNumber} - ${order.customerName}</h2>
-                                          <div>${label.allLabels.map((lbl, i) => `<a href="${lbl.labelUrl}" target="_blank">📄 Open Box ${i+1} Label</a>`).join('')}</div>
-                                          <div class="label-container">${label.allLabels.map((lbl, i) => `<div><h3>Box ${i+1} - ${lbl.trackingNumber || ''}</h3><iframe src="${lbl.labelUrl}"></iframe></div>`).join('')}</div>
-                                        </body></html>`;
-                                        w.document.write(html);
-                                        w.document.close();
-                                      }
+                                      alert('Failed to merge labels. Use individual Box buttons instead.');
                                     }
                                   }}
                                   style={{

@@ -920,7 +920,25 @@ export default function Shipping() {
                               // Multi-parcel: Print All + individual buttons
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                                 <button
-                                  onClick={() => label.allLabels.forEach(lbl => window.open(lbl.labelUrl, '_blank'))}
+                                  onClick={() => {
+                                    // Open single window with all label PDFs as links
+                                    const w = window.open('', '_blank');
+                                    if (w) {
+                                      const html = `<html><head><title>Labels - ${order.poNumber}</title><style>
+                                        body { font-family: Arial; margin: 20px; }
+                                        iframe { width: 4in; height: 6in; border: 1px solid #ccc; margin: 10px; }
+                                        .label-container { display: flex; flex-wrap: wrap; }
+                                        h3 { margin: 5px 10px; }
+                                        a { display: inline-block; margin: 10px; padding: 10px 20px; background: #2e7d32; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; }
+                                      </style></head><body>
+                                        <h2>Labels for ${order.poNumber} - ${order.customerName}</h2>
+                                        <div>${label.allLabels.map((lbl, i) => `<a href="${lbl.labelUrl}" target="_blank">📄 Open Box ${i+1} Label</a>`).join('')}</div>
+                                        <div class="label-container">${label.allLabels.map((lbl, i) => `<div><h3>Box ${i+1} - ${lbl.trackingNumber || ''}</h3><iframe src="${lbl.labelUrl}"></iframe></div>`).join('')}</div>
+                                      </body></html>`;
+                                      w.document.write(html);
+                                      w.document.close();
+                                    }
+                                  }}
                                   style={{
                                     padding: '6px 12px', background: '#2e7d32', color: 'white', border: 'none',
                                     borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap'

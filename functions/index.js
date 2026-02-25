@@ -76,15 +76,7 @@ async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDe
     address_from: fromAddress, address_to: toAddress, parcels: parcels, async: false,
   };
   if (customsDeclarationId) shipmentData.customs_declaration = customsDeclarationId;
-  if (insurance && insurance.amount > 0) {
-    shipmentData.extra = {
-      insurance: {
-        amount: String(insurance.amount),
-        currency: insurance.currency || 'USD',
-        content: 'Sporting goods',
-      }
-    };
-  }
+  // Insurance is now applied per-parcel in formatParcelsFromOrder, not at shipment level
   return shippoRequest(apiKey, '/shipments/', 'POST', shipmentData);
 }
 
@@ -159,7 +151,7 @@ function isInternational(fromCountry, toCountry) {
   return (fromCountry || 'US').toUpperCase() !== (toCountry || 'US').toUpperCase();
 }
 
-function formatParcelsFromOrder(order) {
+function formatParcelsFromOrder(order, insuranceAmount) {
   var parcels = [];
   if (order.packingMode === 'triwalls' && order.triwalls && order.triwalls.length > 0) {
     order.triwalls.forEach(function(tw) {
@@ -172,6 +164,13 @@ function formatParcelsFromOrder(order) {
     });
   } else {
     parcels.push({ length: 12, width: 12, height: 12, weight: 5, distance_unit: 'in', mass_unit: 'lb' });
+  }
+  // Split insurance evenly across parcels
+  if (insuranceAmount && insuranceAmount > 0 && parcels.length > 0) {
+    var perParcel = Math.ceil((insuranceAmount / parcels.length) * 100) / 100;
+    parcels.forEach(function(p) {
+      p.extra = { insurance: { amount: String(perParcel), currency: 'USD', provider: 'UPS' } };
+    });
   }
   return parcels;
 }
@@ -187,7 +186,8 @@ async function processPackedOrder(apiKey, order, orgSettings) {
 
   if (order.customsInfo && order.customsInfo.destinationCountry) toAddressRaw.country = order.customsInfo.destinationCountry;
 
-  var parcels = formatParcelsFromOrder(order);
+  var insuranceAmount = (order.insuranceAmount !== undefined && order.insuranceAmount !== null && order.insuranceAmount !== '') ? parseFloat(order.insuranceAmount) : (order.subtotal || order.total || 0);
+  var parcels = formatParcelsFromOrder(order, insuranceAmount);
   var fromFormatted = formatStructuredAddress(fromAddress);
   var international = isInternational(fromFormatted.country, toAddressRaw.country);
   var customsDeclarationId = null;
@@ -198,10 +198,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     customsDeclarationId = customs.object_id;
   }
 
-  var insuranceAmount = (order.insuranceAmount !== undefined && order.insuranceAmount !== null && order.insuranceAmount !== '') ? parseFloat(order.insuranceAmount) : (order.subtotal || order.total || 0);
-  var shipment = await createShipment(apiKey, fromFormatted, toAddressRaw, parcels, customsDeclarationId,
-    insuranceAmount > 0 ? { amount: parseFloat(insuranceAmount), currency: 'USD' } : null
-  );
+  var shipment = await createShipment(apiKey, fromFormatted, toAddressRaw, parcels, customsDeclarationId);
   var preferredCarrier = orgSettings.preferredCarrier || 'ups';
   var selectedRate = null;
 

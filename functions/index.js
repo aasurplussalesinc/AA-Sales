@@ -89,7 +89,24 @@ async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDe
 }
 
 async function purchaseLabel(apiKey, rateId) {
-  return shippoRequest(apiKey, '/transactions/', 'POST', { rate: rateId, label_file_type: 'PDF_4x6', async: false });
+  // Purchase the rate - returns master transaction (first parcel only)
+  var masterTransaction = await shippoRequest(apiKey, '/transactions/', 'POST', { rate: rateId, label_file_type: 'PDF_4x6', async: false });
+
+  // For multi-parcel: fetch ALL transactions for this rate to get every parcel's label
+  var allTransactions = await shippoRequest(apiKey, '/transactions/?rate=' + rateId, 'GET');
+  if (allTransactions.results && allTransactions.results.length > 1) {
+    masterTransaction.allLabels = allTransactions.results
+      .filter(function(t) { return t.status === 'SUCCESS'; })
+      .map(function(t) {
+        return {
+          labelUrl: t.label_url,
+          trackingNumber: t.tracking_number,
+          trackingUrl: t.tracking_url_provider,
+          transactionId: t.object_id,
+        };
+      });
+  }
+  return masterTransaction;
 }
 
 async function validateAddress(apiKey, address) {
@@ -215,8 +232,11 @@ async function processPackedOrder(apiKey, order, orgSettings) {
       result.labelUrl = transaction.label_url; result.trackingNumber = transaction.tracking_number;
       result.trackingUrl = transaction.tracking_url_provider; result.transactionId = transaction.object_id;
       result.labelStatus = 'purchased'; result.purchasedAt = Date.now();
-      // For multi-parcel shipments, label_url PDF contains one page per parcel
       result.labelPageCount = parcels.length;
+      // Store all parcel labels for multi-piece shipments
+      if (transaction.allLabels && transaction.allLabels.length > 0) {
+        result.allLabels = transaction.allLabels;
+      }
     } else {
       result.labelStatus = 'failed';
       result.labelError = (transaction.messages || []).map(function(m) { return m.text; }).join('; ') || 'Unknown error';
@@ -273,6 +293,7 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
         labelStatus: transaction.status === 'SUCCESS' ? 'purchased' : 'failed',
         labelError: transaction.status !== 'SUCCESS' ? (transaction.messages || []).map(function(m) { return m.text; }).join('; ') : null,
         purchasedAt: Date.now(), labelPageCount: parcelCount,
+        allLabels: (transaction.allLabels && transaction.allLabels.length > 0) ? transaction.allLabels : null,
       });
       await db.collection('purchaseOrders').doc(orderId).update({ shippingLabel: result, shippingStatus: result.labelStatus, updatedAt: Date.now() });
       return result;

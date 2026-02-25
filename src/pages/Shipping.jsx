@@ -843,10 +843,17 @@ export default function Shipping() {
                     <td style={{ padding: '12px 10px', fontSize: 12 }}>
                       {label?.trackingNumber ? (
                         <div>
-                          <div style={{ fontFamily: 'monospace', fontWeight: 600 }}>{label.trackingNumber}</div>
+                          <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 11 }}>{label.trackingNumber}</div>
                           {label.trackingUrl && (
                             <a href={label.trackingUrl} target="_blank" rel="noopener noreferrer"
-                              style={{ color: '#1976d2', fontSize: 11 }}>Track →</a>
+                              style={{ color: '#1976d2', fontSize: 11 }}>Track (Master) →</a>
+                          )}
+                          {label.allLabels && label.allLabels.length > 1 && (
+                            <div style={{ marginTop: 4, fontSize: 10, color: '#666' }}>
+                              {label.allLabels.map((lbl, idx) => (
+                                <div key={idx}>Box {idx + 1}: {lbl.trackingNumber}</div>
+                              ))}
+                            </div>
                           )}
                         </div>
                       ) : (
@@ -897,18 +904,49 @@ export default function Shipping() {
                         {/* Label purchased - Print & Ship */}
                         {label?.labelStatus === 'purchased' && (
                           <>
-                            <a
-                              href={label.labelUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                padding: '6px 12px', background: '#4CAF50', color: 'white', border: 'none',
-                                borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, textDecoration: 'none',
-                                display: 'inline-block', whiteSpace: 'nowrap'
-                              }}
-                            >
-                              🖨️ Print {label.labelPageCount > 1 ? `${label.labelPageCount} Labels` : 'Label'}
-                            </a>
+                            {label.allLabels && label.allLabels.length > 1 ? (
+                              // Multi-parcel: Print All + individual buttons
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                <button
+                                  onClick={() => label.allLabels.forEach(lbl => window.open(lbl.labelUrl, '_blank'))}
+                                  style={{
+                                    padding: '6px 12px', background: '#2e7d32', color: 'white', border: 'none',
+                                    borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap'
+                                  }}
+                                >
+                                  🖨️ Print All {label.allLabels.length} Labels
+                                </button>
+                                <div style={{ display: 'flex', gap: 4 }}>
+                                  {label.allLabels.map((lbl, idx) => (
+                                    <a key={idx}
+                                      href={lbl.labelUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{
+                                        padding: '4px 8px', background: '#66bb6a', color: 'white', border: 'none',
+                                        borderRadius: 4, cursor: 'pointer', fontSize: 10, fontWeight: 600, textDecoration: 'none',
+                                        display: 'inline-block', whiteSpace: 'nowrap'
+                                      }}
+                                    >
+                                      Box {idx + 1}
+                                    </a>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : (
+                              <a
+                                href={label.labelUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  padding: '6px 12px', background: '#4CAF50', color: 'white', border: 'none',
+                                  borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, textDecoration: 'none',
+                                  display: 'inline-block', whiteSpace: 'nowrap'
+                                }}
+                              >
+                                🖨️ Print Label
+                              </a>
+                            )}
                             {order.status === 'packed' && (
                               <button
                                 onClick={() => markShipped(order.id)}

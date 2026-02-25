@@ -81,7 +81,7 @@ async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDe
       insurance: {
         amount: String(insurance.amount),
         currency: insurance.currency || 'USD',
-        content: 'Military surplus goods',
+        content: 'Sporting goods',
       }
     };
   }

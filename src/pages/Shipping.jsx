@@ -13,6 +13,7 @@ export default function Shipping() {
   const [filterStatus, setFilterStatus] = useState('packed');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [customers, setCustomers] = useState([]);
 
   // Settings state
   const [showSettings, setShowSettings] = useState(false);
@@ -43,10 +44,10 @@ export default function Shipping() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const ordersData = await DB.getPurchaseOrders();
-      // Sort by packedAt date, most recent first
+      const [ordersData, customersData] = await Promise.all([DB.getPurchaseOrders(), DB.getCustomers()]);
       const sorted = ordersData.sort((a, b) => (b.packedAt || b.updatedAt || 0) - (a.packedAt || a.updatedAt || 0));
       setOrders(sorted);
+      setCustomers(customersData);
     } catch (err) {
       console.error('Error loading orders:', err);
       setError('Failed to load orders');
@@ -361,6 +362,98 @@ export default function Shipping() {
     return `${h}:${minute.toString().padStart(2, '0')} ${ampm}`;
   };
 
+  // Get customer's UPS account from customers collection
+  const getCustomerCarrierAccount = (order, carrier = 'ups') => {
+    if (!order.customerId) return '';
+    const cust = customers.find(c => c.id === order.customerId);
+    if (!cust) return '';
+    return carrier === 'ups' ? (cust.upsAccount || '') : (cust.fedexAccount || '');
+  };
+
+  // Save third-party billing info on order
+  const saveBillTo = async (orderId, upsAccount) => {
+    try {
+      await DB.updatePurchaseOrder(orderId, { thirdPartyBilling: upsAccount ? { account: upsAccount, type: 'THIRD_PARTY', country: 'US' } : null, updatedAt: Date.now() });
+      await loadData();
+      setMessage('Bill To updated');
+      setTimeout(() => setMessage(''), 2000);
+    } catch (err) { setError('Failed to save billing: ' + err.message); }
+  };
+
+  // Generate End of Day manifest PDF (4x6 thermal)
+  const generateEndOfDay = async () => {
+    const today = new Date();
+    const todayStr = today.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
+    
+    // Get all orders with labels purchased today
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    const shippedToday = orders.filter(o => {
+      const label = o.shippingLabel;
+      if (!label || label.labelStatus !== 'purchased') return false;
+      return (label.purchasedAt || 0) >= startOfDay || (o.shippedAt || 0) >= startOfDay;
+    });
+
+    if (shippedToday.length === 0) {
+      setError('No labels purchased today for End of Day report.');
+      setTimeout(() => setError(''), 3000);
+      return;
+    }
+
+    // Count total packages
+    let totalPackages = 0;
+    let groundCount = 0, nextDayCount = 0, twoDayCount = 0, threeDayCount = 0, intlPkgs = 0, intlShpts = 0;
+    shippedToday.forEach(o => {
+      const label = o.shippingLabel;
+      const parcels = label.allLabels ? label.allLabels.length : (label.parcels || 1);
+      totalPackages += parcels;
+      const svc = (label.selectedRate?.servicelevel?.token || label.selectedRate?.servicelevel?.name || '').toLowerCase();
+      if (svc.includes('next_day') || svc.includes('1da')) nextDayCount += parcels;
+      else if (svc.includes('2nd_day') || svc.includes('2da')) twoDayCount += parcels;
+      else if (svc.includes('3_day') || svc.includes('3ds')) threeDayCount += parcels;
+      else groundCount += parcels;
+      if (label.international) { intlPkgs += parcels; intlShpts++; }
+    });
+
+    const fromAddr = organization?.settings?.shippingFromAddress;
+    const acctNum = organization?.settings?.upsAccountNumber || '—';
+    const companyName = fromAddr?.company || fromAddr?.name || organization?.name || 'AA SURPLUS SALES INC';
+    const street = fromAddr?.street1 || '';
+    const cityStateZip = `${fromAddr?.city || ''} ${fromAddr?.state || ''} ${fromAddr?.zip || ''}`;
+
+    try {
+      const mergeFn = httpsCallable(functions, 'generateEndOfDayPdf');
+      const result = await mergeFn({
+        shipDate: todayStr,
+        accountNumber: acctNum,
+        companyName,
+        street,
+        cityStateZip,
+        totalPackages,
+        groundCount,
+        nextDayCount,
+        twoDayCount,
+        threeDayCount,
+        intlPkgs,
+        intlShpts,
+        orderDetails: shippedToday.map(o => ({
+          poNumber: o.poNumber,
+          customer: o.customerName,
+          packages: o.shippingLabel.allLabels ? o.shippingLabel.allLabels.length : (o.shippingLabel.parcels || 1),
+          tracking: o.shippingLabel.trackingNumber || '',
+          service: o.shippingLabel.selectedRate?.servicelevel?.name || 'Ground',
+        }))
+      });
+      const byteChars = atob(result.data.pdf);
+      const byteArray = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      window.open(URL.createObjectURL(blob), '_blank');
+    } catch (err) {
+      console.error('End of Day failed:', err);
+      setError('Failed to generate End of Day report: ' + err.message);
+    }
+  };
+
   if (loading) return <div style={{ padding: 20, textAlign: 'center' }}>Loading shipping data...</div>;
 
   return (
@@ -376,6 +469,15 @@ export default function Shipping() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={generateEndOfDay}
+            style={{
+              padding: '10px 20px', background: '#e65100', color: 'white', border: 'none',
+              borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14
+            }}
+          >
+            📋 End of Day
+          </button>
           <button
             onClick={triggerManualCheck}
             disabled={processing.manual}

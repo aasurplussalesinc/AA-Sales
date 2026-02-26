@@ -41,7 +41,9 @@ export default function Customers() {
     state: '',
     zipCode: '',
     country: '',
-    notes: ''
+    notes: '',
+    upsAccount: '',
+    fedexAccount: ''
   });
 
   const phoneTypeOptions = ['Cell', 'Office', 'Store', 'Home', 'Fax'];
@@ -91,7 +93,9 @@ export default function Customers() {
       state: customer.state || '',
       zipCode: customer.zipCode || '',
       country: customer.country || '',
-      notes: customer.notes || ''
+      notes: customer.notes || '',
+      upsAccount: customer.upsAccount || '',
+      fedexAccount: customer.fedexAccount || ''
     });
     
     // Get customer's orders
@@ -688,6 +692,31 @@ export default function Customers() {
                 onChange={e => setEditForm({ ...editForm, country: e.target.value })}
                 style={{ width: '100%' }}
               />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 15 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>🚚 UPS Account #</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. 112-5WV"
+                  value={editForm.upsAccount}
+                  onChange={e => setEditForm({ ...editForm, upsAccount: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>📦 FedEx Account #</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. 123456789"
+                  value={editForm.fedexAccount}
+                  onChange={e => setEditForm({ ...editForm, fedexAccount: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+              </div>
             </div>
 
             <div style={{ marginBottom: 15 }}>

@@ -72,12 +72,21 @@ async function createCustomsDeclaration(apiKey, order, orgSettings) {
   return shippoRequest(apiKey, '/customs/declarations/', 'POST', declaration);
 }
 
-async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDeclarationId, insurance) {
+async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDeclarationId, thirdPartyBilling) {
   var shipmentData = {
     address_from: fromAddress, address_to: toAddress, parcels: parcels, async: false,
   };
   if (customsDeclarationId) shipmentData.customs_declaration = customsDeclarationId;
-  // Insurance is now applied per-parcel in formatParcelsFromOrder, not at shipment level
+  // Add third-party billing if provided
+  if (thirdPartyBilling && thirdPartyBilling.account) {
+    if (!shipmentData.extra) shipmentData.extra = {};
+    shipmentData.extra.billing = {
+      type: thirdPartyBilling.type || 'THIRD_PARTY',
+      account: thirdPartyBilling.account,
+      zip: thirdPartyBilling.zip || '',
+      country: thirdPartyBilling.country || 'US'
+    };
+  }
   return shippoRequest(apiKey, '/shipments/', 'POST', shipmentData);
 }
 
@@ -208,7 +217,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     customsDeclarationId = customs.object_id;
   }
 
-  var shipment = await createShipment(apiKey, fromFormatted, toAddressRaw, parcels, customsDeclarationId);
+  var shipment = await createShipment(apiKey, fromFormatted, toAddressRaw, parcels, customsDeclarationId, order.thirdPartyBilling || null);
   var preferredCarrier = orgSettings.preferredCarrier || 'ups';
   var selectedRate = null;
 
@@ -437,4 +446,83 @@ exports.mergeLabelPdfs = functions.runWith({ timeoutSeconds: 60, memory: '512MB'
     var base64 = Buffer.from(mergedBytes).toString('base64');
     return { pdf: base64, pageCount: mergedPdf.getPageCount() };
   } catch (error) { throw new functions.https.HttpsError('internal', 'Failed to merge PDFs: ' + error.message); }
+});
+
+// Generate End of Day Driver Summary PDF (4x6 thermal)
+exports.generateEndOfDayPdf = functions.runWith({ timeoutSeconds: 30, memory: '256MB' }).https.onCall(async function(data, context) {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  try {
+    var { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+    var pdfDoc = await PDFDocument.create();
+    // 4x6 inches = 288x432 points
+    var page = pdfDoc.addPage([288, 432]);
+    var font = await pdfDoc.embedFont(StandardFonts.CourierBold);
+    var fontR = await pdfDoc.embedFont(StandardFonts.Courier);
+    var y = 415;
+    var lh = 13;
+    var margin = 15;
+
+    function drawText(text, x, yPos, size, f) {
+      page.drawText(text || '', { x: x, y: yPos, size: size || 9, font: f || font, color: rgb(0, 0, 0) });
+    }
+    function drawLine(yPos) {
+      page.drawLine({ start: { x: margin, y: yPos }, end: { x: 273, y: yPos }, thickness: 1.5, color: rgb(0, 0, 0) });
+    }
+
+    // Header
+    drawText('PICKUP SUMMARY BARCODE REPORT', margin, y, 9); y -= lh;
+    drawText('SHIP DATE:  ' + (data.shipDate || ''), margin, y, 9); y -= lh;
+    drawText('ACCOUNT NUMBER: ' + (data.accountNumber || ''), margin, y, 9); y -= lh;
+    drawText('CUSTOMER', margin, y, 9); y -= lh;
+    drawText('  ' + (data.companyName || ''), margin, y, 9); y -= lh;
+    drawText('  ' + (data.street || ''), margin, y, 9); y -= lh;
+    drawText('  ' + (data.cityStateZip || ''), margin, y, 9); y -= lh * 2;
+
+    // Separator
+    drawLine(y + 5);
+    y -= lh;
+
+    // Driver Summary
+    drawText('DRIVER SUMMARY', margin, y, 11); y -= lh;
+    drawText('TOTAL NUMBER OF PACKAGES = ' + (data.totalPackages || 0), margin, y, 10); y -= lh * 1.5;
+    drawText('UPS CONTROL LOG REQUIRED', margin, y, 8, fontR); y -= lh * 1.5;
+
+    // Service breakdown
+    drawText('1DA  ' + (data.nextDayCount || 0), margin, y, 9);
+    drawText("INT'L pkgs " + (data.intlPkgs || 0), margin + 100, y, 9);
+    drawText('/shpts ' + (data.intlShpts || 0), margin + 195, y, 9);
+    y -= lh;
+    drawText('2DA  ' + (data.twoDayCount || 0), margin, y, 9);
+    drawText('CODS     0', margin + 100, y, 9);
+    y -= lh;
+    drawText('3DS  ' + (data.threeDayCount || 0), margin, y, 9);
+    y -= lh;
+    drawText('GND  ' + (data.groundCount || 0), margin, y, 9);
+    y -= lh * 2;
+
+    // Separator
+    drawLine(y + 5);
+    y -= lh;
+
+    // Shipment details
+    drawText('SHIPMENTS:', margin, y, 8, fontR); y -= lh;
+    (data.orderDetails || []).forEach(function(od) {
+      if (y < 60) return;
+      drawText(od.poNumber + ' ' + (od.customer || '').substring(0, 16) + '  x' + od.packages, margin, y, 7, fontR);
+      y -= 10;
+    });
+
+    y = Math.min(y, 80);
+    // Footer
+    drawLine(y + 5);
+    y -= lh;
+    drawText('SHIPMENTS SUBJECT TO TERMS OF', margin, y, 7, fontR); y -= 10;
+    drawText('AGREEMENT ON FILE', margin, y, 7, fontR); y -= lh * 1.5;
+    drawText('Received By: ____________________', margin, y, 9); y -= lh * 1.5;
+    drawText('Pickup Time: ______  Pkgs: ______', margin, y, 9);
+
+    var pdfBytes = await pdfDoc.save();
+    var base64 = Buffer.from(pdfBytes).toString('base64');
+    return { pdf: base64 };
+  } catch (error) { throw new functions.https.HttpsError('internal', 'End of Day PDF failed: ' + error.message); }
 });

@@ -218,6 +218,13 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   }
 
   var shipment = await createShipment(apiKey, fromFormatted, toAddressRaw, parcels, customsDeclarationId, order.thirdPartyBilling || null);
+  console.log('=== SHIPPO DEBUG ===');
+  console.log('Shipment ID:', shipment.object_id);
+  console.log('Shipment status:', shipment.status);
+  console.log('Total rates returned:', (shipment.rates || []).length);
+  console.log('Carriers:', (shipment.rates || []).map(function(r) { return r.provider; }));
+  console.log('Messages:', JSON.stringify(shipment.messages || []));
+  console.log('=== END DEBUG ===');
   var preferredCarrier = orgSettings.preferredCarrier || 'ups';
   var selectedRate = null;
 

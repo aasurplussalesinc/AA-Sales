@@ -184,11 +184,11 @@ function formatParcelsFromOrder(order, insuranceAmount) {
   } else {
     parcels.push({ length: 12, width: 12, height: 12, weight: 5, distance_unit: 'in', mass_unit: 'lb' });
   }
-  // Split insurance evenly across parcels
+  // Split insurance evenly across parcels (carrier-agnostic for rate shopping)
   if (insuranceAmount && insuranceAmount > 0 && parcels.length > 0) {
     var perParcel = Math.ceil((insuranceAmount / parcels.length) * 100) / 100;
     parcels.forEach(function(p) {
-      p.extra = { insurance: { amount: String(perParcel), currency: 'USD', provider: 'UPS' } };
+      p.extra = { insurance: { amount: String(perParcel), currency: 'USD' } };
     });
   }
   return parcels;

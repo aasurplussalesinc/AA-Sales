@@ -317,7 +317,7 @@ export default function Shipping() {
 
   const startInsuranceEdit = (order) => {
     setInsuranceEditing(order.id);
-    setInsuranceValue(order.insuranceAmount || order.subtotal || order.total || '');
+    setInsuranceValue((order.insuranceAmount !== undefined && order.insuranceAmount !== null && order.insuranceAmount !== '') ? order.insuranceAmount : (order.subtotal || order.total || ''));
   };
 
   const saveInsurance = async (orderId) => {

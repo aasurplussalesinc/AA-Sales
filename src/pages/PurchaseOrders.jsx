@@ -472,11 +472,14 @@ export default function PurchaseOrders() {
     const updatedItems = packingOrder.items.map((item, idx) => {
       const distributions = boxAssignments[idx] || [{ box: 1, qty: getItemQty(item) }];
       const totalPacked = distributions.reduce((sum, d) => sum + (parseInt(d.qty) || 0), 0);
-      return {
+      const cleanItem = {
         ...item,
         qtyShipped: totalPacked, // Update shipped qty based on what was packed
         boxDistributions: distributions
       };
+      // Remove undefined values - Firestore rejects them
+      Object.keys(cleanItem).forEach(k => { if (cleanItem[k] === undefined) delete cleanItem[k]; });
+      return cleanItem;
     });
     
     // Recalculate order totals based on new qtyShipped values
@@ -486,7 +489,7 @@ export default function PurchaseOrders() {
     const tax = parseFloat(packingOrder.tax) || 0;
     const shipping = parseFloat(packingOrder.shipping) || 0;
     
-    await DB.updatePurchaseOrder(packingOrder.id, {
+    const updateData = {
       ...packingOrder,
       items: updatedItems,
       boxDistributions: boxAssignments,
@@ -494,7 +497,11 @@ export default function PurchaseOrders() {
       status: 'packed',
       subtotal: newSubtotal,
       total: newSubtotal + tax + shipping
-    });
+    };
+    // Remove undefined values from top-level update - Firestore rejects them
+    Object.keys(updateData).forEach(k => { if (updateData[k] === undefined) delete updateData[k]; });
+    
+    await DB.updatePurchaseOrder(packingOrder.id, updateData);
     
     setShowPackOrder(false); setPackingOrder(null); loadData(); alert('Packing saved! Shipped quantities updated.');
   };

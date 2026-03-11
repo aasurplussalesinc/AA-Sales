@@ -562,12 +562,15 @@ export default function PickLists() {
       return;
     }
     
-    // Build a map of picked quantities from the pick list using lineId
-    const pickedQtyMap = {};
+    // Build maps of picked quantities from the pick list using BOTH lineId and itemId
+    // This handles cases where pick list was deleted and recreated with new lineIds
+    const pickedByLineId = {};
+    const pickedByItemId = {};
     if (pickList.items) {
       pickList.items.forEach(plItem => {
-        const key = plItem.lineId || plItem.itemId;
-        pickedQtyMap[key] = plItem.pickedQty || 0;
+        const pickedQty = (plItem.pickedQty !== undefined && plItem.pickedQty !== null) ? parseInt(plItem.pickedQty) : null;
+        if (plItem.lineId) pickedByLineId[plItem.lineId] = pickedQty;
+        if (plItem.itemId) pickedByItemId[plItem.itemId] = pickedQty;
       });
     }
     
@@ -576,10 +579,20 @@ export default function PickLists() {
       ...order,
       pickListId: pickList.id,
       items: (order.items || []).map(item => {
-        const key = item.lineId || item.itemId;
+        // Try lineId first, then itemId, to find picked quantity from pick list
+        let pickedQty = null;
+        if (item.lineId && pickedByLineId[item.lineId] !== undefined) {
+          pickedQty = pickedByLineId[item.lineId];
+        } else if (item.itemId && pickedByItemId[item.itemId] !== undefined) {
+          pickedQty = pickedByItemId[item.itemId];
+        }
+        // Only fall back to order quantity if no pick list data at all
+        if (pickedQty === null) {
+          pickedQty = pickList.items ? 0 : (parseInt(item.qtyShipped) || parseInt(item.quantity) || 0);
+        }
         return {
           ...item,
-          pickedQty: pickedQtyMap[key] ?? (parseInt(item.qtyShipped) || parseInt(item.quantity) || 0)
+          pickedQty
         };
       })
     };
@@ -941,6 +954,20 @@ export default function PickLists() {
     alert('Packing reset! Items reloaded from pick list.');
   };
 
+  // Deep clean object: recursively remove all undefined values (Firestore rejects them)
+  const cleanForFirestore = (obj) => {
+    if (obj === null || obj === undefined) return null;
+    if (Array.isArray(obj)) return obj.map(item => cleanForFirestore(item));
+    if (typeof obj === 'object') {
+      const cleaned = {};
+      Object.keys(obj).forEach(k => {
+        if (obj[k] !== undefined) cleaned[k] = cleanForFirestore(obj[k]);
+      });
+      return cleaned;
+    }
+    return obj;
+  };
+
   const savePackOrderDraft = async () => {
     if (!packingOrder) return;
     
@@ -989,7 +1016,7 @@ export default function PickLists() {
     }
     
     try {
-      await DB.updatePurchaseOrder(packingOrder.id, updateData);
+      await DB.updatePurchaseOrder(packingOrder.id, cleanForFirestore(updateData));
     } catch (error) {
       console.error('Error saving draft:', error);
       alert('Error saving: ' + error.message);
@@ -1080,7 +1107,7 @@ export default function PickLists() {
     console.log('Updating PO with data:', { id: packingOrder.id, status: updateData.status, packingMode: updateData.packingMode });
     
     try {
-      await DB.updatePurchaseOrder(packingOrder.id, updateData);
+      await DB.updatePurchaseOrder(packingOrder.id, cleanForFirestore(updateData));
       console.log('PO updated successfully');
     } catch (error) {
       console.error('Error updating PO:', error);

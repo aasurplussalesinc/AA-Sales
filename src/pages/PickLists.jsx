@@ -1006,7 +1006,26 @@ export default function PickLists() {
       updateData.triwallAssignments = triwallAssignments;
     } else {
       updateData.boxDistributions = boxAssignments;
-      updateData.boxDetails = boxDetails;
+      // Calculate per-box contents value from items × unitPrice
+      const boxValues = {};
+      updatedItems.forEach((item, idx) => {
+        const dists = boxAssignments[idx] || [];
+        dists.forEach(d => {
+          const boxNum = d.box;
+          if (!boxValues[boxNum]) boxValues[boxNum] = 0;
+          boxValues[boxNum] += (parseInt(d.qty) || 0) * (parseFloat(item.unitPrice) || 0);
+        });
+      });
+      const enrichedBoxDetails = { ...boxDetails };
+      Object.keys(boxValues).forEach(boxNum => {
+        enrichedBoxDetails[boxNum] = { ...(enrichedBoxDetails[boxNum] || {}), contentsValue: Math.round(boxValues[boxNum] * 100) / 100 };
+      });
+      updateData.boxDetails = enrichedBoxDetails;
+      const boxInsurance = {};
+      Object.keys(boxValues).forEach(boxNum => {
+        boxInsurance[boxNum] = Math.round(boxValues[boxNum] * 100) / 100;
+      });
+      updateData.boxInsurance = boxInsurance;
     }
     
     // Don't change status to packed — keep current status
@@ -1098,7 +1117,28 @@ export default function PickLists() {
       updateData.triwallAssignments = triwallAssignments;
     } else {
       updateData.boxDistributions = boxAssignments;
-      updateData.boxDetails = boxDetails;
+      // Calculate per-box contents value from items × unitPrice
+      const boxValues = {};
+      updatedItems.forEach((item, idx) => {
+        const dists = boxAssignments[idx] || [];
+        dists.forEach(d => {
+          const boxNum = d.box;
+          if (!boxValues[boxNum]) boxValues[boxNum] = 0;
+          boxValues[boxNum] += (parseInt(d.qty) || 0) * (parseFloat(item.unitPrice) || 0);
+        });
+      });
+      // Merge calculated values into boxDetails
+      const enrichedBoxDetails = { ...boxDetails };
+      Object.keys(boxValues).forEach(boxNum => {
+        enrichedBoxDetails[boxNum] = { ...(enrichedBoxDetails[boxNum] || {}), contentsValue: Math.round(boxValues[boxNum] * 100) / 100 };
+      });
+      updateData.boxDetails = enrichedBoxDetails;
+      // Store per-box insurance (defaults to contents value)
+      const boxInsurance = {};
+      Object.keys(boxValues).forEach(boxNum => {
+        boxInsurance[boxNum] = Math.round(boxValues[boxNum] * 100) / 100;
+      });
+      updateData.boxInsurance = boxInsurance;
     }
     
     // Save packed items checkboxes
@@ -2187,6 +2227,21 @@ export default function PickLists() {
                           24"
                         </button>
                       </div>
+                      
+                      {/* Calculated box contents value */}
+                      {(() => {
+                        let val = 0;
+                        (packingOrder?.items || []).forEach((item, idx) => {
+                          (boxAssignments[idx] || []).forEach(d => {
+                            if (d.box === boxNum) val += (parseInt(d.qty) || 0) * (parseFloat(item.unitPrice) || 0);
+                          });
+                        });
+                        return val > 0 ? (
+                          <span style={{ padding: '4px 10px', background: '#fff3e0', color: '#e65100', borderRadius: 6, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            💰 ${val.toFixed(2)}
+                          </span>
+                        ) : null;
+                      })()}
                     </div>
                   ))}
                 </div>

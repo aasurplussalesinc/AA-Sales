@@ -500,11 +500,27 @@ export default function PurchaseOrders() {
     const tax = parseFloat(packingOrder.tax) || 0;
     const shipping = parseFloat(packingOrder.shipping) || 0;
     
+    // Calculate per-box contents value from items × unitPrice
+    const boxValues = {};
+    updatedItems.forEach((item, idx) => {
+      const dists = boxAssignments[idx] || [];
+      dists.forEach(d => {
+        const boxNum = d.box;
+        if (!boxValues[boxNum]) boxValues[boxNum] = 0;
+        boxValues[boxNum] += (parseInt(d.qty) || 0) * (parseFloat(item.unitPrice) || 0);
+      });
+    });
+    const boxInsurance = {};
+    Object.keys(boxValues).forEach(boxNum => {
+      boxInsurance[boxNum] = Math.round(boxValues[boxNum] * 100) / 100;
+    });
+    
     // Deep clean entire update object - Firestore rejects any undefined at any depth
     const updateData = cleanForFirestore({
       ...packingOrder,
       items: updatedItems,
       boxDistributions: boxAssignments,
+      boxInsurance: boxInsurance,
       packingComplete: true,
       status: 'packed',
       subtotal: newSubtotal,

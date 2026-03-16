@@ -312,20 +312,57 @@ export default function Shipping() {
 
   // ==================== INSURANCE ====================
   const [insuranceEditing, setInsuranceEditing] = useState(null); // orderId being edited
-  const [insuranceValue, setInsuranceValue] = useState('');
+  const [insuranceValue, setInsuranceValue] = useState(''); // legacy single value
+  const [boxInsuranceValues, setBoxInsuranceValues] = useState({}); // { boxNum: amount }
   const [savingInsurance, setSavingInsurance] = useState(false);
 
   const startInsuranceEdit = (order) => {
     setInsuranceEditing(order.id);
-    setInsuranceValue((order.insuranceAmount !== undefined && order.insuranceAmount !== null && order.insuranceAmount !== '') ? order.insuranceAmount : (order.subtotal || order.total || ''));
+    // Load per-box insurance if available, otherwise fall back to single value
+    if (order.boxInsurance && Object.keys(order.boxInsurance).length > 0) {
+      setBoxInsuranceValues({ ...order.boxInsurance });
+      // Also set legacy value as total for display
+      const total = Object.values(order.boxInsurance).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+      setInsuranceValue(total);
+    } else if (order.boxDetails && Object.keys(order.boxDetails).length > 0) {
+      // Auto-populate from box contents values
+      const autoInsurance = {};
+      Object.entries(order.boxDetails).forEach(([boxNum, details]) => {
+        autoInsurance[boxNum] = details.contentsValue || 0;
+      });
+      setBoxInsuranceValues(autoInsurance);
+      const total = Object.values(autoInsurance).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+      setInsuranceValue(total);
+    } else {
+      setBoxInsuranceValues({});
+      setInsuranceValue((order.insuranceAmount !== undefined && order.insuranceAmount !== null && order.insuranceAmount !== '') ? order.insuranceAmount : (order.subtotal || order.total || ''));
+    }
+  };
+
+  const updateBoxInsurance = (boxNum, value) => {
+    setBoxInsuranceValues(prev => {
+      const updated = { ...prev, [boxNum]: value };
+      // Update total
+      const total = Object.values(updated).reduce((s, v) => s + (parseFloat(v) || 0), 0);
+      setInsuranceValue(Math.round(total * 100) / 100);
+      return updated;
+    });
   };
 
   const saveInsurance = async (orderId) => {
     setSavingInsurance(true);
     try {
       const saveFn = httpsCallable(functions, 'saveInsurance');
-      await saveFn({ orderId, orgId: organization.id, insuranceAmount: insuranceValue });
-      setMessage('✅ Insurance value saved! Get Rates again to include insurance.');
+      const hasBoxInsurance = Object.keys(boxInsuranceValues).length > 0;
+      const totalInsurance = hasBoxInsurance
+        ? Object.values(boxInsuranceValues).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+        : parseFloat(insuranceValue) || 0;
+      await saveFn({
+        orderId, orgId: organization.id,
+        insuranceAmount: Math.round(totalInsurance * 100) / 100,
+        boxInsurance: hasBoxInsurance ? boxInsuranceValues : null
+      });
+      setMessage('✅ Insurance values saved! Get Rates again to include insurance.');
       setInsuranceEditing(null);
       await loadData();
     } catch (err) {
@@ -893,22 +930,45 @@ export default function Shipping() {
                     </td>
                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
                       {insuranceEditing === order.id ? (
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                          <span style={{ fontSize: 13, fontWeight: 600 }}>$</span>
-                          <input
-                            type="number" value={insuranceValue}
-                            onChange={e => setInsuranceValue(e.target.value)}
-                            style={{ width: 70, padding: '4px 6px', borderRadius: 4, border: '1px solid #ccc', fontSize: 12 }}
-                            autoFocus
-                          />
-                          <button onClick={() => saveInsurance(order.id)} disabled={savingInsurance}
-                            style={{ padding: '3px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
-                            ✓
-                          </button>
-                          <button onClick={() => setInsuranceEditing(null)}
-                            style={{ padding: '3px 6px', background: '#999', color: 'white', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
-                            ✕
-                          </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
+                          {Object.keys(boxInsuranceValues).length > 0 ? (
+                            <>
+                              {Object.entries(boxInsuranceValues).sort((a,b) => parseInt(a[0]) - parseInt(b[0])).map(([boxNum, val]) => (
+                                <div key={boxNum} style={{ display: 'flex', gap: 3, alignItems: 'center', fontSize: 11 }}>
+                                  <span style={{ color: '#666', minWidth: 30 }}>Box {boxNum}</span>
+                                  <span style={{ fontWeight: 600 }}>$</span>
+                                  <input
+                                    type="number" value={val}
+                                    onChange={e => updateBoxInsurance(boxNum, e.target.value)}
+                                    style={{ width: 65, padding: '3px 5px', borderRadius: 4, border: '1px solid #ccc', fontSize: 11 }}
+                                  />
+                                </div>
+                              ))}
+                              <div style={{ fontSize: 10, color: '#666', fontWeight: 600, borderTop: '1px solid #ddd', paddingTop: 3, marginTop: 2 }}>
+                                Total: ${Object.values(boxInsuranceValues).reduce((s, v) => s + (parseFloat(v) || 0), 0).toFixed(0)}
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ display: 'flex', gap: 3, alignItems: 'center' }}>
+                              <span style={{ fontSize: 13, fontWeight: 600 }}>$</span>
+                              <input
+                                type="number" value={insuranceValue}
+                                onChange={e => setInsuranceValue(e.target.value)}
+                                style={{ width: 70, padding: '4px 6px', borderRadius: 4, border: '1px solid #ccc', fontSize: 12 }}
+                                autoFocus
+                              />
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 3 }}>
+                            <button onClick={() => saveInsurance(order.id)} disabled={savingInsurance}
+                              style={{ padding: '3px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
+                              ✓
+                            </button>
+                            <button onClick={() => setInsuranceEditing(null)}
+                              style={{ padding: '3px 6px', background: '#999', color: 'white', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
+                              ✕
+                            </button>
+                          </div>
                         </div>
                       ) : (
                         <div

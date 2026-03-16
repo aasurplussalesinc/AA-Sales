@@ -147,13 +147,11 @@ function formatAddressForShippo(customerName, addressString, email, phone) {
     for (var i = 0; i < parts.length; i++) {
       var trimmed = parts[i].trim().toUpperCase();
       if (provinces.indexOf(trimmed) >= 0) { state = trimmed; break; }
-      // Also check within parts like "BC V2L 1L6"
       for (var p = 0; p < provinces.length; p++) {
         if (trimmed.indexOf(provinces[p]) === 0) { state = provinces[p]; break; }
       }
       if (state) break;
     }
-    // Street is first part, city is usually the part before province
     street1 = parts[0] || '';
     if (parts.length >= 3) city = parts[parts.length - 3] || parts[1] || '';
     else if (parts.length >= 2) city = parts[1] || '';
@@ -181,7 +179,6 @@ function formatAddressForShippo(customerName, addressString, email, phone) {
   if (parts.length >= 4) {
     street1 = parts[0] || '';
     city = parts[1] || '';
-    // parts[2] could be "NY 11779" or just "NY"
     if (!state) {
       var p2Match = parts[2].match(/^([A-Z]{2})\s*(\d{5}(-\d{4})?)?\s*$/i);
       if (p2Match) { state = p2Match[1].toUpperCase(); if (p2Match[2] && !zip) zip = p2Match[2]; }
@@ -200,12 +197,10 @@ function formatAddressForShippo(customerName, addressString, email, phone) {
     else if (!state) { state = stateZip; }
   } else if (parts.length === 2) {
     street1 = parts[0] || '';
-    // Second part might be "City, ST 12345" that didn't split, or just city
     var part1Match = parts[1].match(/^(.+?)\s+([A-Z]{2})\s+(\d{5}(-\d{4})?)$/i);
     if (part1Match) { city = part1Match[1]; if (!state) state = part1Match[2]; if (!zip) zip = part1Match[3]; }
     else city = parts[1] || '';
   } else if (parts.length === 1) {
-    // Single line - try to parse "123 Main St City ST 12345"
     street1 = parts[0] || '';
   }
   
@@ -233,20 +228,39 @@ function isInternational(fromCountry, toCountry) {
 
 function formatParcelsFromOrder(order, insuranceAmount) {
   var parcels = [];
+  var boxNumbers = []; // Track which box number each parcel corresponds to
   if (order.packingMode === 'triwalls' && order.triwalls && order.triwalls.length > 0) {
-    order.triwalls.forEach(function(tw) {
+    order.triwalls.forEach(function(tw, i) {
       parcels.push({ length: parseFloat(tw.length) || 48, width: parseFloat(tw.width) || 40, height: parseFloat(tw.height) || 36, weight: parseFloat(tw.weight) || 50, distance_unit: 'in', mass_unit: 'lb' });
+      boxNumbers.push(String(i + 1));
     });
   } else if (order.boxDetails && Object.keys(order.boxDetails).length > 0) {
     Object.entries(order.boxDetails).forEach(function(entry) {
+      var boxNum = entry[0];
       var box = entry[1];
       parcels.push({ length: parseFloat(box.length) || 12, width: parseFloat(box.width) || 12, height: parseFloat(box.height) || 12, weight: parseFloat(box.weight) || 5, distance_unit: 'in', mass_unit: 'lb' });
+      boxNumbers.push(boxNum);
     });
   } else {
     parcels.push({ length: 12, width: 12, height: 12, weight: 5, distance_unit: 'in', mass_unit: 'lb' });
+    boxNumbers.push('1');
   }
-  // Split insurance evenly across parcels (carrier-agnostic for rate shopping)
-  if (insuranceAmount && insuranceAmount > 0 && parcels.length > 0) {
+  
+  // Apply insurance per-box if available, otherwise split evenly
+  var boxInsurance = order.boxInsurance || {};
+  var hasPerBoxInsurance = Object.keys(boxInsurance).length > 0;
+  
+  if (hasPerBoxInsurance) {
+    // Use per-box insurance values — each parcel gets its actual contents value
+    parcels.forEach(function(p, i) {
+      var boxNum = boxNumbers[i];
+      var boxAmt = parseFloat(boxInsurance[boxNum]) || 0;
+      if (boxAmt > 0) {
+        p.extra = { insurance: { amount: String(boxAmt), currency: 'USD' } };
+      }
+    });
+  } else if (insuranceAmount && insuranceAmount > 0 && parcels.length > 0) {
+    // Legacy: split insurance evenly across parcels (carrier-agnostic for rate shopping)
     var perParcel = Math.ceil((insuranceAmount / parcels.length) * 100) / 100;
     parcels.forEach(function(p) {
       p.extra = { insurance: { amount: String(perParcel), currency: 'USD' } };
@@ -263,12 +277,6 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   if (order.shipToAddress) toAddressRaw = formatAddressForShippo(order.customerName, order.shipToAddress, order.customerEmail, order.customerPhone);
   else if (order.customerAddress) toAddressRaw = formatAddressForShippo(order.customerName, order.customerAddress, order.customerEmail, order.customerPhone);
   else throw new Error('Order ' + order.poNumber + ' has no shipping address');
-
-  console.log('=== ADDRESS DEBUG ===');
-  console.log('Raw shipToAddress:', order.shipToAddress || 'NONE');
-  console.log('Raw customerAddress:', order.customerAddress || 'NONE');
-  console.log('Parsed toAddress:', JSON.stringify(toAddressRaw));
-  console.log('=== END ADDRESS DEBUG ===');
 
   if (order.customsInfo && order.customsInfo.destinationCountry) toAddressRaw.country = order.customsInfo.destinationCountry;
 
@@ -442,7 +450,16 @@ exports.saveInsurance = functions.https.onCall(async function(data, context) {
   var orderId = data.orderId, orgId = data.orgId, insuranceAmount = data.insuranceAmount;
   if (!orderId || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderId and orgId required');
   try {
-    await db.collection('purchaseOrders').doc(orderId).update({ insuranceAmount: parseFloat(insuranceAmount) || 0, updatedAt: Date.now() });
+    var updateObj = { insuranceAmount: parseFloat(insuranceAmount) || 0, updatedAt: Date.now() };
+    // Save per-box insurance if provided
+    if (data.boxInsurance && typeof data.boxInsurance === 'object') {
+      var cleanBoxInsurance = {};
+      Object.keys(data.boxInsurance).forEach(function(k) {
+        cleanBoxInsurance[k] = parseFloat(data.boxInsurance[k]) || 0;
+      });
+      updateObj.boxInsurance = cleanBoxInsurance;
+    }
+    await db.collection('purchaseOrders').doc(orderId).update(updateObj);
     return { success: true };
   } catch (error) { throw new functions.https.HttpsError('internal', error.message); }
 });

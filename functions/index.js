@@ -129,8 +129,10 @@ function getOrgShippoKey(orgData) {
 }
 
 function formatAddressForShippo(customerName, addressString, email, phone) {
-  // Normalize: replace newlines with commas, collapse multiple commas/spaces
+  // Normalize: replace newlines with commas, strip periods after state codes, collapse multiple commas/spaces
   var normalized = (addressString || '').replace(/[\r\n]+/g, ', ').replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
+  // Strip periods after 2-letter state codes (e.g., "NC. 28546" -> "NC 28546")
+  normalized = normalized.replace(/\b([A-Z]{2})\.\s*/gi, '$1 ');
   var parts = normalized.split(',').map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 0; });
   
   var street1 = '', street2 = '', city = '', state = '', zip = '', country = 'US';
@@ -206,6 +208,11 @@ function formatAddressForShippo(customerName, addressString, email, phone) {
     // Single line - try to parse "123 Main St City ST 12345"
     street1 = parts[0] || '';
   }
+  
+  // Clean up final values
+  state = (state || '').replace(/\./g, '').trim();
+  zip = (zip || '').trim();
+  city = (city || '').trim();
   
   return { name: customerName || 'Customer', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '' };
 }

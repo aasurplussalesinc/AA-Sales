@@ -129,30 +129,84 @@ function getOrgShippoKey(orgData) {
 }
 
 function formatAddressForShippo(customerName, addressString, email, phone) {
-  var parts = addressString.split(',').map(function(p) { return p.trim(); });
-  var street1 = parts[0] || '';
-  var city = '', state = '', zip = '', country = 'US';
-  if (parts.length >= 3) {
-    city = parts[1] || '';
-    var stateZip = parts[2] || '';
-    var stateZipMatch = stateZip.match(/^([A-Z]{2})\s*(\d{5}(-\d{4})?)$/i);
-    if (stateZipMatch) { state = stateZipMatch[1]; zip = stateZipMatch[2]; }
-    else { state = stateZip; zip = parts[3] || ''; }
-  } else if (parts.length === 2) { city = parts[1] || ''; }
-  if (parts.length >= 4) {
-    var lastPart = parts[parts.length - 1].trim().toUpperCase();
-    if (lastPart.length === 2 && lastPart !== state) country = lastPart;
-  }
+  // Normalize: replace newlines with commas, collapse multiple commas/spaces
+  var normalized = (addressString || '').replace(/[\r\n]+/g, ', ').replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
+  var parts = normalized.split(',').map(function(p) { return p.trim(); }).filter(function(p) { return p.length > 0; });
+  
+  var street1 = '', street2 = '', city = '', state = '', zip = '', country = 'US';
   var allText = parts.join(' ');
+  
+  // Check for Canadian postal code anywhere in the address
   var canadianPostal = allText.match(/([A-Z]\d[A-Z]\s?\d[A-Z]\d)/i);
   if (canadianPostal) {
-    country = 'CA'; zip = canadianPostal[1].toUpperCase();
+    country = 'CA';
+    zip = canadianPostal[1].toUpperCase().replace(/\s/, ' ');
     var provinces = ['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'];
     for (var i = 0; i < parts.length; i++) {
       var trimmed = parts[i].trim().toUpperCase();
       if (provinces.indexOf(trimmed) >= 0) { state = trimmed; break; }
+      // Also check within parts like "BC V2L 1L6"
+      for (var p = 0; p < provinces.length; p++) {
+        if (trimmed.indexOf(provinces[p]) === 0) { state = provinces[p]; break; }
+      }
+      if (state) break;
+    }
+    // Street is first part, city is usually the part before province
+    street1 = parts[0] || '';
+    if (parts.length >= 3) city = parts[parts.length - 3] || parts[1] || '';
+    else if (parts.length >= 2) city = parts[1] || '';
+    return { name: customerName || 'Customer', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '' };
+  }
+  
+  // Try to extract US zip code from anywhere in the text
+  var usZipMatch = allText.match(/\b(\d{5}(-\d{4})?)\b/);
+  if (usZipMatch) zip = usZipMatch[1];
+  
+  // Try to extract 2-letter state code
+  var stateMatch = allText.match(/\b([A-Z]{2})\s+\d{5}/i);
+  if (stateMatch) state = stateMatch[1].toUpperCase();
+  
+  // Check if last part is a 2-letter country code (not a US state)
+  var usStates = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC','PR','VI','GU','AS','MP'];
+  if (parts.length >= 4) {
+    var lastPart = parts[parts.length - 1].trim().toUpperCase();
+    if (lastPart.length === 2 && usStates.indexOf(lastPart) < 0 && lastPart !== state) {
+      country = lastPart;
     }
   }
+  
+  // Parse parts based on count
+  if (parts.length >= 4) {
+    street1 = parts[0] || '';
+    city = parts[1] || '';
+    // parts[2] could be "NY 11779" or just "NY"
+    if (!state) {
+      var p2Match = parts[2].match(/^([A-Z]{2})\s*(\d{5}(-\d{4})?)?\s*$/i);
+      if (p2Match) { state = p2Match[1].toUpperCase(); if (p2Match[2] && !zip) zip = p2Match[2]; }
+      else state = parts[2];
+    }
+    if (!zip && parts[3]) {
+      var p3Zip = parts[3].match(/\d{5}(-\d{4})?/);
+      if (p3Zip) zip = p3Zip[0];
+    }
+  } else if (parts.length === 3) {
+    street1 = parts[0] || '';
+    city = parts[1] || '';
+    var stateZip = parts[2] || '';
+    var stateZipMatch = stateZip.match(/^([A-Z]{2})\s*(\d{5}(-\d{4})?)$/i);
+    if (stateZipMatch) { if (!state) state = stateZipMatch[1]; if (!zip) zip = stateZipMatch[2]; }
+    else if (!state) { state = stateZip; }
+  } else if (parts.length === 2) {
+    street1 = parts[0] || '';
+    // Second part might be "City, ST 12345" that didn't split, or just city
+    var part1Match = parts[1].match(/^(.+?)\s+([A-Z]{2})\s+(\d{5}(-\d{4})?)$/i);
+    if (part1Match) { city = part1Match[1]; if (!state) state = part1Match[2]; if (!zip) zip = part1Match[3]; }
+    else city = parts[1] || '';
+  } else if (parts.length === 1) {
+    // Single line - try to parse "123 Main St City ST 12345"
+    street1 = parts[0] || '';
+  }
+  
   return { name: customerName || 'Customer', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '' };
 }
 
@@ -202,6 +256,12 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   if (order.shipToAddress) toAddressRaw = formatAddressForShippo(order.customerName, order.shipToAddress, order.customerEmail, order.customerPhone);
   else if (order.customerAddress) toAddressRaw = formatAddressForShippo(order.customerName, order.customerAddress, order.customerEmail, order.customerPhone);
   else throw new Error('Order ' + order.poNumber + ' has no shipping address');
+
+  console.log('=== ADDRESS DEBUG ===');
+  console.log('Raw shipToAddress:', order.shipToAddress || 'NONE');
+  console.log('Raw customerAddress:', order.customerAddress || 'NONE');
+  console.log('Parsed toAddress:', JSON.stringify(toAddressRaw));
+  console.log('=== END ADDRESS DEBUG ===');
 
   if (order.customsInfo && order.customsInfo.destinationCountry) toAddressRaw.country = order.customsInfo.destinationCountry;
 

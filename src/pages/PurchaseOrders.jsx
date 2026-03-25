@@ -1430,6 +1430,28 @@ ${labelsHtml}
                   style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
               </div>
 
+              {/* Customer Address, Phone, Email */}
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Address</label>
+                <input type="text" placeholder="Street, City, State, Zip" value={newPO.customerAddress || ''}
+                  onChange={e => setNewPO({ ...newPO, customerAddress: e.target.value })}
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
+              </div>
+              <div style={{ display: 'flex', gap: 15, marginBottom: 20 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Phone</label>
+                  <input type="text" placeholder="Phone number..." value={newPO.customerPhone || ''}
+                    onChange={e => setNewPO({ ...newPO, customerPhone: e.target.value })}
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Email</label>
+                  <input type="text" placeholder="Email address..." value={newPO.customerEmail || ''}
+                    onChange={e => setNewPO({ ...newPO, customerEmail: e.target.value })}
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
+                </div>
+              </div>
+
               {/* Ship To Address */}
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>

@@ -1343,6 +1343,7 @@ export default function Shipping() {
                         <tr style={{ background: '#e8eaf6', textAlign: 'left' }}>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}>Carrier</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}>Service</th>
+                          <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'center' }}>Insurance</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'right' }}>Price</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'center' }}>Est. Delivery</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}></th>
@@ -1360,6 +1361,15 @@ export default function Shipping() {
                             }}>
                               <td style={{ padding: '10px 12px', fontWeight: 600 }}>{rate.provider}</td>
                               <td style={{ padding: '10px 12px' }}>{rate.servicelevel}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                {rate.insuranceProvider === 'UPS' ? (
+                                  <span style={{ background: '#fff3e0', color: '#e65100', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>UPS</span>
+                                ) : rate.insuranceProvider === 'XCover' ? (
+                                  <span style={{ background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>XCover</span>
+                                ) : (
+                                  <span style={{ color: '#ccc', fontSize: 11 }}>—</span>
+                                )}
+                              </td>
                               <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontSize: 15, color: '#1976d2' }}>
                                 ${rate.amount}
                               </td>
@@ -1414,6 +1424,15 @@ export default function Shipping() {
                           <div style={{ fontWeight: 700, fontSize: 20, color: '#1976d2' }}>${rate.amount}</div>
                           <div style={{ fontWeight: 600, marginTop: 4 }}>{rate.provider}</div>
                           <div style={{ fontSize: 12, color: '#666' }}>{rate.servicelevel}</div>
+                          {rate.insuranceProvider && rate.insuranceProvider !== 'none' && (
+                            <div style={{ fontSize: 10, marginTop: 3 }}>
+                              {rate.insuranceProvider === 'UPS' ? (
+                                <span style={{ background: '#fff3e0', color: '#e65100', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>🛡️ UPS Insurance</span>
+                              ) : (
+                                <span style={{ background: '#e8f5e9', color: '#2e7d32', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>🛡️ XCover Insurance</span>
+                              )}
+                            </div>
+                          )}
                           {rate.estimatedDays && (
                             <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
                               Est. {rate.estimatedDays} day{rate.estimatedDays !== 1 ? 's' : ''}

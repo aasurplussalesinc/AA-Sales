@@ -72,11 +72,15 @@ async function createCustomsDeclaration(apiKey, order, orgSettings) {
   return shippoRequest(apiKey, '/customs/declarations/', 'POST', declaration);
 }
 
-async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDeclarationId, thirdPartyBilling) {
+async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDeclarationId, thirdPartyBilling, carrierAccountIds) {
   var shipmentData = {
     address_from: fromAddress, address_to: toAddress, parcels: parcels, async: false,
   };
   if (customsDeclarationId) shipmentData.customs_declaration = customsDeclarationId;
+  // Force specific carrier accounts if provided
+  if (carrierAccountIds && carrierAccountIds.length > 0) {
+    shipmentData.carrier_accounts = carrierAccountIds;
+  }
   // Add third-party billing if provided
   if (thirdPartyBilling && thirdPartyBilling.account) {
     if (!shipmentData.extra) shipmentData.extra = {};
@@ -226,7 +230,7 @@ function isInternational(fromCountry, toCountry) {
   return (fromCountry || 'US').toUpperCase() !== (toCountry || 'US').toUpperCase();
 }
 
-function formatParcelsFromOrder(order, insuranceAmount) {
+function formatParcelsFromOrder(order, insuranceAmount, insuranceProvider) {
   var parcels = [];
   var boxNumbers = []; // Track which box number each parcel corresponds to
   if (order.packingMode === 'triwalls' && order.triwalls && order.triwalls.length > 0) {
@@ -247,23 +251,27 @@ function formatParcelsFromOrder(order, insuranceAmount) {
   }
   
   // Apply insurance per-box if available, otherwise split evenly
+  // insuranceProvider: 'UPS' for UPS native, undefined/null for XCover default
   var boxInsurance = order.boxInsurance || {};
   var hasPerBoxInsurance = Object.keys(boxInsurance).length > 0;
+  var insuranceObj = function(amt) {
+    var ins = { amount: String(amt), currency: 'USD' };
+    if (insuranceProvider) ins.provider = insuranceProvider;
+    return ins;
+  };
   
   if (hasPerBoxInsurance) {
-    // Use per-box insurance values — each parcel gets its actual contents value
     parcels.forEach(function(p, i) {
       var boxNum = boxNumbers[i];
       var boxAmt = parseFloat(boxInsurance[boxNum]) || 0;
       if (boxAmt > 0) {
-        p.extra = { insurance: { amount: String(boxAmt), currency: 'USD' } };
+        p.extra = { insurance: insuranceObj(boxAmt) };
       }
     });
   } else if (insuranceAmount && insuranceAmount > 0 && parcels.length > 0) {
-    // Legacy: split insurance evenly across parcels (carrier-agnostic for rate shopping)
     var perParcel = Math.ceil((insuranceAmount / parcels.length) * 100) / 100;
     parcels.forEach(function(p) {
-      p.extra = { insurance: { amount: String(perParcel), currency: 'USD' } };
+      p.extra = { insurance: insuranceObj(perParcel) };
     });
   }
   return parcels;
@@ -280,8 +288,37 @@ async function processPackedOrder(apiKey, order, orgSettings) {
 
   if (order.customsInfo && order.customsInfo.destinationCountry) toAddressRaw.country = order.customsInfo.destinationCountry;
 
+  // Validate and auto-correct the destination address (Shippo's dashboard does this automatically)
+  try {
+    var validated = await validateAddress(apiKey, toAddressRaw);
+    console.log('=== ADDRESS VALIDATION ===');
+    console.log('Original:', JSON.stringify(toAddressRaw));
+    console.log('Validated:', JSON.stringify({ street1: validated.street1, city: validated.city, state: validated.state, zip: validated.zip, country: validated.country }));
+    console.log('Is valid:', validated.validation_results && validated.validation_results.is_valid);
+    console.log('Messages:', JSON.stringify((validated.validation_results && validated.validation_results.messages) || []));
+    console.log('=== END VALIDATION ===');
+    // Use the validated/corrected address if validation passed
+    if (validated.validation_results && validated.validation_results.is_valid) {
+      toAddressRaw = {
+        name: validated.name || toAddressRaw.name,
+        street1: validated.street1 || toAddressRaw.street1,
+        street2: validated.street2 || '',
+        city: validated.city || toAddressRaw.city,
+        state: validated.state || toAddressRaw.state,
+        zip: validated.zip || toAddressRaw.zip,
+        country: validated.country || toAddressRaw.country,
+        email: toAddressRaw.email || '',
+        phone: toAddressRaw.phone || ''
+      };
+      console.log('Using validated address');
+    } else {
+      console.log('Validation failed, using original parsed address');
+    }
+  } catch (e) {
+    console.log('Address validation error (continuing with original):', e.message);
+  }
+
   var insuranceAmount = (order.insuranceAmount !== undefined && order.insuranceAmount !== null && order.insuranceAmount !== '') ? parseFloat(order.insuranceAmount) : (order.subtotal || order.total || 0);
-  var parcels = formatParcelsFromOrder(order, insuranceAmount);
   var fromFormatted = formatStructuredAddress(fromAddress);
   var international = isInternational(fromFormatted.country, toAddressRaw.country);
   var customsDeclarationId = null;
@@ -292,35 +329,105 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     customsDeclarationId = customs.object_id;
   }
 
-  var shipment = await createShipment(apiKey, fromFormatted, toAddressRaw, parcels, customsDeclarationId, order.thirdPartyBilling || null);
-  console.log('=== SHIPPO DEBUG ===');
-  console.log('Shipment ID:', shipment.object_id);
-  console.log('Shipment status:', shipment.status);
-  console.log('Total rates returned:', (shipment.rates || []).length);
-  console.log('Carriers:', (shipment.rates || []).map(function(r) { return r.provider; }));
-  console.log('Messages:', JSON.stringify(shipment.messages || []));
+  // Fetch active carrier accounts - prefer user's own accounts over Shippo accounts
+  var carrierAccountIds = [];
+  try {
+    var carriers = await shippoRequest(apiKey, '/carrier_accounts/?results=50', 'GET');
+    var activeAccounts = (carriers.results || []).filter(function(c) { return c.active; });
+    console.log('=== CARRIER ACCOUNTS ===');
+    activeAccounts.forEach(function(c) {
+      console.log('  ' + c.carrier + ' | ' + (c.account_id || 'no-id') + ' | object_id: ' + c.object_id + ' | is_shippo: ' + c.is_shippo_account);
+    });
+    console.log('=== END CARRIER ACCOUNTS ===');
+    
+    var userOwnCarriers = {};
+    activeAccounts.forEach(function(c) {
+      if (!c.is_shippo_account) userOwnCarriers[c.carrier] = true;
+    });
+    
+    carrierAccountIds = activeAccounts.filter(function(c) {
+      if (c.is_shippo_account && userOwnCarriers[c.carrier]) {
+        console.log('  Excluding Shippo account for ' + c.carrier + ' (user has own account)');
+        return false;
+      }
+      return true;
+    }).map(function(c) { return c.object_id; });
+    
+    console.log('Using ' + carrierAccountIds.length + ' carrier accounts for rate request');
+  } catch (e) {
+    console.log('Could not fetch carrier accounts:', e.message);
+  }
+
+  // Create TWO shipments: one with UPS insurance, one with XCover (no provider)
+  // This lets the user compare total costs with different insurance providers
+  var hasInsurance = insuranceAmount > 0 || (order.boxInsurance && Object.keys(order.boxInsurance).length > 0);
+  
+  var parcelsUPS = formatParcelsFromOrder(order, insuranceAmount, 'UPS');
+  var shipmentUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsUPS, customsDeclarationId, order.thirdPartyBilling || null, carrierAccountIds);
+  
+  var allRates = (shipmentUPS.rates || []).map(function(r) {
+    return { 
+      rateId: r.object_id, provider: r.provider, 
+      servicelevel: (r.servicelevel && r.servicelevel.name) || (r.servicelevel && r.servicelevel.token) || '', 
+      amount: r.amount, currency: r.currency, estimatedDays: r.estimated_days, durationTerms: r.duration_terms,
+      insuranceProvider: hasInsurance ? 'UPS' : 'none',
+      shipmentId: shipmentUPS.object_id
+    };
+  });
+  
+  console.log('=== SHIPPO DEBUG (UPS Insurance) ===');
+  console.log('Shipment ID:', shipmentUPS.object_id);
+  console.log('Total rates returned:', (shipmentUPS.rates || []).length);
+  console.log('Carriers:', (shipmentUPS.rates || []).map(function(r) { return r.provider; }));
   console.log('=== END DEBUG ===');
+
+  // Only fetch XCover rates if there's insurance to compare
+  var shipmentXCover = null;
+  if (hasInsurance) {
+    try {
+      var parcelsXCover = formatParcelsFromOrder(order, insuranceAmount, null); // no provider = XCover
+      shipmentXCover = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsXCover, customsDeclarationId, order.thirdPartyBilling || null, carrierAccountIds);
+      
+      (shipmentXCover.rates || []).forEach(function(r) {
+        allRates.push({
+          rateId: r.object_id, provider: r.provider,
+          servicelevel: (r.servicelevel && r.servicelevel.name) || (r.servicelevel && r.servicelevel.token) || '',
+          amount: r.amount, currency: r.currency, estimatedDays: r.estimated_days, durationTerms: r.duration_terms,
+          insuranceProvider: 'XCover',
+          shipmentId: shipmentXCover.object_id
+        });
+      });
+      
+      console.log('=== SHIPPO DEBUG (XCover Insurance) ===');
+      console.log('Shipment ID:', shipmentXCover.object_id);
+      console.log('Total rates returned:', (shipmentXCover.rates || []).length);
+      console.log('=== END DEBUG ===');
+    } catch (e) {
+      console.log('XCover shipment failed (non-critical):', e.message);
+    }
+  }
+
+  // Sort all rates by price
+  allRates.sort(function(a, b) { return parseFloat(a.amount) - parseFloat(b.amount); });
+
   var preferredCarrier = orgSettings.preferredCarrier || 'ups';
   var selectedRate = null;
 
-  if (shipment.rates && shipment.rates.length > 0) {
-    // Get all rates from preferred carrier, sorted cheapest first
-    var carrierRates = shipment.rates.filter(function(r) { return r.provider.toLowerCase().indexOf(preferredCarrier.toLowerCase()) >= 0; });
+  if (allRates.length > 0) {
+    var carrierRates = allRates.filter(function(r) { return r.provider.toLowerCase().indexOf(preferredCarrier.toLowerCase()) >= 0; });
     if (carrierRates.length > 0) {
-      selectedRate = carrierRates.sort(function(a, b) { return parseFloat(a.amount) - parseFloat(b.amount); })[0];
+      selectedRate = carrierRates[0]; // already sorted cheapest first
     }
-    // Fallback: cheapest rate from any carrier
-    if (!selectedRate) selectedRate = shipment.rates.sort(function(a, b) { return parseFloat(a.amount) - parseFloat(b.amount); })[0];
+    if (!selectedRate) selectedRate = allRates[0];
   }
 
   var result = {
-    shipmentId: shipment.object_id, international: international,
+    shipmentId: shipmentUPS.object_id, international: international,
+    xCoverShipmentId: shipmentXCover ? shipmentXCover.object_id : null,
     customsDeclarationId: customsDeclarationId, destinationCountry: toAddressRaw.country,
-    rates: (shipment.rates || []).map(function(r) {
-      return { rateId: r.object_id, provider: r.provider, servicelevel: (r.servicelevel && r.servicelevel.name) || (r.servicelevel && r.servicelevel.token) || '', amount: r.amount, currency: r.currency, estimatedDays: r.estimated_days, durationTerms: r.duration_terms };
-    }),
-    selectedRate: selectedRate ? { rateId: selectedRate.object_id, provider: selectedRate.provider, servicelevel: (selectedRate.servicelevel && selectedRate.servicelevel.name) || (selectedRate.servicelevel && selectedRate.servicelevel.token) || '', amount: selectedRate.amount, currency: selectedRate.currency } : null,
-    parcels: parcels.length, toAddress: toAddressRaw, createdAt: Date.now(),
+    rates: allRates,
+    selectedRate: selectedRate,
+    parcels: parcelsUPS.length, toAddress: toAddressRaw, createdAt: Date.now(),
     insuranceAmount: insuranceAmount,
   };
 
@@ -616,4 +723,48 @@ exports.generateEndOfDayPdf = functions.runWith({ timeoutSeconds: 30, memory: '2
     var base64 = Buffer.from(pdfBytes).toString('base64');
     return { pdf: base64 };
   } catch (error) { throw new functions.https.HttpsError('internal', 'End of Day PDF failed: ' + error.message); }
+});
+
+// One-time utility: Update UPS carrier account with invoice details to enable negotiated rates
+exports.updateCarrierInvoice = functions.https.onCall(async function(data, context) {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  try {
+    var orgDoc = await db.collection('organizations').doc(data.orgId).get();
+    var apiKey = getOrgShippoKey(orgDoc.data());
+    if (!apiKey) throw new Error('Shippo API key not configured.');
+    
+    var carrierAccountId = data.carrierAccountId;
+    if (!carrierAccountId) throw new Error('carrierAccountId required');
+    
+    // First GET the current carrier account to see its state
+    var current = await shippoRequest(apiKey, '/carrier_accounts/' + carrierAccountId, 'GET');
+    console.log('Current carrier account:', JSON.stringify({
+      carrier: current.carrier,
+      account_id: current.account_id,
+      object_id: current.object_id,
+      active: current.active,
+      is_shippo: current.is_shippo_account,
+      has_invoice: current.parameters && current.parameters.has_invoice
+    }));
+    
+    // Update with invoice details via PUT
+    var updateBody = {
+      parameters: Object.assign({}, current.parameters || {}, {
+        has_invoice: true,
+        invoice_controlid: data.invoiceControlId || '',
+        invoice_date: data.invoiceDate || '',
+        invoice_number: data.invoiceNumber || '',
+        invoice_value: data.invoiceValue || ''
+      })
+    };
+    
+    console.log('Updating carrier account with invoice:', JSON.stringify(updateBody));
+    var result = await shippoRequest(apiKey, '/carrier_accounts/' + carrierAccountId, 'PUT', updateBody);
+    console.log('Update result:', JSON.stringify({ object_id: result.object_id, active: result.active }));
+    
+    return { success: true, carrierAccountId: result.object_id, message: 'Invoice details updated. Negotiated rates should now be available.' };
+  } catch (error) {
+    console.error('updateCarrierInvoice error:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
 });

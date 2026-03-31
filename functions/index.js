@@ -159,7 +159,7 @@ function formatAddressForShippo(customerName, addressString, email, phone) {
     street1 = parts[0] || '';
     if (parts.length >= 3) city = parts[parts.length - 3] || parts[1] || '';
     else if (parts.length >= 2) city = parts[1] || '';
-    return { name: customerName || 'Customer', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '' };
+    return { name: customerName || 'Customer', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '', is_residential: false };
   }
   
   // Try to extract US zip code from anywhere in the text
@@ -213,7 +213,7 @@ function formatAddressForShippo(customerName, addressString, email, phone) {
   zip = (zip || '').trim();
   city = (city || '').trim();
   
-  return { name: customerName || 'Customer', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '' };
+  return { name: customerName || 'Customer', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '', is_residential: false };
 }
 
 function formatStructuredAddress(data) {
@@ -308,7 +308,8 @@ async function processPackedOrder(apiKey, order, orgSettings) {
         zip: validated.zip || toAddressRaw.zip,
         country: validated.country || toAddressRaw.country,
         email: toAddressRaw.email || '',
-        phone: toAddressRaw.phone || ''
+        phone: toAddressRaw.phone || '',
+        is_residential: false
       };
       console.log('Using validated address');
     } else {
@@ -358,52 +359,74 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     console.log('Could not fetch carrier accounts:', e.message);
   }
 
-  // Create TWO shipments: one with UPS insurance, one with XCover (no provider)
-  // This lets the user compare total costs with different insurance providers
+  // Billing contexts: always fetch AA account rates, also fetch customer-billed rates if they have a UPS account
   var hasInsurance = insuranceAmount > 0 || (order.boxInsurance && Object.keys(order.boxInsurance).length > 0);
-  
+  var customerBilling = (order.thirdPartyBilling && order.thirdPartyBilling.account) ? order.thirdPartyBilling : null;
+
+  // Helper to map rates with labels
+  function mapRates(shipment, billedTo, insProvider) {
+    return (shipment.rates || []).map(function(r) {
+      return {
+        rateId: r.object_id, provider: r.provider,
+        servicelevel: (r.servicelevel && r.servicelevel.name) || (r.servicelevel && r.servicelevel.token) || '',
+        amount: r.amount, currency: r.currency, estimatedDays: r.estimated_days, durationTerms: r.duration_terms,
+        insuranceProvider: insProvider,
+        billedTo: billedTo,
+        shipmentId: shipment.object_id
+      };
+    });
+  }
+
+  // --- AA Account rates (no third-party billing) ---
   var parcelsUPS = formatParcelsFromOrder(order, insuranceAmount, 'UPS');
-  var shipmentUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsUPS, customsDeclarationId, order.thirdPartyBilling || null, carrierAccountIds);
-  
-  var allRates = (shipmentUPS.rates || []).map(function(r) {
-    return { 
-      rateId: r.object_id, provider: r.provider, 
-      servicelevel: (r.servicelevel && r.servicelevel.name) || (r.servicelevel && r.servicelevel.token) || '', 
-      amount: r.amount, currency: r.currency, estimatedDays: r.estimated_days, durationTerms: r.duration_terms,
-      insuranceProvider: hasInsurance ? 'UPS' : 'none',
-      shipmentId: shipmentUPS.object_id
-    };
-  });
-  
-  console.log('=== SHIPPO DEBUG (UPS Insurance) ===');
-  console.log('Shipment ID:', shipmentUPS.object_id);
-  console.log('Total rates returned:', (shipmentUPS.rates || []).length);
-  console.log('Carriers:', (shipmentUPS.rates || []).map(function(r) { return r.provider; }));
+  var shipmentAAUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsUPS, customsDeclarationId, null, carrierAccountIds);
+  var allRates = mapRates(shipmentAAUPS, 'AA', hasInsurance ? 'UPS' : 'none');
+
+  console.log('=== SHIPPO DEBUG (AA Account / UPS Insurance) ===');
+  console.log('Shipment ID:', shipmentAAUPS.object_id);
+  console.log('Total rates returned:', (shipmentAAUPS.rates || []).length);
   console.log('=== END DEBUG ===');
 
-  // Only fetch XCover rates if there's insurance to compare
-  var shipmentXCover = null;
+  // AA Account + XCover insurance
   if (hasInsurance) {
     try {
-      var parcelsXCover = formatParcelsFromOrder(order, insuranceAmount, null); // no provider = XCover
-      shipmentXCover = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsXCover, customsDeclarationId, order.thirdPartyBilling || null, carrierAccountIds);
-      
-      (shipmentXCover.rates || []).forEach(function(r) {
-        allRates.push({
-          rateId: r.object_id, provider: r.provider,
-          servicelevel: (r.servicelevel && r.servicelevel.name) || (r.servicelevel && r.servicelevel.token) || '',
-          amount: r.amount, currency: r.currency, estimatedDays: r.estimated_days, durationTerms: r.duration_terms,
-          insuranceProvider: 'XCover',
-          shipmentId: shipmentXCover.object_id
-        });
-      });
-      
-      console.log('=== SHIPPO DEBUG (XCover Insurance) ===');
-      console.log('Shipment ID:', shipmentXCover.object_id);
-      console.log('Total rates returned:', (shipmentXCover.rates || []).length);
+      var parcelsAAXCover = formatParcelsFromOrder(order, insuranceAmount, null);
+      var shipmentAAXCover = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAAXCover, customsDeclarationId, null, carrierAccountIds);
+      allRates = allRates.concat(mapRates(shipmentAAXCover, 'AA', 'XCover'));
+      console.log('=== SHIPPO DEBUG (AA Account / XCover Insurance) ===');
+      console.log('Total rates returned:', (shipmentAAXCover.rates || []).length);
       console.log('=== END DEBUG ===');
     } catch (e) {
-      console.log('XCover shipment failed (non-critical):', e.message);
+      console.log('AA XCover shipment failed (non-critical):', e.message);
+    }
+  }
+
+  // --- Customer Account rates (third-party billing) ---
+  if (customerBilling) {
+    try {
+      var parcelsCustUPS = formatParcelsFromOrder(order, insuranceAmount, 'UPS');
+      var shipmentCustUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustUPS, customsDeclarationId, customerBilling, carrierAccountIds);
+      allRates = allRates.concat(mapRates(shipmentCustUPS, 'Customer', hasInsurance ? 'UPS' : 'none'));
+      console.log('=== SHIPPO DEBUG (Customer Account / UPS Insurance) ===');
+      console.log('Customer account:', customerBilling.account);
+      console.log('Total rates returned:', (shipmentCustUPS.rates || []).length);
+      console.log('=== END DEBUG ===');
+    } catch (e) {
+      console.log('Customer UPS billing shipment failed (non-critical):', e.message);
+    }
+
+    // Customer Account + XCover insurance
+    if (hasInsurance) {
+      try {
+        var parcelsCustXCover = formatParcelsFromOrder(order, insuranceAmount, null);
+        var shipmentCustXCover = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustXCover, customsDeclarationId, customerBilling, carrierAccountIds);
+        allRates = allRates.concat(mapRates(shipmentCustXCover, 'Customer', 'XCover'));
+        console.log('=== SHIPPO DEBUG (Customer Account / XCover Insurance) ===');
+        console.log('Total rates returned:', (shipmentCustXCover.rates || []).length);
+        console.log('=== END DEBUG ===');
+      } catch (e) {
+        console.log('Customer XCover shipment failed (non-critical):', e.message);
+      }
     }
   }
 
@@ -422,8 +445,8 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   }
 
   var result = {
-    shipmentId: shipmentUPS.object_id, international: international,
-    xCoverShipmentId: shipmentXCover ? shipmentXCover.object_id : null,
+    shipmentId: shipmentAAUPS.object_id, international: international,
+    customerBillingAccount: customerBilling ? customerBilling.account : null,
     customsDeclarationId: customsDeclarationId, destinationCountry: toAddressRaw.country,
     rates: allRates,
     selectedRate: selectedRate,
@@ -437,7 +460,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
       result.labelUrl = transaction.label_url; result.trackingNumber = transaction.tracking_number;
       result.trackingUrl = transaction.tracking_url_provider; result.transactionId = transaction.object_id;
       result.labelStatus = 'purchased'; result.purchasedAt = Date.now();
-      result.labelPageCount = parcels.length;
+      result.labelPageCount = parcelsUPS.length;
       // Store all parcel labels for multi-piece shipments
       if (transaction.allLabels && transaction.allLabels.length > 0) {
         result.allLabels = transaction.allLabels;
@@ -448,7 +471,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     }
   } else {
     result.labelStatus = 'rates_ready';
-    result.labelPageCount = parcels.length;
+    result.labelPageCount = parcelsUPS.length;
   }
 
   return result;

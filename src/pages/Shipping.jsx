@@ -34,6 +34,7 @@ export default function Shipping() {
   const [selectedRate, setSelectedRate] = useState(null);
   const [rateSortBy, setRateSortBy] = useState('cheapest'); // cheapest, fastest, carrier
   const [rateFilterCarrier, setRateFilterCarrier] = useState('all'); // all, ups, usps, fedex, dhl
+  const [rateFilterBilling, setRateFilterBilling] = useState('all'); // all, AA, Customer
   const [rateViewMode, setRateViewMode] = useState('table'); // table, cards
 
   useEffect(() => {
@@ -46,6 +47,26 @@ export default function Shipping() {
     try {
       const [ordersData, customersData] = await Promise.all([DB.getPurchaseOrders(), DB.getCustomers()]);
       const sorted = ordersData.sort((a, b) => (b.packedAt || b.updatedAt || 0) - (a.packedAt || a.updatedAt || 0));
+
+      // Auto-detect: if a packed order's customer has a UPS account but order has no thirdPartyBilling, set it
+      const autoUpdates = [];
+      for (const order of sorted) {
+        if (order.status !== 'packed' || order.shippingLabel?.trackingNumber) continue;
+        const cust = customersData.find(c => c.id === order.customerId);
+        if (!cust?.upsAccount) continue;
+        const alreadySet = order.thirdPartyBilling?.account === cust.upsAccount;
+        if (!alreadySet) {
+          autoUpdates.push(
+            DB.updatePurchaseOrder(order.id, {
+              thirdPartyBilling: { account: cust.upsAccount, type: 'THIRD_PARTY', country: 'US', zip: cust.zip || '' },
+              updatedAt: Date.now()
+            })
+          );
+          order.thirdPartyBilling = { account: cust.upsAccount, type: 'THIRD_PARTY', country: 'US', zip: cust.zip || '' };
+        }
+      }
+      if (autoUpdates.length > 0) await Promise.all(autoUpdates);
+
       setOrders(sorted);
       setCustomers(customersData);
     } catch (err) {
@@ -890,6 +911,7 @@ export default function Shipping() {
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Ship To</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Packages</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Insurance</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Bill To</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Label Status</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Tracking</th>
                 <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Cost</th>
@@ -989,6 +1011,24 @@ export default function Shipping() {
                           )}
                         </div>
                       )}
+                    </td>
+                    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                      {(() => {
+                        const cust = customers.find(c => c.id === order.customerId);
+                        const custAcct = cust?.upsAccount;
+                        const billing = order.thirdPartyBilling;
+                        if (custAcct) {
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
+                              <span style={{ padding: '2px 8px', borderRadius: 8, background: '#e3f2fd', color: '#1565c0', fontSize: 11, fontWeight: 700 }}>
+                                🏢 {custAcct}
+                              </span>
+                              <span style={{ fontSize: 10, color: '#888' }}>Customer UPS</span>
+                            </div>
+                          );
+                        }
+                        return <span style={{ color: '#ccc', fontSize: 12 }}>AA Acct</span>;
+                      })()}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
                       <span style={{
@@ -1210,10 +1250,15 @@ export default function Shipping() {
             // Get unique carriers for filter
             const carriers = [...new Set(allRates.map(r => r.provider))];
 
+            // Check if any customer-billed rates exist
+            const hasCustomerRates = allRates.some(r => r.billedTo === 'Customer');
+
             // Filter rates
-            const filteredRates = rateFilterCarrier === 'all' 
-              ? allRates 
-              : allRates.filter(r => r.provider.toLowerCase().includes(rateFilterCarrier.toLowerCase()));
+            const filteredRates = allRates.filter(r => {
+              const carrierMatch = rateFilterCarrier === 'all' || r.provider.toLowerCase().includes(rateFilterCarrier.toLowerCase());
+              const billingMatch = rateFilterBilling === 'all' || r.billedTo === rateFilterBilling;
+              return carrierMatch && billingMatch;
+            });
 
             // Sort rates
             const sortedRates = [...filteredRates].sort((a, b) => {
@@ -1243,8 +1288,14 @@ export default function Shipping() {
                       {allRates.length} rate{allRates.length !== 1 ? 's' : ''} from {carriers.length} carrier{carriers.length !== 1 ? 's' : ''}
                       {' • '}{order.customerName} → {order.shipToAddress || order.customerAddress || 'N/A'}
                     </span>
+                    {hasCustomerRates && order.thirdPartyBilling?.account && (
+                      <div style={{ marginTop: 4, display: 'flex', gap: 8 }}>
+                        <span style={{ padding: '2px 8px', borderRadius: 8, background: '#e8f5e9', color: '#2e7d32', fontSize: 11, fontWeight: 600 }}>🏢 AA Account rates included</span>
+                        <span style={{ padding: '2px 8px', borderRadius: 8, background: '#e3f2fd', color: '#1565c0', fontSize: 11, fontWeight: 600 }}>📦 Customer UPS ({order.thirdPartyBilling.account}) rates included</span>
+                      </div>
+                    )}
                   </div>
-                  <button onClick={() => { setShowRates(null); setRateFilterCarrier('all'); }} style={{
+                  <button onClick={() => { setShowRates(null); setRateFilterCarrier('all'); setRateFilterBilling('all'); }} style={{
                     background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999', padding: '0 4px'
                   }}>✕</button>
                 </div>
@@ -1322,6 +1373,25 @@ export default function Shipping() {
                     })}
                   </div>
 
+                  {/* Bill To Filter - only show if customer rates exist */}
+                  {hasCustomerRates && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Bill To:</span>
+                      {[
+                        { value: 'all', label: 'All' },
+                        { value: 'AA', label: '🏢 AA Account' },
+                        { value: 'Customer', label: `📦 Customer (${order.thirdPartyBilling?.account || ''})` },
+                      ].map(b => (
+                        <button key={b.value} onClick={() => setRateFilterBilling(b.value)} style={{
+                          padding: '5px 12px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer',
+                          background: rateFilterBilling === b.value ? '#1565c0' : 'white',
+                          color: rateFilterBilling === b.value ? 'white' : '#333',
+                          fontWeight: rateFilterBilling === b.value ? 600 : 400, fontSize: 12
+                        }}>{b.label}</button>
+                      ))}
+                    </div>
+                  )}
+
                   {/* View Toggle */}
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
                     <button onClick={() => setRateViewMode('table')} style={{
@@ -1343,7 +1413,6 @@ export default function Shipping() {
                         <tr style={{ background: '#e8eaf6', textAlign: 'left' }}>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}>Carrier</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}>Service</th>
-                          <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'center' }}>Insurance</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'right' }}>Price</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'center' }}>Est. Delivery</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}></th>
@@ -1361,15 +1430,6 @@ export default function Shipping() {
                             }}>
                               <td style={{ padding: '10px 12px', fontWeight: 600 }}>{rate.provider}</td>
                               <td style={{ padding: '10px 12px' }}>{rate.servicelevel}</td>
-                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                                {rate.insuranceProvider === 'UPS' ? (
-                                  <span style={{ background: '#fff3e0', color: '#e65100', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>UPS</span>
-                                ) : rate.insuranceProvider === 'XCover' ? (
-                                  <span style={{ background: '#e8f5e9', color: '#2e7d32', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>XCover</span>
-                                ) : (
-                                  <span style={{ color: '#ccc', fontSize: 11 }}>—</span>
-                                )}
-                              </td>
                               <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontSize: 15, color: '#1976d2' }}>
                                 ${rate.amount}
                               </td>
@@ -1382,6 +1442,20 @@ export default function Shipping() {
                               <td style={{ padding: '10px 12px' }}>
                                 {isCheapest && <span style={{ background: '#4CAF50', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 }}>CHEAPEST</span>}
                                 {isFastest && <span style={{ background: '#2196F3', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 }}>FASTEST</span>}
+                              </td>
+                              <td style={{ padding: '10px 12px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                  {rate.billedTo === 'Customer'
+                                    ? <span style={{ padding: '2px 7px', borderRadius: 8, background: '#e3f2fd', color: '#1565c0', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>📦 Customer UPS</span>
+                                    : <span style={{ padding: '2px 7px', borderRadius: 8, background: '#f3e5f5', color: '#6a1b9a', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>🏢 AA Account</span>
+                                  }
+                                  {rate.insuranceProvider && rate.insuranceProvider !== 'none' && (
+                                    <span style={{ padding: '2px 7px', borderRadius: 8, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
+                                      background: rate.insuranceProvider === 'UPS' ? '#fff3e0' : '#e8f5e9',
+                                      color: rate.insuranceProvider === 'UPS' ? '#e65100' : '#2e7d32'
+                                    }}>🛡️ {rate.insuranceProvider}</span>
+                                  )}
+                                </div>
                               </td>
                               <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                 <button
@@ -1424,15 +1498,18 @@ export default function Shipping() {
                           <div style={{ fontWeight: 700, fontSize: 20, color: '#1976d2' }}>${rate.amount}</div>
                           <div style={{ fontWeight: 600, marginTop: 4 }}>{rate.provider}</div>
                           <div style={{ fontSize: 12, color: '#666' }}>{rate.servicelevel}</div>
-                          {rate.insuranceProvider && rate.insuranceProvider !== 'none' && (
-                            <div style={{ fontSize: 10, marginTop: 3 }}>
-                              {rate.insuranceProvider === 'UPS' ? (
-                                <span style={{ background: '#fff3e0', color: '#e65100', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>🛡️ UPS Insurance</span>
-                              ) : (
-                                <span style={{ background: '#e8f5e9', color: '#2e7d32', padding: '1px 6px', borderRadius: 8, fontWeight: 600 }}>🛡️ XCover Insurance</span>
-                              )}
-                            </div>
-                          )}
+                          <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
+                            {rate.billedTo === 'Customer'
+                              ? <span style={{ padding: '2px 7px', borderRadius: 8, background: '#e3f2fd', color: '#1565c0', fontSize: 10, fontWeight: 600 }}>📦 Customer UPS</span>
+                              : <span style={{ padding: '2px 7px', borderRadius: 8, background: '#f3e5f5', color: '#6a1b9a', fontSize: 10, fontWeight: 600 }}>🏢 AA Account</span>
+                            }
+                            {rate.insuranceProvider && rate.insuranceProvider !== 'none' && (
+                              <span style={{ padding: '2px 7px', borderRadius: 8, fontSize: 10, fontWeight: 600,
+                                background: rate.insuranceProvider === 'UPS' ? '#fff3e0' : '#e8f5e9',
+                                color: rate.insuranceProvider === 'UPS' ? '#e65100' : '#2e7d32'
+                              }}>🛡️ {rate.insuranceProvider}</span>
+                            )}
+                          </div>
                           {rate.estimatedDays && (
                             <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
                               Est. {rate.estimatedDays} day{rate.estimatedDays !== 1 ? 's' : ''}

@@ -1950,7 +1950,7 @@ ${labelsHtml}
       {/* Orders Table */}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden' }}>
-          <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Packing</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Ship</th></tr></thead>
+          <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Packing</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Quick Action</th></tr></thead>
           <tbody>
             {(() => {
               // Filter orders
@@ -2066,6 +2066,18 @@ ${labelsHtml}
                         }}
                       >
                         {processingOrder[order.id] ? '...' : '🚚 Ship'}
+                      </button>
+                    ) : order.status === 'shipped' ? (
+                      <button
+                        onClick={() => markPaid(order)}
+                        title="Mark as Paid"
+                        style={{
+                          padding: '5px 12px', background: '#1976d2',
+                          color: 'white', border: 'none', borderRadius: 6,
+                          cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
+                        }}
+                      >
+                        💰 Paid
                       </button>
                     ) : (
                       <span style={{ color: '#ccc', fontSize: 12 }}>—</span>

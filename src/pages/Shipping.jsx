@@ -36,6 +36,7 @@ export default function Shipping() {
   const [rateFilterCarrier, setRateFilterCarrier] = useState('all'); // all, ups, usps, fedex, dhl
   const [rateFilterBilling, setRateFilterBilling] = useState('all'); // all, AA, Customer
   const [rateViewMode, setRateViewMode] = useState('table'); // table, cards
+  const [hideTriwalls, setHideTriwalls] = useState(true); // hide triwall orders by default
 
   useEffect(() => {
     loadData();
@@ -393,7 +394,9 @@ export default function Shipping() {
   };
 
   // Filter orders
+  const triwallCount = orders.filter(o => o.packingMode === 'triwalls').length;
   const filteredOrders = orders.filter(order => {
+    if (hideTriwalls && order.packingMode === 'triwalls') return false;
     if (filterStatus === 'all') return ['packed', 'shipped'].includes(order.status);
     if (filterStatus === 'packed') return order.status === 'packed';
     if (filterStatus === 'shipped') return order.status === 'shipped';
@@ -748,6 +751,26 @@ export default function Shipping() {
           </button>
         ))}
       </div>
+
+      {/* Triwall Toggle */}
+      {triwallCount > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <button
+            onClick={() => setHideTriwalls(prev => !prev)}
+            style={{
+              padding: '6px 14px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer', fontSize: 12,
+              background: hideTriwalls ? '#fff8e1' : '#fff3e0',
+              color: hideTriwalls ? '#f57f17' : '#e65100',
+              fontWeight: 600,
+            }}
+          >
+            {hideTriwalls
+              ? `🪵 ${triwallCount} Triwall order${triwallCount !== 1 ? 's' : ''} hidden — click to show`
+              : `🪵 Hide Triwall orders (${triwallCount})`
+            }
+          </button>
+        </div>
+      )}
 
       {/* Batch Controls */}
       {selectedCount > 0 && (

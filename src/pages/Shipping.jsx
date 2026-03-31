@@ -55,15 +55,16 @@ export default function Shipping() {
         if (order.status !== 'packed' || order.shippingLabel?.trackingNumber) continue;
         const cust = customersData.find(c => c.id === order.customerId);
         if (!cust?.upsAccount) continue;
-        const alreadySet = order.thirdPartyBilling?.account === cust.upsAccount;
+        const alreadySet = order.thirdPartyBilling?.account === cust.upsAccount && 
+          order.thirdPartyBilling?.zip === (cust.zipCode || '');
         if (!alreadySet) {
           autoUpdates.push(
             DB.updatePurchaseOrder(order.id, {
-              thirdPartyBilling: { account: cust.upsAccount, type: 'THIRD_PARTY', country: 'US', zip: cust.zip || '' },
+              thirdPartyBilling: { account: cust.upsAccount, type: 'THIRD_PARTY', country: 'US', zip: cust.zipCode || '' },
               updatedAt: Date.now()
             })
           );
-          order.thirdPartyBilling = { account: cust.upsAccount, type: 'THIRD_PARTY', country: 'US', zip: cust.zip || '' };
+          order.thirdPartyBilling = { account: cust.upsAccount, type: 'THIRD_PARTY', country: 'US', zip: cust.zipCode || '' };
         }
       }
       if (autoUpdates.length > 0) await Promise.all(autoUpdates);

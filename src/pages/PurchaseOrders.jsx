@@ -33,6 +33,7 @@ export default function PurchaseOrders() {
   const [filterStatus, setFilterStatus] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [processingOrder, setProcessingOrder] = useState({});
   const PAGE_SIZE = 15;
   const [filterPayment, setFilterPayment] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
@@ -548,6 +549,29 @@ export default function PurchaseOrders() {
       }
     }
     await DB.markPOShipped(order.id); loadData(); closeOrderModal();
+  };
+
+  const markShippedInline = async (order) => {
+    if (!window.confirm(`Mark ${order.poNumber} as Shipped?`)) return;
+    setProcessingOrder(prev => ({ ...prev, [order.id]: true }));
+    try {
+      for (const item of order.items || []) {
+        const qtyShipped = parseInt(item.qtyShipped) || 0;
+        if (qtyShipped <= 0) continue;
+        if (item.source === 'inventory' || item.source === 'inventory_contract') {
+          const currentItem = items.find(i => i.id === item.itemId);
+          if (currentItem) {
+            const newStock = Math.max(0, (currentItem.stock || 0) - qtyShipped);
+            await DB.updateItem(item.itemId, { stock: newStock });
+          }
+        }
+      }
+      await DB.markPOShipped(order.id);
+      await loadData();
+    } catch (err) {
+      alert('Failed to mark shipped: ' + err.message);
+    }
+    setProcessingOrder(prev => ({ ...prev, [order.id]: false }));
   };
 
   const markPaid = async (order) => { 
@@ -1926,7 +1950,7 @@ ${labelsHtml}
       {/* Orders Table */}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden' }}>
-          <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Packing</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th></tr></thead>
+          <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Packing</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Ship</th></tr></thead>
           <tbody>
             {(() => {
               // Filter orders
@@ -2028,6 +2052,25 @@ ${labelsHtml}
                   </td>
                   <td style={{ padding: 12, textAlign: 'center', fontSize: 13 }}>{formatDate(order.createdAt)}</td>
                   <td style={{ padding: 12, textAlign: 'center' }}><button className="btn btn-primary" onClick={() => setSelectedOrder(order)} style={{ padding: '4px 12px', fontSize: 12 }}>View</button></td>
+                  <td style={{ padding: 12, textAlign: 'center' }}>
+                    {order.status === 'packed' ? (
+                      <button
+                        onClick={() => markShippedInline(order)}
+                        disabled={!!processingOrder[order.id]}
+                        title="Mark as Shipped"
+                        style={{
+                          padding: '5px 12px', background: processingOrder[order.id] ? '#ccc' : '#388e3c',
+                          color: 'white', border: 'none', borderRadius: 6,
+                          cursor: processingOrder[order.id] ? 'not-allowed' : 'pointer',
+                          fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
+                        }}
+                      >
+                        {processingOrder[order.id] ? '...' : '🚚 Ship'}
+                      </button>
+                    ) : (
+                      <span style={{ color: '#ccc', fontSize: 12 }}>—</span>
+                    )}
+                  </td>
                 </tr>
               ));
             })()}

@@ -16,6 +16,9 @@ export default function PickLists() {
   
   // Filter state
   const [filterStatus, setFilterStatus] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 15;
   const [filterSearch, setFilterSearch] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
@@ -1184,6 +1187,36 @@ export default function PickLists() {
         </button>
       </div>
 
+      {/* Status Tabs */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '2px solid #e0e0e0', flexWrap: 'wrap' }}>
+        {[
+          { value: 'all', label: 'All', statuses: null },
+          { value: 'pending', label: 'Pending', statuses: ['pending'] },
+          { value: 'in_progress', label: 'In Progress', statuses: ['in_progress'] },
+          { value: 'completed', label: 'Completed', statuses: ['completed'] },
+          { value: 'packing', label: 'Packing', statuses: ['packing'] },
+          { value: 'shipped', label: 'Shipped', statuses: ['shipped'] },
+        ].map(tab => {
+          const count = tab.statuses
+            ? pickLists.filter(l => tab.statuses.includes(getDisplayStatus(l))).length
+            : pickLists.length;
+          const isActive = activeTab === tab.value;
+          return (
+            <button key={tab.value} onClick={() => { setActiveTab(tab.value); setFilterStatus(tab.value === 'all' ? '' : tab.value); setCurrentPage(1); }} style={{
+              padding: '10px 18px', border: 'none', borderBottom: isActive ? '3px solid #2d5f3f' : '3px solid transparent',
+              background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: isActive ? 700 : 400,
+              color: isActive ? '#2d5f3f' : '#666', marginBottom: -2, whiteSpace: 'nowrap'
+            }}>
+              {tab.label}
+              <span style={{
+                marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                background: isActive ? '#2d5f3f' : '#eee', color: isActive ? 'white' : '#666'
+              }}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Filters */}
       <div style={{ display: 'flex', gap: 15, marginBottom: 20, flexWrap: 'wrap', alignItems: 'center' }}>
         <input
@@ -1193,20 +1226,6 @@ export default function PickLists() {
           onChange={e => setFilterSearch(e.target.value)}
           style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, minWidth: 200 }}
         />
-        <select
-          value={filterStatus}
-          onChange={e => setFilterStatus(e.target.value)}
-          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
-        >
-          <option value="">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="in_progress">In Progress</option>
-          <option value="completed">Completed (Picked)</option>
-          <option value="packing">Packing (In Progress)</option>
-          <option value="packed">Packed</option>
-          <option value="shipped">Shipped</option>
-          <option value="paid">Paid</option>
-        </select>
         <select
           value={sortBy}
           onChange={e => setSortBy(e.target.value)}
@@ -1697,6 +1716,11 @@ export default function PickLists() {
                 }
               });
               
+              // Paginate
+              const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+              const safePage = Math.min(currentPage, totalPages);
+              const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
               if (filtered.length === 0) {
                 return (
                   <tr>
@@ -1707,7 +1731,7 @@ export default function PickLists() {
                 );
               }
               
-              return filtered.map(list => {
+              return paginated.map(list => {
               const displayStatus = getDisplayStatus(list);
               const priorityInfo = priorityOptions.find(p => p.value === (list.priority || 'normal')) || priorityOptions[2];
               return (
@@ -1801,6 +1825,42 @@ export default function PickLists() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls */}
+      {(() => {
+        let filtered = pickLists.filter(list => {
+          if (filterSearch) {
+            const search = filterSearch.toLowerCase();
+            if (!list.name?.toLowerCase().includes(search)) return false;
+          }
+          if (filterStatus) {
+            const displayStatus = getDisplayStatus(list);
+            if (displayStatus !== filterStatus) return false;
+          }
+          if (filterAssignee && list.assignedTo !== filterAssignee) return false;
+          if (filterPriority && (list.priority || 'normal') !== filterPriority) return false;
+          return true;
+        });
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        const safePage = Math.min(currentPage, totalPages);
+        if (totalPages <= 1) return null;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16, padding: '12px 0' }}>
+            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1} style={{
+              padding: '7px 16px', borderRadius: 6, border: '1px solid #ddd', cursor: safePage === 1 ? 'not-allowed' : 'pointer',
+              background: safePage === 1 ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
+            }}>‹</button>
+            <span style={{ fontSize: 13, color: '#666' }}>
+              Page <strong>{safePage}</strong> of <strong>{totalPages}</strong>
+              <span style={{ marginLeft: 8, color: '#999' }}>({filtered.length} pick lists)</span>
+            </span>
+            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} style={{
+              padding: '7px 16px', borderRadius: 6, border: '1px solid #ddd', cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
+              background: safePage === totalPages ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
+            }}>›</button>
+          </div>
+        );
+      })()}
 
       {/* Pack Order Modal */}
       {showPackOrder && packingOrder && (

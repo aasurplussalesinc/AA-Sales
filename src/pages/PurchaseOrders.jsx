@@ -31,6 +31,9 @@ export default function PurchaseOrders() {
   const [showFilters, setShowFilters] = useState(false);
   const [filterSearch, setFilterSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [activeTab, setActiveTab] = useState('all');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 15;
   const [filterPayment, setFilterPayment] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
@@ -1430,28 +1433,6 @@ ${labelsHtml}
                   style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
               </div>
 
-              {/* Customer Address, Phone, Email */}
-              <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Address</label>
-                <input type="text" placeholder="Street, City, State, Zip" value={newPO.customerAddress || ''}
-                  onChange={e => setNewPO({ ...newPO, customerAddress: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
-              </div>
-              <div style={{ display: 'flex', gap: 15, marginBottom: 20 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Phone</label>
-                  <input type="text" placeholder="Phone number..." value={newPO.customerPhone || ''}
-                    onChange={e => setNewPO({ ...newPO, customerPhone: e.target.value })}
-                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Email</label>
-                  <input type="text" placeholder="Email address..." value={newPO.customerEmail || ''}
-                    onChange={e => setNewPO({ ...newPO, customerEmail: e.target.value })}
-                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
-                </div>
-              </div>
-
               {/* Ship To Address */}
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
@@ -1811,15 +1792,44 @@ ${labelsHtml}
         </div>
       )}
 
+      {/* Status Tabs */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 0, borderBottom: '2px solid #e0e0e0', flexWrap: 'wrap' }}>
+        {[
+          { value: 'all', label: 'All', statuses: null },
+          { value: 'draft', label: 'Draft', statuses: ['draft'] },
+          { value: 'confirmed', label: 'Confirmed', statuses: ['confirmed'] },
+          { value: 'picking', label: 'Picking', statuses: ['picking'] },
+          { value: 'packed', label: 'Packed', statuses: ['packed'] },
+          { value: 'shipped', label: 'Shipped', statuses: ['shipped'] },
+          { value: 'paid', label: 'Paid', statuses: ['paid'] },
+        ].map(tab => {
+          const count = tab.statuses ? orders.filter(o => tab.statuses.includes(o.status)).length : orders.length;
+          const isActive = activeTab === tab.value;
+          return (
+            <button key={tab.value} onClick={() => { setActiveTab(tab.value); setFilterStatus(tab.value === 'all' ? '' : tab.value); setCurrentPage(1); }} style={{
+              padding: '10px 18px', border: 'none', borderBottom: isActive ? '3px solid #2d5f3f' : '3px solid transparent',
+              background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: isActive ? 700 : 400,
+              color: isActive ? '#2d5f3f' : '#666', marginBottom: -2, whiteSpace: 'nowrap'
+            }}>
+              {tab.label}
+              <span style={{
+                marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 600,
+                background: isActive ? '#2d5f3f' : '#eee', color: isActive ? 'white' : '#666'
+              }}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Filter/Sort Section */}
-      <div style={{ marginBottom: 20 }}>
+      <div style={{ marginBottom: 20, marginTop: 12 }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button 
             className="btn" 
             onClick={() => setShowFilters(!showFilters)}
             style={{ background: showFilters ? '#2d5f3f' : '#f5f5f5', color: showFilters ? 'white' : '#333' }}
           >
-            🔍 Filter {(filterSearch || filterStatus || filterPayment || filterDateFrom || filterDateTo) && '•'}
+            🔍 Filter {(filterSearch || filterPayment || filterDateFrom || filterDateTo) && '•'}
           </button>
           
           <input
@@ -1973,11 +1983,16 @@ ${labelsHtml}
                 }
               });
               
+              // Paginate
+              const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+              const safePage = Math.min(currentPage, totalPages);
+              const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
               if (filtered.length === 0) {
                 return <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: '#999' }}>{orders.length === 0 ? 'No purchase orders yet. Click "+ New Order" to create one.' : 'No orders match your filters.'}</td></tr>;
               }
               
-              return filtered.map(order => (
+              return paginated.map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
                   <td style={{ padding: 12 }}><strong>{order.poNumber}</strong></td>
                   <td style={{ padding: 12 }}>{order.customerName}</td>
@@ -2002,6 +2017,42 @@ ${labelsHtml}
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Controls */}
+      {(() => {
+        let filtered = orders.filter(order => {
+          if (filterSearch) {
+            const search = filterSearch.toLowerCase();
+            if (!order.poNumber?.toLowerCase().includes(search) && !order.customerName?.toLowerCase().includes(search)) return false;
+          }
+          if (filterStatus && order.status !== filterStatus) return false;
+          if (filterPayment) {
+            const isPaid = !!order.paymentMethod;
+            if (filterPayment === 'paid' && !isPaid) return false;
+            if (filterPayment === 'unpaid' && isPaid) return false;
+          }
+          return true;
+        });
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        const safePage = Math.min(currentPage, totalPages);
+        if (totalPages <= 1) return null;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16, padding: '12px 0' }}>
+            <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1} style={{
+              padding: '7px 16px', borderRadius: 6, border: '1px solid #ddd', cursor: safePage === 1 ? 'not-allowed' : 'pointer',
+              background: safePage === 1 ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
+            }}>‹</button>
+            <span style={{ fontSize: 13, color: '#666' }}>
+              Page <strong>{Math.min(currentPage, totalPages)}</strong> of <strong>{totalPages}</strong>
+              <span style={{ marginLeft: 8, color: '#999' }}>({filtered.length} orders)</span>
+            </span>
+            <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} style={{
+              padding: '7px 16px', borderRadius: 6, border: '1px solid #ddd', cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
+              background: safePage === totalPages ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
+            }}>›</button>
+          </div>
+        );
+      })()}
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && orderToDelete && (

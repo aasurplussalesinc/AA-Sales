@@ -1793,28 +1793,32 @@ ${labelsHtml}
       )}
 
       {/* Status Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 0, borderBottom: '2px solid #e0e0e0', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { value: 'all', label: 'All', statuses: null },
-          { value: 'draft', label: 'Draft', statuses: ['draft'] },
-          { value: 'confirmed', label: 'Confirmed', statuses: ['confirmed'] },
-          { value: 'picking', label: 'Picking', statuses: ['picking'] },
-          { value: 'packed', label: 'Packed', statuses: ['packed'] },
-          { value: 'shipped', label: 'Shipped', statuses: ['shipped'] },
-          { value: 'paid', label: 'Paid', statuses: ['paid'] },
+          { value: 'all',       label: 'All Orders', statuses: null,          icon: '📋', color: '#455a64', bg: '#eceff1' },
+          { value: 'draft',     label: 'Draft',      statuses: ['draft'],     icon: '✏️',  color: '#78909c', bg: '#f5f5f5' },
+          { value: 'confirmed', label: 'Confirmed',  statuses: ['confirmed'], icon: '✅',  color: '#1976d2', bg: '#e3f2fd' },
+          { value: 'picking',   label: 'Picking',    statuses: ['picking'],   icon: '🔍',  color: '#f57c00', bg: '#fff3e0' },
+          { value: 'packed',    label: 'Packed',     statuses: ['packed'],    icon: '📦',  color: '#7b1fa2', bg: '#f3e5f5' },
+          { value: 'shipped',   label: 'Shipped',    statuses: ['shipped'],   icon: '🚚',  color: '#388e3c', bg: '#e8f5e9' },
+          { value: 'paid',      label: 'Paid',       statuses: ['paid'],      icon: '💰',  color: '#2e7d32', bg: '#c8e6c9' },
         ].map(tab => {
           const count = tab.statuses ? orders.filter(o => tab.statuses.includes(o.status)).length : orders.length;
           const isActive = activeTab === tab.value;
           return (
             <button key={tab.value} onClick={() => { setActiveTab(tab.value); setFilterStatus(tab.value === 'all' ? '' : tab.value); setCurrentPage(1); }} style={{
-              padding: '10px 18px', border: 'none', borderBottom: isActive ? '3px solid #2d5f3f' : '3px solid transparent',
-              background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: isActive ? 700 : 400,
-              color: isActive ? '#2d5f3f' : '#666', marginBottom: -2, whiteSpace: 'nowrap'
+              padding: '10px 20px', border: isActive ? `2px solid ${tab.color}` : '2px solid transparent',
+              borderRadius: 10, background: isActive ? tab.bg : '#f9f9f9',
+              cursor: 'pointer', fontSize: 13, fontWeight: isActive ? 700 : 500,
+              color: isActive ? tab.color : '#888', whiteSpace: 'nowrap',
+              boxShadow: isActive ? `0 2px 8px ${tab.color}33` : 'none',
+              transition: 'all 0.15s ease', display: 'flex', alignItems: 'center', gap: 6
             }}>
-              {tab.label}
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
               <span style={{
-                marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                background: isActive ? '#2d5f3f' : '#eee', color: isActive ? 'white' : '#666'
+                padding: '1px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                background: isActive ? tab.color : '#ddd', color: isActive ? 'white' : '#666'
               }}>{count}</span>
             </button>
           );
@@ -1922,7 +1926,7 @@ ${labelsHtml}
       {/* Orders Table */}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden' }}>
-          <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th></tr></thead>
+          <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Packing</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th></tr></thead>
           <tbody>
             {(() => {
               // Filter orders
@@ -1998,6 +2002,19 @@ ${labelsHtml}
                   <td style={{ padding: 12 }}>{order.customerName}</td>
                   <td style={{ padding: 12, textAlign: 'center' }}>{order.items?.length || 0}</td>
                   <td style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>{formatCurrency(order.total)}</td>
+                  <td style={{ padding: 12, textAlign: 'center' }}>
+                    {order.packingMode === 'triwalls' ? (
+                      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#fff8e1', color: '#f57f17', border: '1px solid #ffe082', whiteSpace: 'nowrap' }}>
+                        🪵 Triwall ({order.triwalls?.length || 0})
+                      </span>
+                    ) : order.packingMode === 'boxes' || order.boxDetails ? (
+                      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7', whiteSpace: 'nowrap' }}>
+                        📦 Boxes ({Object.keys(order.boxDetails || {}).length || 1})
+                      </span>
+                    ) : (
+                      <span style={{ color: '#ccc', fontSize: 12 }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: 12, textAlign: 'center' }}>
                     <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: getStatusColor(order.status), color: 'white' }}>{order.status || 'draft'}</span>
                     {order.packingComplete && <span style={{ marginLeft: 5, fontSize: 11, color: '#9c27b0' }}>📦</span>}

@@ -1188,14 +1188,14 @@ export default function PickLists() {
       </div>
 
       {/* Status Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '2px solid #e0e0e0', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { value: 'all', label: 'All', statuses: null },
-          { value: 'pending', label: 'Pending', statuses: ['pending'] },
-          { value: 'in_progress', label: 'In Progress', statuses: ['in_progress'] },
-          { value: 'completed', label: 'Completed', statuses: ['completed'] },
-          { value: 'packing', label: 'Packing', statuses: ['packing'] },
-          { value: 'shipped', label: 'Shipped', statuses: ['shipped'] },
+          { value: 'all',         label: 'All Lists',   statuses: null,            icon: '📋', color: '#455a64', bg: '#eceff1' },
+          { value: 'pending',     label: 'Pending',     statuses: ['pending'],     icon: '⏳',  color: '#f57c00', bg: '#fff3e0' },
+          { value: 'in_progress', label: 'In Progress', statuses: ['in_progress'], icon: '⚡',  color: '#1976d2', bg: '#e3f2fd' },
+          { value: 'completed',   label: 'Completed',   statuses: ['completed'],   icon: '✅',  color: '#388e3c', bg: '#e8f5e9' },
+          { value: 'packing',     label: 'Packing',     statuses: ['packing'],     icon: '📦',  color: '#7b1fa2', bg: '#f3e5f5' },
+          { value: 'shipped',     label: 'Shipped',     statuses: ['shipped'],     icon: '🚚',  color: '#2e7d32', bg: '#c8e6c9' },
         ].map(tab => {
           const count = tab.statuses
             ? pickLists.filter(l => tab.statuses.includes(getDisplayStatus(l))).length
@@ -1203,14 +1203,18 @@ export default function PickLists() {
           const isActive = activeTab === tab.value;
           return (
             <button key={tab.value} onClick={() => { setActiveTab(tab.value); setFilterStatus(tab.value === 'all' ? '' : tab.value); setCurrentPage(1); }} style={{
-              padding: '10px 18px', border: 'none', borderBottom: isActive ? '3px solid #2d5f3f' : '3px solid transparent',
-              background: 'transparent', cursor: 'pointer', fontSize: 13, fontWeight: isActive ? 700 : 400,
-              color: isActive ? '#2d5f3f' : '#666', marginBottom: -2, whiteSpace: 'nowrap'
+              padding: '10px 20px', border: isActive ? `2px solid ${tab.color}` : '2px solid transparent',
+              borderRadius: 10, background: isActive ? tab.bg : '#f9f9f9',
+              cursor: 'pointer', fontSize: 13, fontWeight: isActive ? 700 : 500,
+              color: isActive ? tab.color : '#888', whiteSpace: 'nowrap',
+              boxShadow: isActive ? `0 2px 8px ${tab.color}33` : 'none',
+              transition: 'all 0.15s ease', display: 'flex', alignItems: 'center', gap: 6
             }}>
-              {tab.label}
+              <span>{tab.icon}</span>
+              <span>{tab.label}</span>
               <span style={{
-                marginLeft: 6, padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                background: isActive ? '#2d5f3f' : '#eee', color: isActive ? 'white' : '#666'
+                padding: '1px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700,
+                background: isActive ? tab.color : '#ddd', color: isActive ? 'white' : '#666'
               }}>{count}</span>
             </button>
           );

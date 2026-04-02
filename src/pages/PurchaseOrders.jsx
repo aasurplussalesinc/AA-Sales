@@ -1620,7 +1620,7 @@ ${labelsHtml}
 
               <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn btn-primary" onClick={createPurchaseOrder} style={{ flex: 1 }}>{editMode ? 'Save Changes' : 'Create Order'}</button>
-                <button className="btn" onClick={() => { setShowCreate(false); setEditMode(false); resetForm(); }} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>Cancel</button>
+                <button className="btn" onClick={() => { setShowCreate(false); setEditMode(false); resetForm(); }} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>Cancel</button>
               </div>
             </div>
           </div>
@@ -1845,7 +1845,7 @@ ${labelsHtml}
               </div>
             </div>
             <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: 15, borderTop: '1px solid var(--border)' }}>
-              <button className="btn" onClick={() => setShowPackOrder(false)} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>Cancel</button>
+              <button className="btn" onClick={() => setShowPackOrder(false)} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>Cancel</button>
               <button className="btn btn-primary" onClick={savePackOrder} disabled={!validatePacking()}>Save Packing</button>
             </div>
           </div>
@@ -1975,7 +1975,7 @@ ${labelsHtml}
             <button
               className="btn btn-sm"
               onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterPayment(''); setFilterDateFrom(''); setFilterDateTo(''); }}
-              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', padding: '8px 12px' }}
+              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)', padding: '8px 12px' }}
             >
               Clear Filters
             </button>
@@ -2285,7 +2285,7 @@ ${labelsHtml}
               <button
                 onClick={() => { setShowPaymentModal(false); setPaymentOrder(null); setPaymentMethod(''); }}
                 style={{
-                  flex: 1, padding: '12px 20px', background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)',
+                  flex: 1, padding: '12px 20px', background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)',
                   border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600
                 }}
               >
@@ -2360,7 +2360,7 @@ ${labelsHtml}
                 <button
                   onClick={() => { setShowOneOffModal(false); setOneOffItem({ name: '', price: '', category: 'One-Off' }); }}
                   className="btn"
-                  style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                  style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
                 >
                   Cancel
                 </button>

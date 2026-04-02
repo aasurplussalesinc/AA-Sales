@@ -538,7 +538,7 @@ export default function Customers() {
         <button 
           className="btn" 
           onClick={closeDetail}
-          style={{ marginBottom: 20, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+          style={{ marginBottom: 20, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
         >
           ← Back to Customers
         </button>
@@ -939,7 +939,7 @@ export default function Customers() {
                 <button 
                   className="btn" 
                   onClick={() => setSelectedOrder(null)} 
-                  style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', marginLeft: 'auto' }}
+                  style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)', marginLeft: 'auto' }}
                 >
                   Close
                 </button>
@@ -1243,7 +1243,7 @@ export default function Customers() {
                 <button 
                   className="btn" 
                   onClick={() => setEditingOrder(null)} 
-                  style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                  style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
                 >
                   Cancel
                 </button>
@@ -1279,7 +1279,7 @@ export default function Customers() {
               {importing ? '⏳ Importing...' : '📤 Import CSV'}
             </button>
           )}
-          <button className="btn" onClick={exportToCSV} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
+          <button className="btn" onClick={exportToCSV} style={{ background: '#0891b2', color: 'white' }}>
             📥 Export CSV
           </button>
           {canEdit && (
@@ -1490,7 +1490,7 @@ export default function Customers() {
               <button className="btn btn-primary" onClick={saveCustomer} style={{ flex: 1 }}>
                 Create Customer
               </button>
-              <button className="btn" onClick={() => setShowCreate(false)} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
+              <button className="btn" onClick={() => setShowCreate(false)} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
                 Cancel
               </button>
             </div>

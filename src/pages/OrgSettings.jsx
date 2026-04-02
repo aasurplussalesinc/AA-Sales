@@ -522,7 +522,7 @@ export default function OrgSettings() {
                       <button
                         className="btn btn-sm"
                         onClick={() => setEditingEmployee(null)}
-                        style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                        style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
                       >
                         Cancel
                       </button>

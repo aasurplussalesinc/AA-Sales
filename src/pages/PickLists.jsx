@@ -1264,7 +1264,7 @@ export default function PickLists() {
           <button
             className="btn btn-sm"
             onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterAssignee(''); setFilterPriority(''); }}
-            style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', padding: '8px 12px' }}
+            style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)', padding: '8px 12px' }}
           >
             Clear Filters
           </button>
@@ -1409,7 +1409,7 @@ export default function PickLists() {
               <button className="btn btn-primary" onClick={createPickList} style={{ flex: 1 }}>
                 {editMode ? 'Save Changes' : 'Create Pick List'}
               </button>
-              <button className="btn" onClick={resetPickListForm} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
+              <button className="btn" onClick={resetPickListForm} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
                 Cancel
               </button>
             </div>
@@ -1649,7 +1649,7 @@ export default function PickLists() {
               <button 
                 className="btn" 
                 onClick={() => setSelectedList(null)} 
-                style={{ flex: selectedList.status === 'completed' ? 1 : 'none', background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                style={{ flex: selectedList.status === 'completed' ? 1 : 'none', background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
               >
                 Close
               </button>
@@ -2351,7 +2351,7 @@ export default function PickLists() {
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
-                <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
                 <button 
                   onClick={savePackOrderDraft} 
                   style={{ 

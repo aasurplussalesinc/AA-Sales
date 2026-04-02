@@ -620,7 +620,7 @@ W2,2,C,3`;
         <button 
           className="btn"
           onClick={downloadTemplate}
-          style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+          style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
         >
           📋 Download Template
         </button>
@@ -814,7 +814,7 @@ W2,2,C,3`;
               <button 
                 className="btn btn-sm"
                 onClick={clearSelection}
-                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
               >
                 Clear
               </button>

@@ -768,7 +768,7 @@ export default function Reports() {
                   setCustomFilters({ dateFrom: '', dateTo: '', type: '', user: '' });
                   setCustomData([]);
                 }}
-                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
               >
                 Clear
               </button>

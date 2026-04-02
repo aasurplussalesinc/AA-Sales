@@ -361,7 +361,7 @@ export default function Scanner() {
             <button
               className="btn"
               onClick={() => setShowPopup(false)}
-              style={{width: '100%', padding: 12, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)'}}
+              style={{width: '100%', padding: 12, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)'}}
             >
               Close
             </button>

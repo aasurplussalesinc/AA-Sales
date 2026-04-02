@@ -287,7 +287,7 @@ export default function Contracts() {
           <button
             className="btn"
             onClick={downloadTemplate}
-            style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+            style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
           >
             📋 Template
           </button>

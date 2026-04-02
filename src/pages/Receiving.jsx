@@ -278,7 +278,7 @@ export default function Receiving() {
               <button className="btn btn-primary" onClick={createReceiving} style={{ flex: 1 }}>
                 Create Receiving
               </button>
-              <button className="btn" onClick={() => setShowCreate(false)} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
+              <button className="btn" onClick={() => setShowCreate(false)} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
                 Cancel
               </button>
             </div>
@@ -382,7 +382,7 @@ export default function Receiving() {
               <button 
                 className="btn" 
                 onClick={() => setSelectedReceiving(null)} 
-                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
               >
                 Close
               </button>

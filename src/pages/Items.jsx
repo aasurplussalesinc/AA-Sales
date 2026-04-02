@@ -1294,7 +1294,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         <button 
           className="btn"
           onClick={downloadTemplate}
-          style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+          style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
         >
           📋 Download Template
         </button>
@@ -1354,7 +1354,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   Select This Page ({paginatedItems.length})
                 </button>
                 {selectedItems.length > 0 && (
-                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
+                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
                     Clear Selection
                   </button>
                 )}
@@ -1413,7 +1413,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               <button
                 className="btn"
                 onClick={() => { setShowBatchCategory(false); setBatchCategory(''); }}
-                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
               >
                 Cancel
               </button>
@@ -1449,7 +1449,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   Select This Page ({paginatedItems.length})
                 </button>
                 {selectedItems.length > 0 && (
-                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
+                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
                     Clear Selection
                   </button>
                 )}
@@ -1505,7 +1505,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               <button
                 className="btn"
                 onClick={() => { setShowBatchLocation(false); setBatchLocation(''); }}
-                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
               >
                 Cancel
               </button>
@@ -1538,7 +1538,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   Select All Filtered ({sortedItems.length})
                 </button>
                 {selectedItems.length > 0 && (
-                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
+                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
                     Clear Selection
                   </button>
                 )}
@@ -1596,7 +1596,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             <button
               className="btn"
               onClick={() => setShowLabelModal(false)}
-              style={{ width: '100%', background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+              style={{ width: '100%', background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
             >
               Cancel
             </button>
@@ -2631,7 +2631,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               <button 
                 className="btn" 
                 onClick={() => { setShowEditItem(false); setEditUseMultiLocation(false); }}
-                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
+                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
               >
                 Cancel
               </button>

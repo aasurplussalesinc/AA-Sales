@@ -64,7 +64,7 @@ export const OrgDB = {
       logo: orgData.logo || '',
       
       // Subscription
-      plan: 'trial', // trial, starter, business, pro, owner
+      plan: 'trial', // trial, starter, pro, business, enterprise, owner
       status: 'active', // active, past_due, canceled, suspended
       trialEndsAt: trialEndsAt.toISOString(),
       subscriptionId: null, // Stripe subscription ID
@@ -435,7 +435,7 @@ export const OrgDB = {
     }
     
     // Check paid subscription status
-    if (['starter', 'business', 'pro'].includes(org.plan)) {
+    if (['starter', 'pro', 'business', 'enterprise'].includes(org.plan)) {
       return org.status === 'active';
     }
     

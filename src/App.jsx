@@ -17,11 +17,44 @@ import PurchaseOrders from './pages/PurchaseOrders';
 import Customers from './pages/Customers';
 import Contracts from './pages/Contracts';
 import Shipping from './pages/Shipping';
+import { useTier } from './useTier';
 import './App.css';
+
+// Full-screen hard block for locked features
+export function TierGate({ feature, requiredPlan, children }) {
+  const { canUseOrders, canUsePickLists, canUsePacking, canUseReports,
+          canUseShipping, canUseContracts } = useTier();
+  const gates = {
+    orders: canUseOrders, pickLists: canUsePickLists, packing: canUsePacking,
+    reports: canUseReports, shipping: canUseShipping, contracts: canUseContracts,
+  };
+  const allowed = gates[feature] !== false;
+  if (allowed) return children;
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', alignItems: 'center',
+      justifyContent: 'center', minHeight: '60vh', textAlign: 'center', padding: 40
+    }}>
+      <div style={{ fontSize: 64, marginBottom: 20 }}>🔒</div>
+      <h2 style={{ fontSize: 28, marginBottom: 10, color: '#333' }}>
+        {requiredPlan} Plan Required
+      </h2>
+      <p style={{ color: '#666', fontSize: 16, maxWidth: 400, marginBottom: 30 }}>
+        This feature is available on the <strong>{requiredPlan}</strong> plan and above.
+        Upgrade to unlock it.
+      </p>
+      <a href="/subscription-required" style={{
+        padding: '12px 32px', background: '#2d5f3f', color: 'white',
+        borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 16
+      }}>View Plans & Upgrade</a>
+    </div>
+  );
+}
 
 function NavBar() {
   const location = useLocation();
   const { user, logout, organization, subscriptionStatus, organizations, switchOrganization } = useAuth();
+  const tier = useTier();
   
   const isActive = (path) => location.pathname === path;
 
@@ -29,6 +62,16 @@ function NavBar() {
     if (window.confirm('Are you sure you want to sign out?')) {
       await logout();
     }
+  };
+
+  const planColors = {
+    trial: '#ffc107', starter: '#78909c', pro: '#1976d2',
+    business: '#7b1fa2', enterprise: '#2d5f3f', owner: '#c62828'
+  };
+  const planLabels = {
+    trial: `Trial · ${subscriptionStatus?.trialDaysRemaining ?? 0}d left`,
+    starter: 'Starter', pro: 'Pro', business: 'Business',
+    enterprise: 'Enterprise', owner: '⭐ Owner'
   };
   
   return (
@@ -40,7 +83,6 @@ function NavBar() {
         </div>
         {user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 15, flexWrap: 'wrap' }}>
-            {/* Organization switcher */}
             {organizations.length > 1 && (
               <select
                 value={organization?.id || ''}
@@ -49,100 +91,47 @@ function NavBar() {
                   if (org) switchOrganization(org);
                 }}
                 style={{
-                  background: 'rgba(255,255,255,0.2)',
-                  border: 'none',
-                  color: 'white',
-                  padding: '6px 10px',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  fontSize: 13
+                  background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white',
+                  padding: '6px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 13
                 }}
               >
                 {organizations.map(org => (
-                  <option key={org.id} value={org.id} style={{ color: 'black' }}>
-                    {org.name}
-                  </option>
+                  <option key={org.id} value={org.id} style={{ color: 'black' }}>{org.name}</option>
                 ))}
               </select>
             )}
-            
-            {/* Trial/subscription badge */}
-            {subscriptionStatus && subscriptionStatus.plan === 'trial' && (
+            {subscriptionStatus?.plan && (
               <span style={{
-                background: '#ffc107',
-                color: '#000',
-                padding: '4px 8px',
-                borderRadius: 4,
-                fontSize: 11,
-                fontWeight: 600
+                background: planColors[subscriptionStatus.plan] || '#666',
+                color: 'white', padding: '4px 10px', borderRadius: 12,
+                fontSize: 11, fontWeight: 700, letterSpacing: 0.5
               }}>
-                Trial: {subscriptionStatus.trialDaysRemaining} days left
+                {planLabels[subscriptionStatus.plan] || subscriptionStatus.plan}
               </span>
             )}
-            
-            <span style={{ fontSize: 14, opacity: 0.9 }}>
-              👤 {user.email}
-            </span>
-            <button 
-              onClick={handleLogout}
-              style={{
-                background: 'rgba(255,255,255,0.2)',
-                border: 'none',
-                color: 'white',
-                padding: '6px 12px',
-                borderRadius: 4,
-                cursor: 'pointer',
-                fontSize: 13
-              }}
-            >
-              Sign Out
-            </button>
+            <span style={{ fontSize: 14, opacity: 0.9 }}>👤 {user.email}</span>
+            <button onClick={handleLogout} style={{
+              background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white',
+              padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 13
+            }}>Sign Out</button>
           </div>
         )}
       </div>
       <div className="nav-tabs">
-        <Link to="/" className={`nav-tab ${isActive('/') ? 'active' : ''}`}>
-          📊 Dashboard
-        </Link>
-        <Link to="/scanner" className={`nav-tab ${isActive('/scanner') ? 'active' : ''}`}>
-          📷 Scan
-        </Link>
-        <Link to="/items" className={`nav-tab ${isActive('/items') ? 'active' : ''}`}>
-          📦 Items
-        </Link>
-        <Link to="/locations" className={`nav-tab ${isActive('/locations') ? 'active' : ''}`}>
-          📍 Locations
-        </Link>
-        <Link to="/pick-lists" className={`nav-tab ${isActive('/pick-lists') ? 'active' : ''}`}>
-          📋 Pick Lists
-        </Link>
-        <Link to="/purchase-orders" className={`nav-tab ${isActive('/purchase-orders') ? 'active' : ''}`}>
-          🧾 Orders
-        </Link>
-        <Link to="/shipping" className={`nav-tab ${isActive('/shipping') ? 'active' : ''}`}>
-          🚚 Shipping
-        </Link>
-        <Link to="/customers" className={`nav-tab ${isActive('/customers') ? 'active' : ''}`}>
-          👥 Customers
-        </Link>
-        <Link to="/contracts" className={`nav-tab ${isActive('/contracts') ? 'active' : ''}`}>
-          📄 Contracts
-        </Link>
-        <Link to="/receiving" className={`nav-tab ${isActive('/receiving') ? 'active' : ''}`}>
-          📥 Receiving
-        </Link>
-        <Link to="/movements" className={`nav-tab ${isActive('/movements') ? 'active' : ''}`}>
-          🔄 Movements
-        </Link>
-        <Link to="/reports" className={`nav-tab ${isActive('/reports') ? 'active' : ''}`}>
-          📈 Reports
-        </Link>
-        <Link to="/activity" className={`nav-tab ${isActive('/activity') ? 'active' : ''}`}>
-          📜 Activity
-        </Link>
-        <Link to="/settings" className={`nav-tab ${isActive('/settings') ? 'active' : ''}`}>
-          ⚙️ Settings
-        </Link>
+        <Link to="/" className={`nav-tab ${isActive('/') ? 'active' : ''}`}>📊 Dashboard</Link>
+        <Link to="/scanner" className={`nav-tab ${isActive('/scanner') ? 'active' : ''}`}>📷 Scan</Link>
+        <Link to="/items" className={`nav-tab ${isActive('/items') ? 'active' : ''}`}>📦 Items</Link>
+        <Link to="/locations" className={`nav-tab ${isActive('/locations') ? 'active' : ''}`}>📍 Locations</Link>
+        <Link to="/customers" className={`nav-tab ${isActive('/customers') ? 'active' : ''}`}>👥 Customers</Link>
+        <Link to="/receiving" className={`nav-tab ${isActive('/receiving') ? 'active' : ''}`}>📥 Receiving</Link>
+        {tier.canUseOrders && <Link to="/purchase-orders" className={`nav-tab ${isActive('/purchase-orders') ? 'active' : ''}`}>🧾 Orders</Link>}
+        {tier.canUsePickLists && <Link to="/pick-lists" className={`nav-tab ${isActive('/pick-lists') ? 'active' : ''}`}>📋 Pick Lists</Link>}
+        {tier.canUseReports && <Link to="/reports" className={`nav-tab ${isActive('/reports') ? 'active' : ''}`}>📈 Reports</Link>}
+        {tier.canUseShipping && <Link to="/shipping" className={`nav-tab ${isActive('/shipping') ? 'active' : ''}`}>🚚 Shipping</Link>}
+        {tier.canUseContracts && <Link to="/contracts" className={`nav-tab ${isActive('/contracts') ? 'active' : ''}`}>📄 Contracts</Link>}
+        <Link to="/movements" className={`nav-tab ${isActive('/movements') ? 'active' : ''}`}>🔄 Movements</Link>
+        <Link to="/activity" className={`nav-tab ${isActive('/activity') ? 'active' : ''}`}>📜 Activity</Link>
+        <Link to="/settings" className={`nav-tab ${isActive('/settings') ? 'active' : ''}`}>⚙️ Settings</Link>
       </div>
     </>
   );
@@ -263,12 +252,12 @@ function AppRoutes() {
       } />
       <Route path="/pick-lists" element={
         <ProtectedRoute>
-          <AppLayout><PickLists /></AppLayout>
+          <AppLayout><TierGate feature="pickLists" requiredPlan="Pro"><PickLists /></TierGate></AppLayout>
         </ProtectedRoute>
       } />
       <Route path="/purchase-orders" element={
         <ProtectedRoute>
-          <AppLayout><PurchaseOrders /></AppLayout>
+          <AppLayout><TierGate feature="orders" requiredPlan="Pro"><PurchaseOrders /></TierGate></AppLayout>
         </ProtectedRoute>
       } />
       <Route path="/customers" element={
@@ -278,12 +267,12 @@ function AppRoutes() {
       } />
       <Route path="/contracts" element={
         <ProtectedRoute>
-          <AppLayout><Contracts /></AppLayout>
+          <AppLayout><TierGate feature="contracts" requiredPlan="Business"><Contracts /></TierGate></AppLayout>
         </ProtectedRoute>
       } />
       <Route path="/shipping" element={
         <ProtectedRoute>
-          <AppLayout><Shipping /></AppLayout>
+          <AppLayout><TierGate feature="shipping" requiredPlan="Business"><Shipping /></TierGate></AppLayout>
         </ProtectedRoute>
       } />
       <Route path="/receiving" element={
@@ -293,7 +282,7 @@ function AppRoutes() {
       } />
       <Route path="/reports" element={
         <ProtectedRoute>
-          <AppLayout><Reports /></AppLayout>
+          <AppLayout><TierGate feature="reports" requiredPlan="Pro"><Reports /></TierGate></AppLayout>
         </ProtectedRoute>
       } />
       <Route path="/settings" element={

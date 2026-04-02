@@ -54,9 +54,9 @@ export default function PickLists() {
   
   // Priority options
   const priorityOptions = [
-    { value: 'urgent', label: '🔴 Urgent', color: '#f44336' },
+    { value: 'urgent', label: '🔴 Urgent', color: 'var(--text-error)' },
     { value: 'high', label: '🟠 High', color: '#ff9800' },
-    { value: 'normal', label: '🟢 Normal', color: '#4CAF50' },
+    { value: 'normal', label: '🟢 Normal', color: 'var(--text-success)' },
     { value: 'low', label: '🔵 Low', color: '#2196F3' }
   ];
   
@@ -1191,11 +1191,11 @@ export default function PickLists() {
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
           { value: 'all',         label: 'All Lists',   statuses: null,            icon: '📋', color: '#455a64', bg: '#eceff1' },
-          { value: 'pending',     label: 'Pending',     statuses: ['pending'],     icon: '⏳',  color: '#f57c00', bg: '#fff3e0' },
-          { value: 'in_progress', label: 'In Progress', statuses: ['in_progress'], icon: '⚡',  color: '#1976d2', bg: '#e3f2fd' },
-          { value: 'completed',   label: 'Completed',   statuses: ['completed'],   icon: '✅',  color: '#388e3c', bg: '#e8f5e9' },
-          { value: 'packing',     label: 'Packing',     statuses: ['packing'],     icon: '📦',  color: '#7b1fa2', bg: '#f3e5f5' },
-          { value: 'shipped',     label: 'Shipped',     statuses: ['shipped'],     icon: '🚚',  color: '#2e7d32', bg: '#c8e6c9' },
+          { value: 'pending',     label: 'Pending',     statuses: ['pending'],     icon: '⏳',  color: 'var(--text-badge-orange)', bg: '#fff3e0' },
+          { value: 'in_progress', label: 'In Progress', statuses: ['in_progress'], icon: '⚡',  color: 'var(--text-link)', bg: '#e3f2fd' },
+          { value: 'completed',   label: 'Completed',   statuses: ['completed'],   icon: '✅',  color: 'var(--text-badge-green)', bg: '#e8f5e9' },
+          { value: 'packing',     label: 'Packing',     statuses: ['packing'],     icon: '📦',  color: 'var(--text-badge-purple)', bg: '#f3e5f5' },
+          { value: 'shipped',     label: 'Shipped',     statuses: ['shipped'],     icon: '🚚',  color: 'var(--text-badge-green)', bg: '#c8e6c9' },
         ].map(tab => {
           const count = tab.statuses
             ? pickLists.filter(l => tab.statuses.includes(getDisplayStatus(l))).length
@@ -1228,12 +1228,12 @@ export default function PickLists() {
           placeholder="Search by name or PO#..."
           value={filterSearch}
           onChange={e => setFilterSearch(e.target.value)}
-          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, minWidth: 200 }}
+          style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, minWidth: 200 }}
         />
         <select
           value={sortBy}
           onChange={e => setSortBy(e.target.value)}
-          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+          style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4 }}
         >
           <option value="date-desc">Newest First</option>
           <option value="date-asc">Oldest First</option>
@@ -1243,7 +1243,7 @@ export default function PickLists() {
         <select
           value={filterAssignee}
           onChange={e => setFilterAssignee(e.target.value)}
-          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+          style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4 }}
         >
           <option value="">All Assignees</option>
           {employeeOptions.map(name => (
@@ -1253,7 +1253,7 @@ export default function PickLists() {
         <select
           value={filterPriority}
           onChange={e => setFilterPriority(e.target.value)}
-          style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+          style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4 }}
         >
           <option value="">All Priorities</option>
           {priorityOptions.map(p => (
@@ -1264,7 +1264,7 @@ export default function PickLists() {
           <button
             className="btn btn-sm"
             onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterAssignee(''); setFilterPriority(''); }}
-            style={{ background: '#6c757d', color: 'white', padding: '8px 12px' }}
+            style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', padding: '8px 12px' }}
           >
             Clear Filters
           </button>
@@ -1279,12 +1279,12 @@ export default function PickLists() {
           justifyContent: 'center', zIndex: 1000, padding: 20
         }}>
           <div style={{
-            background: 'white', borderRadius: 12, padding: 30,
+            background: 'var(--bg-surface)', borderRadius: 12, padding: 30,
             maxWidth: 600, width: '100%', maxHeight: '90vh', overflow: 'auto'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3 style={{ margin: 0 }}>{editMode ? 'Edit Pick List' : 'Create Pick List'}</h3>
-              <button onClick={resetPickListForm} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#666' }}>×</button>
+              <button onClick={resetPickListForm} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
             </div>
             
             <div style={{ marginBottom: 15 }}>
@@ -1335,7 +1335,7 @@ export default function PickLists() {
                     width: '100%', 
                     padding: 10,
                     background: priorityOptions.find(p => p.value === (newList.priority || 'normal'))?.color || '#4CAF50',
-                    color: 'white',
+                    color: 'var(--text-on-dark)',
                     fontWeight: 600
                   }}
                 >
@@ -1357,16 +1357,16 @@ export default function PickLists() {
                 style={{ width: '100%' }}
               />
               {filteredItems.length > 0 && (
-                <div style={{ border: '1px solid #ddd', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
                   {filteredItems.slice(0, 10).map(item => (
                     <div
                       key={item.id}
                       onClick={() => addItemToList(item)}
-                      style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}
+                      style={{ padding: 10, borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
                     >
                       <strong>{item.name}</strong>
-                      <span style={{ color: '#666', marginLeft: 10 }}>{item.partNumber}</span>
-                      <span style={{ color: '#2d5f3f', marginLeft: 10 }}>Stock: {item.stock || 0}</span>
+                      <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>{item.partNumber}</span>
+                      <span style={{ color: 'var(--accent)', marginLeft: 10 }}>Stock: {item.stock || 0}</span>
                     </div>
                   ))}
                 </div>
@@ -1379,12 +1379,12 @@ export default function PickLists() {
                 <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>
                   Items to Pick ({newList.items.length})
                 </label>
-                <div style={{ border: '1px solid #ddd', borderRadius: 4 }}>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 4 }}>
                   {newList.items.map(item => (
-                    <div key={item.itemId} style={{ padding: 10, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div key={item.itemId} style={{ padding: 10, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ flex: 1 }}>
                         <strong>{item.itemName}</strong>
-                        <div style={{ fontSize: 12, color: '#666' }}>{item.partNumber}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.partNumber}</div>
                       </div>
                       <input
                         type="number"
@@ -1395,7 +1395,7 @@ export default function PickLists() {
                       />
                       <button
                         onClick={() => removeItemFromList(item.itemId)}
-                        style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer' }}
+                        style={{ background: '#f44336', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer' }}
                       >
                         ✕
                       </button>
@@ -1409,7 +1409,7 @@ export default function PickLists() {
               <button className="btn btn-primary" onClick={createPickList} style={{ flex: 1 }}>
                 {editMode ? 'Save Changes' : 'Create Pick List'}
               </button>
-              <button className="btn" onClick={resetPickListForm} style={{ flex: 1, background: '#6c757d', color: 'white' }}>
+              <button className="btn" onClick={resetPickListForm} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
                 Cancel
               </button>
             </div>
@@ -1425,26 +1425,26 @@ export default function PickLists() {
           justifyContent: 'center', zIndex: 1000, padding: 20
         }}>
           <div style={{
-            background: 'white', borderRadius: 12, padding: 30,
+            background: 'var(--bg-surface)', borderRadius: 12, padding: 30,
             maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <h3>{selectedList.name}</h3>
               <span style={{
                 padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-                background: getStatusColor(selectedList.status), color: 'white'
+                background: getStatusColor(selectedList.status), color: 'var(--text-on-dark)'
               }}>
                 {selectedList.status?.toUpperCase()}
               </span>
             </div>
 
             {selectedList.notes && (
-              <p style={{ color: '#666', marginBottom: 15 }}>{selectedList.notes}</p>
+              <p style={{ color: 'var(--text-muted)', marginBottom: 15 }}>{selectedList.notes}</p>
             )}
 
             {/* QR Scanner Section */}
             {selectedList.status !== 'completed' && (
-              <div style={{ marginBottom: 20, padding: 15, background: '#e3f2fd', borderRadius: 8 }}>
+              <div style={{ marginBottom: 20, padding: 15, background: 'var(--bg-badge-blue)', borderRadius: 8 }}>
                 <div style={{ display: 'flex', gap: 10, marginBottom: scanMode ? 10 : 0 }}>
                   {!scanMode && (
                     <>
@@ -1472,14 +1472,14 @@ export default function PickLists() {
                           DB.updatePickList(selectedList.id, { items: updatedItems });
                           setSelectedList(prev => ({ ...prev, items: updatedItems }));
                         }}
-                        style={{ background: '#4CAF50', color: 'white' }}
+                        style={{ background: '#4CAF50', color: 'var(--text-on-dark)' }}
                       >
                         ✓ Fill All
                       </button>
                       <button 
                         className="btn"
                         onClick={() => openEditPickList(selectedList)}
-                        style={{ background: '#ff9800', color: 'white' }}
+                        style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}
                       >
                         ✏️ Edit
                       </button>
@@ -1487,7 +1487,7 @@ export default function PickLists() {
                         <button 
                           className="btn"
                           onClick={() => syncFromPO(selectedList)}
-                          style={{ background: '#2196F3', color: 'white' }}
+                          style={{ background: '#2196F3', color: 'var(--text-on-dark)' }}
                         >
                           🔄 Sync from PO
                         </button>
@@ -1506,7 +1506,7 @@ export default function PickLists() {
                         onClick={stopScanner}
                         style={{
                           position: 'absolute', top: 10, right: 10,
-                          background: 'rgba(0,0,0,0.7)', color: 'white',
+                          background: 'rgba(0,0,0,0.7)', color: 'var(--text-on-dark)',
                           border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer'
                         }}
                       >
@@ -1539,14 +1539,14 @@ export default function PickLists() {
                     DB.updatePickList(selectedList.id, { items: updatedItems });
                     setSelectedList(prev => ({ ...prev, items: updatedItems }));
                   }}
-                  style={{ background: '#4CAF50', color: 'white' }}
+                  style={{ background: '#4CAF50', color: 'var(--text-on-dark)' }}
                 >
                   ✓ Fill All
                 </button>
                 <button 
                   className="btn"
                   onClick={() => openEditPickList(selectedList)}
-                  style={{ background: '#ff9800', color: 'white' }}
+                  style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}
                 >
                   ✏️ Edit Items
                 </button>
@@ -1554,7 +1554,7 @@ export default function PickLists() {
                   <button 
                     className="btn"
                     onClick={() => syncFromPO(selectedList)}
-                    style={{ background: '#9c27b0', color: 'white' }}
+                    style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}
                   >
                     🔄 Sync from PO
                   </button>
@@ -1568,7 +1568,7 @@ export default function PickLists() {
                       loadData();
                     }
                   }}
-                  style={{ background: '#2196F3', color: 'white' }}
+                  style={{ background: '#2196F3', color: 'var(--text-on-dark)' }}
                 >
                   🔓 Reopen
                 </button>
@@ -1577,7 +1577,7 @@ export default function PickLists() {
 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: '#f5f5f5' }}>
+                <tr style={{ background: 'var(--bg-surface-2)' }}>
                   <th style={{ padding: 10, textAlign: 'left' }}>Item</th>
                   <th style={{ padding: 10, textAlign: 'center', width: 80 }}>Requested</th>
                   <th style={{ padding: 10, textAlign: 'center', width: 100 }}>Picked</th>
@@ -1588,12 +1588,12 @@ export default function PickLists() {
                 {selectedList.items?.map(item => {
                   const lineKey = getLineKey(item);
                   return (
-                  <tr key={lineKey} style={{ borderBottom: '1px solid #eee' }}>
+                  <tr key={lineKey} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: 10 }}>
                       <strong>{item.itemName}</strong>
-                      <div style={{ fontSize: 12, color: '#666' }}>{item.partNumber}</div>
-                      {item.location && <div style={{ fontSize: 11, color: '#2d5f3f' }}>📍 {item.location}</div>}
-                      {item.unitPrice > 0 && <div style={{ fontSize: 11, color: '#888' }}>@ ${parseFloat(item.unitPrice).toFixed(2)}</div>}
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.partNumber}</div>
+                      {item.location && <div style={{ fontSize: 11, color: 'var(--accent)' }}>📍 {item.location}</div>}
+                      {item.unitPrice > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>@ ${parseFloat(item.unitPrice).toFixed(2)}</div>}
                     </td>
                     <td style={{ padding: 10, textAlign: 'center' }}>{item.requestedQty}</td>
                     <td style={{ padding: 10, textAlign: 'center' }}>
@@ -1623,7 +1623,7 @@ export default function PickLists() {
                   <select
                     value={pickCompletedBy}
                     onChange={e => setPickCompletedBy(e.target.value)}
-                    style={{ padding: 10, borderRadius: 4, border: '1px solid #ddd', minWidth: 150 }}
+                    style={{ padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', minWidth: 150 }}
                   >
                     <option value="">Completed By...</option>
                     {employeeOptions.map(name => (
@@ -1641,7 +1641,7 @@ export default function PickLists() {
                 </>
               )}
               {selectedList.status === 'completed' && selectedList.completedBy && (
-                <div style={{ flex: 1, padding: 10, background: '#e8f5e9', borderRadius: 4, color: '#2e7d32' }}>
+                <div style={{ flex: 1, padding: 10, background: 'var(--bg-badge-green)', borderRadius: 4, color: 'var(--text-badge-green)' }}>
                   ✓ Completed by <strong>{selectedList.completedBy}</strong>
                   {selectedList.completedAt && ` on ${new Date(selectedList.completedAt).toLocaleDateString()}`}
                 </div>
@@ -1649,7 +1649,7 @@ export default function PickLists() {
               <button 
                 className="btn" 
                 onClick={() => setSelectedList(null)} 
-                style={{ flex: selectedList.status === 'completed' ? 1 : 'none', background: '#6c757d', color: 'white' }}
+                style={{ flex: selectedList.status === 'completed' ? 1 : 'none', background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
               >
                 Close
               </button>
@@ -1728,7 +1728,7 @@ export default function PickLists() {
               if (filtered.length === 0) {
                 return (
                   <tr>
-                    <td colSpan={7} style={{ padding: 40, textAlign: 'center', color: '#999' }}>
+                    <td colSpan={7} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
                       {pickLists.length === 0 ? 'No pick lists yet.' : 'No pick lists match your filters.'}
                     </td>
                   </tr>
@@ -1747,9 +1747,9 @@ export default function PickLists() {
                     style={{ 
                       padding: '4px 8px', 
                       borderRadius: 4, 
-                      border: '1px solid #ddd',
+                      border: '1px solid var(--border)',
                       background: priorityInfo.color,
-                      color: 'white',
+                      color: 'var(--text-on-dark)',
                       fontWeight: 600,
                       fontSize: 11,
                       cursor: 'pointer'
@@ -1768,7 +1768,7 @@ export default function PickLists() {
                     style={{ 
                       padding: '4px 8px', 
                       borderRadius: 4, 
-                      border: '1px solid #ddd',
+                      border: '1px solid var(--border)',
                       fontSize: 12,
                       minWidth: 100,
                       background: list.assignedTo ? '#e3f2fd' : '#fff'
@@ -1784,7 +1784,7 @@ export default function PickLists() {
                 <td>
                   <span style={{
                     padding: '4px 8px', borderRadius: 4, fontSize: 12,
-                    background: getStatusColor(displayStatus), color: 'white'
+                    background: getStatusColor(displayStatus), color: 'var(--text-on-dark)'
                   }}>
                     {displayStatus}
                   </span>
@@ -1802,7 +1802,7 @@ export default function PickLists() {
                       <button 
                         className="btn btn-sm"
                         onClick={() => openPackOrder(list)}
-                        style={{ background: '#9c27b0', color: 'white' }}
+                        style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}
                       >
                         {getLinkedOrder(list)?.packingComplete ? '📦 Edit Pack' : '📦 Pack'}
                       </button>
@@ -1810,7 +1810,7 @@ export default function PickLists() {
                     <button 
                       className="btn btn-sm"
                       onClick={() => printPickList(list)}
-                      style={{ background: '#607d8b', color: 'white' }}
+                      style={{ background: '#607d8b', color: 'var(--text-on-dark)' }}
                     >
                       🖨️ Print
                     </button>
@@ -1851,15 +1851,15 @@ export default function PickLists() {
         return (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16, padding: '12px 0' }}>
             <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1} style={{
-              padding: '7px 16px', borderRadius: 6, border: '1px solid #ddd', cursor: safePage === 1 ? 'not-allowed' : 'pointer',
+              padding: '7px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: safePage === 1 ? 'not-allowed' : 'pointer',
               background: safePage === 1 ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
             }}>‹</button>
-            <span style={{ fontSize: 13, color: '#666' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               Page <strong>{safePage}</strong> of <strong>{totalPages}</strong>
-              <span style={{ marginLeft: 8, color: '#999' }}>({filtered.length} pick lists)</span>
+              <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>({filtered.length} pick lists)</span>
             </span>
             <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} style={{
-              padding: '7px 16px', borderRadius: 6, border: '1px solid #ddd', cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
+              padding: '7px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
               background: safePage === totalPages ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
             }}>›</button>
           </div>
@@ -1874,12 +1874,12 @@ export default function PickLists() {
           justifyContent: 'center', zIndex: 1000, padding: 20
         }} onClick={() => setShowPackOrder(false)}>
           <div style={{
-            background: 'white', borderRadius: 12, maxWidth: 800, width: '100%',
+            background: 'var(--bg-surface)', borderRadius: 12, maxWidth: 800, width: '100%',
             maxHeight: '90vh', overflow: 'auto'
           }} onClick={e => e.stopPropagation()}>
-            <div style={{ padding: '15px 20px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '15px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ margin: 0 }}>📦 Pack Order - {packingOrder.poNumber}</h3>
-              <button onClick={() => setShowPackOrder(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: '#666' }}>×</button>
+              <button onClick={() => setShowPackOrder(false)} style={{ background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', color: 'var(--text-muted)' }}>×</button>
             </div>
             <div style={{ padding: 20 }}>
               {/* Packing Mode Toggle */}
@@ -1911,9 +1911,9 @@ export default function PickLists() {
                 </button>
               </div>
 
-              <div style={{ background: '#e3f2fd', padding: 12, borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
+              <div style={{ background: 'var(--bg-badge-blue)', padding: 12, borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
                 <strong>📋 Quantities from Pick List</strong>
-                <span style={{ color: '#666', marginLeft: 10 }}>Packing quantities are based on what was actually picked.</span>
+                <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>Packing quantities are based on what was actually picked.</span>
               </div>
               
               {/* TRIWALL PACKING MODE */}
@@ -1951,9 +1951,9 @@ export default function PickLists() {
                             </button>
                             <div>
                               <strong>{item.itemName}</strong>
-                              {item.partNumber && <span style={{ color: '#666', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
+                              {item.partNumber && <span style={{ color: 'var(--text-muted)', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
                               {hasShortage && (
-                                <div style={{ fontSize: 11, color: '#f57c00', marginTop: 2 }}>
+                                <div style={{ fontSize: 11, color: 'var(--text-badge-orange)', marginTop: 2 }}>
                                   ⚠️ Shortage: Ordered {orderedQty}, Picked {pickedQty}
                                 </div>
                               )}
@@ -1963,7 +1963,7 @@ export default function PickLists() {
                             <span style={{ fontWeight: 'bold', color: isValid ? '#4CAF50' : '#ff9800' }}>
                               {distributedQty} / {pickedQty}
                             </span>
-                            <div style={{ fontSize: 10, color: '#666' }}>packed / picked</div>
+                            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>packed / picked</div>
                             {!isValid && <div style={{ fontSize: 11, color: '#ff9800' }}>⚠️ {distributedQty < pickedQty ? `${pickedQty - distributedQty} remaining` : `${distributedQty - pickedQty} over`}</div>}
                           </div>
                         </div>
@@ -1972,7 +1972,7 @@ export default function PickLists() {
                         {triwalls.map((triwall, twIdx) => (
                           <div key={triwall.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                             <span style={{ width: 60 }}>Triwall</span>
-                            <span style={{ width: 60, padding: 6, textAlign: 'center', fontWeight: 'bold', background: '#f3e5f5', borderRadius: 4 }}>
+                            <span style={{ width: 60, padding: 6, textAlign: 'center', fontWeight: 'bold', background: 'var(--bg-badge-purple)', borderRadius: 4 }}>
                               {twIdx + 1}
                             </span>
                             <span style={{ width: 40 }}>Qty:</span>
@@ -1988,7 +1988,7 @@ export default function PickLists() {
                         ))}
                         
                         {triwalls.length === 0 && (
-                          <div style={{ color: '#666', fontSize: 13, fontStyle: 'italic' }}>
+                          <div style={{ color: 'var(--text-muted)', fontSize: 13, fontStyle: 'italic' }}>
                             Add a triwall below to assign items
                           </div>
                         )}
@@ -1997,13 +1997,13 @@ export default function PickLists() {
                   })}
                   
                   {/* Triwall Weight & Dimensions Section - similar to box details */}
-                  <div style={{ marginTop: 25, padding: 20, background: '#f3e5f5', borderRadius: 8, border: '1px solid #ce93d8' }}>
+                  <div style={{ marginTop: 25, padding: 20, background: 'var(--bg-badge-purple)', borderRadius: 8, border: '1px solid #ce93d8' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
-                      <h4 style={{ margin: 0, color: '#7b1fa2' }}>🏗️ Triwall Details</h4>
+                      <h4 style={{ margin: 0, color: 'var(--text-badge-purple)' }}>🏗️ Triwall Details</h4>
                       <button
                         onClick={addTriwall}
                         style={{ 
-                          padding: '8px 16px', background: '#9c27b0', color: 'white',
+                          padding: '8px 16px', background: '#9c27b0', color: 'var(--text-on-dark)',
                           border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: 13
                         }}
                       >
@@ -2028,7 +2028,7 @@ export default function PickLists() {
                               const itemWeight = calculateTriwallWeight(triwall.id);
                               updateTriwallDetail(triwall.id, 'weight', (itemWeight + 120).toFixed(1));
                             }}
-                            style={{ padding: '4px 8px', background: '#8d6e63', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+                            style={{ padding: '4px 8px', background: '#8d6e63', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
                           >
                             🟤 Brown
                           </button>
@@ -2042,14 +2042,14 @@ export default function PickLists() {
                               const itemWeight = calculateTriwallWeight(triwall.id);
                               updateTriwallDetail(triwall.id, 'weight', (itemWeight + 75).toFixed(1));
                             }}
-                            style={{ padding: '4px 8px', background: '#e0e0e0', color: '#333', border: '1px solid #999', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+                            style={{ padding: '4px 8px', background: '#e0e0e0', color: 'var(--text-primary)', border: '1px solid #999', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
                           >
                             ⬜ White
                           </button>
                           
                           {/* Weight */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ fontSize: 12, color: '#666' }}>Weight:</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Weight:</span>
                             <input
                               type="number"
                               step="0.1"
@@ -2057,47 +2057,47 @@ export default function PickLists() {
                               placeholder={estimatedWeight > 0 ? `Est: ${estimatedWeight.toFixed(0)}` : 'lbs'}
                               value={triwall.weight || ''}
                               onChange={e => updateTriwallDetail(triwall.id, 'weight', e.target.value)}
-                              style={{ width: 70, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                              style={{ width: 70, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                             />
-                            <span style={{ color: '#666', fontSize: 12 }}>lbs</span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>lbs</span>
                           </div>
                           
                           {/* Dimensions */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ fontSize: 12, color: '#666' }}>L×W×H:</span>
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>L×W×H:</span>
                             <input
                               type="number"
                               min="0"
                               placeholder="L"
                               value={triwall.length || ''}
                               onChange={e => updateTriwallDetail(triwall.id, 'length', e.target.value)}
-                              style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                              style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                             />
-                            <span style={{ color: '#666', fontWeight: 'bold' }}>×</span>
+                            <span style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>×</span>
                             <input
                               type="number"
                               min="0"
                               placeholder="W"
                               value={triwall.width || ''}
                               onChange={e => updateTriwallDetail(triwall.id, 'width', e.target.value)}
-                              style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                              style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                             />
-                            <span style={{ color: '#666', fontWeight: 'bold' }}>×</span>
+                            <span style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>×</span>
                             <input
                               type="number"
                               min="0"
                               placeholder="H"
                               value={triwall.height || ''}
                               onChange={e => updateTriwallDetail(triwall.id, 'height', e.target.value)}
-                              style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                              style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                             />
-                            <span style={{ color: '#666', fontSize: 12 }}>in</span>
+                            <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>in</span>
                           </div>
                           
                           {/* Print Label */}
                           <button
                             onClick={() => printTriwallLabel(triwall.id, twIdx)}
-                            style={{ padding: '4px 8px', background: '#607d8b', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+                            style={{ padding: '4px 8px', background: '#607d8b', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
                           >
                             🏷️ Label
                           </button>
@@ -2106,7 +2106,7 @@ export default function PickLists() {
                           {triwalls.length > 1 && (
                             <button
                               onClick={() => removeTriwall(triwall.id)}
-                              style={{ padding: '4px 8px', background: '#f44336', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
+                              style={{ padding: '4px 8px', background: '#f44336', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
                             >
                               ✕
                             </button>
@@ -2116,7 +2116,7 @@ export default function PickLists() {
                     })}
                     
                     {triwalls.length === 0 && (
-                      <div style={{ color: '#666', textAlign: 'center', padding: 20 }}>
+                      <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 20 }}>
                         No triwalls added yet. Click "+ Add Triwall" to get started.
                       </div>
                     )}
@@ -2156,9 +2156,9 @@ export default function PickLists() {
                         </button>
                         <div>
                           <strong>{item.itemName}</strong>
-                          {item.partNumber && <span style={{ color: '#666', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
+                          {item.partNumber && <span style={{ color: 'var(--text-muted)', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
                           {hasShortage && (
-                            <div style={{ fontSize: 11, color: '#f57c00', marginTop: 2 }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-badge-orange)', marginTop: 2 }}>
                               ⚠️ Shortage: Ordered {orderedQty}, Picked {pickedQty}
                             </div>
                           )}
@@ -2168,7 +2168,7 @@ export default function PickLists() {
                         <span style={{ fontWeight: 'bold', color: isValid ? '#4CAF50' : '#ff9800' }}>
                           {distributedQty} / {pickedQty}
                         </span>
-                        <div style={{ fontSize: 10, color: '#666' }}>packed / picked</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>packed / picked</div>
                         {!isValid && <div style={{ fontSize: 11, color: '#ff9800' }}>⚠️ {distributedQty < pickedQty ? `${pickedQty - distributedQty} remaining` : `${distributedQty - pickedQty} over`}</div>}
                       </div>
                     </div>
@@ -2182,7 +2182,7 @@ export default function PickLists() {
                           max="99"
                           value={dist.box === '' || dist.box === undefined || dist.box === null ? '' : dist.box}
                           onChange={e => updateBoxDistribution(idx, distIdx, 'box', e.target.value)}
-                          style={{ width: 60, padding: 6, textAlign: 'center', fontWeight: 'bold', border: '1px solid #ccc', borderRadius: 4 }}
+                          style={{ width: 60, padding: 6, textAlign: 'center', fontWeight: 'bold', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4 }}
                           placeholder="1"
                         />
                         <span style={{ width: 40 }}>Qty:</span>
@@ -2192,13 +2192,13 @@ export default function PickLists() {
                           max={pickedQty}
                           value={dist.qty === '' || dist.qty === undefined || dist.qty === null ? '' : dist.qty}
                           onChange={e => updateBoxDistribution(idx, distIdx, 'qty', e.target.value)}
-                          style={{ width: 70, padding: 6, textAlign: 'center', border: '1px solid #ccc', borderRadius: 4 }}
+                          style={{ width: 70, padding: 6, textAlign: 'center', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4 }}
                           placeholder="0"
                         />
                         {(boxAssignments[idx] || []).length > 1 && (
                           <button
                             onClick={() => removeBoxDistribution(idx, distIdx)}
-                            style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
+                            style={{ background: '#f44336', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
                           >✕</button>
                         )}
                       </div>
@@ -2206,7 +2206,7 @@ export default function PickLists() {
                     
                     <button
                       onClick={() => addBoxDistribution(idx)}
-                      style={{ background: '#e3f2fd', color: '#1976d2', border: '1px dashed #1976d2', borderRadius: 4, padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 5 }}
+                      style={{ background: 'var(--bg-badge-blue)', color: 'var(--text-link)', border: '1px dashed #1976d2', borderRadius: 4, padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 5 }}
                     >+ Add to another box</button>
                   </div>
                 );
@@ -2214,8 +2214,8 @@ export default function PickLists() {
               
               {/* Box Weight & Dimensions Section - only show in boxes mode */}
               {packingMode === 'boxes' && getUniqueBoxNumbers().length > 0 && (
-                <div style={{ marginTop: 25, padding: 20, background: '#f9f9f9', borderRadius: 8, border: '1px solid #e0e0e0' }}>
-                  <h4 style={{ margin: '0 0 15px 0', color: '#333' }}>📐 Box Weight & Dimensions</h4>
+                <div style={{ marginTop: 25, padding: 20, background: 'var(--bg-surface-2)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <h4 style={{ margin: '0 0 15px 0', color: 'var(--text-primary)' }}>📐 Box Weight & Dimensions</h4>
                   {getUniqueBoxNumbers().map(boxNum => (
                     <div key={boxNum} style={{ display: 'flex', alignItems: 'center', gap: 15, marginBottom: 12, flexWrap: 'wrap' }}>
                       <strong style={{ minWidth: 60 }}>Box {boxNum}:</strong>
@@ -2229,9 +2229,9 @@ export default function PickLists() {
                           placeholder="0"
                           value={boxDetails[boxNum]?.weight || ''}
                           onChange={e => updateBoxDetail(boxNum, 'weight', e.target.value)}
-                          style={{ width: 70, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                          style={{ width: 70, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                         />
-                        <span style={{ color: '#666' }}>lbs</span>
+                        <span style={{ color: 'var(--text-muted)' }}>lbs</span>
                       </div>
                       
                       {/* Dimensions */}
@@ -2243,9 +2243,9 @@ export default function PickLists() {
                           placeholder="L"
                           value={boxDetails[boxNum]?.length || ''}
                           onChange={e => updateBoxDetail(boxNum, 'length', e.target.value)}
-                          style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                          style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                         />
-                        <span style={{ color: '#666', fontWeight: 'bold' }}>×</span>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>×</span>
                         <input
                           type="number"
                           step="0.5"
@@ -2253,9 +2253,9 @@ export default function PickLists() {
                           placeholder="W"
                           value={boxDetails[boxNum]?.width || ''}
                           onChange={e => updateBoxDetail(boxNum, 'width', e.target.value)}
-                          style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                          style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                         />
-                        <span style={{ color: '#666', fontWeight: 'bold' }}>×</span>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>×</span>
                         <input
                           type="number"
                           step="0.5"
@@ -2263,9 +2263,9 @@ export default function PickLists() {
                           placeholder="H"
                           value={boxDetails[boxNum]?.height || ''}
                           onChange={e => updateBoxDetail(boxNum, 'height', e.target.value)}
-                          style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid #ccc' }}
+                          style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                         />
-                        <span style={{ color: '#666', fontSize: 12 }}>in</span>
+                        <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>in</span>
                         
                         {/* Quick fill buttons */}
                         <button
@@ -2275,7 +2275,7 @@ export default function PickLists() {
                             updateBoxDetail(boxNum, 'width', '16');
                             updateBoxDetail(boxNum, 'height', '17');
                           }}
-                          style={{ marginLeft: 10, padding: '4px 8px', background: '#e3f2fd', color: '#1976d2', border: '1px solid #1976d2', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+                          style={{ marginLeft: 10, padding: '4px 8px', background: 'var(--bg-badge-blue)', color: 'var(--text-link)', border: '1px solid #1976d2', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
                         >
                           17"
                         </button>
@@ -2286,7 +2286,7 @@ export default function PickLists() {
                             updateBoxDetail(boxNum, 'width', '16');
                             updateBoxDetail(boxNum, 'height', '24');
                           }}
-                          style={{ padding: '4px 8px', background: '#e8f5e9', color: '#2e7d32', border: '1px solid #2e7d32', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+                          style={{ padding: '4px 8px', background: 'var(--bg-badge-green)', color: 'var(--text-badge-green)', border: '1px solid #2e7d32', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
                         >
                           24"
                         </button>
@@ -2301,7 +2301,7 @@ export default function PickLists() {
                           });
                         });
                         return val > 0 ? (
-                          <span style={{ padding: '4px 10px', background: '#fff3e0', color: '#e65100', borderRadius: 6, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          <span style={{ padding: '4px 10px', background: 'var(--bg-badge-orange)', color: 'var(--text-badge-orange)', borderRadius: 6, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }}>
                             💰 ${val.toFixed(2)}
                           </span>
                         ) : null;
@@ -2319,22 +2319,22 @@ export default function PickLists() {
                     const weight = tw.weight || calculateTriwallWeight(tw.id).toFixed(1);
                     return ` | TW${i+1}: ${weight} lbs`;
                   }).join('')}
-                  {!validateTriwallPacking() && <span style={{ color: '#e65100', marginLeft: 10 }}>⚠️ Quantity mismatches — use "Save for Now" to save progress</span>}
+                  {!validateTriwallPacking() && <span style={{ color: 'var(--text-badge-orange)', marginLeft: 10 }}>⚠️ Quantity mismatches — use "Save for Now" to save progress</span>}
                 </div>
               ) : (
                 <div style={{ marginTop: 20, padding: 15, background: validatePacking() ? '#e8f5e9' : '#fff3e0', borderRadius: 8 }}>
                   <strong>Summary:</strong> {new Set(Object.values(boxAssignments).flatMap(d => d.map(x => x.box))).size} boxes
-                  {!validatePacking() && <span style={{ color: '#e65100', marginLeft: 10 }}>⚠️ Quantity mismatches — use "Save for Now" to save progress</span>}
+                  {!validatePacking() && <span style={{ color: 'var(--text-badge-orange)', marginLeft: 10 }}>⚠️ Quantity mismatches — use "Save for Now" to save progress</span>}
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: 15, borderTop: '1px solid #eee', alignItems: 'center' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: 15, borderTop: '1px solid var(--border)', alignItems: 'center' }}>
               <button 
                 onClick={resetPackingFromPickList} 
                 style={{ 
                   padding: '10px 20px', 
                   background: '#f44336', 
-                  color: 'white', border: 'none', borderRadius: 6, 
+                  color: 'var(--text-on-dark)', border: 'none', borderRadius: 6, 
                   cursor: 'pointer'
                 }}
               >
@@ -2344,20 +2344,20 @@ export default function PickLists() {
                 <select
                   value={packCompletedBy}
                   onChange={e => setPackCompletedBy(e.target.value)}
-                  style={{ padding: 10, borderRadius: 4, border: '1px solid #ddd', minWidth: 150 }}
+                  style={{ padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', minWidth: 150 }}
                 >
                   <option value="">Packed By...</option>
                   {employeeOptions.map(name => (
                     <option key={name} value={name}>{name}</option>
                   ))}
                 </select>
-                <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: '#6c757d', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => setShowPackOrder(false)} style={{ padding: '10px 20px', background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', border: 'none', borderRadius: 6, cursor: 'pointer' }}>Cancel</button>
                 <button 
                   onClick={savePackOrderDraft} 
                   style={{ 
                     padding: '10px 20px', 
                     background: '#ff9800', 
-                    color: 'white', border: 'none', borderRadius: 6, 
+                    color: 'var(--text-on-dark)', border: 'none', borderRadius: 6, 
                     cursor: 'pointer'
                   }}
                 >
@@ -2369,7 +2369,7 @@ export default function PickLists() {
                   style={{ 
                     padding: '10px 20px', 
                     background: ((packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) && packCompletedBy) ? '#4CAF50' : '#ccc', 
-                    color: 'white', border: 'none', borderRadius: 6, 
+                    color: 'var(--text-on-dark)', border: 'none', borderRadius: 6, 
                     cursor: ((packingMode === 'triwalls' ? validateTriwallPacking() : validatePacking()) && packCompletedBy) ? 'pointer' : 'not-allowed' 
                   }}
                 >

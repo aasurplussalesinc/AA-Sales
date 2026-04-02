@@ -180,7 +180,7 @@ export default function OrgSettings() {
 
       {isOwnerOrg() && (
         <div style={{
-          background: '#d4edda',
+          background: 'var(--bg-success)',
           padding: 15,
           borderRadius: 8,
           marginBottom: 20
@@ -190,23 +190,23 @@ export default function OrgSettings() {
       )}
 
       {message && (
-        <div style={{ background: '#d4edda', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+        <div style={{ background: 'var(--bg-success)', padding: 15, borderRadius: 8, marginBottom: 20 }}>
           {message}
         </div>
       )}
       
       {error && (
-        <div style={{ background: '#f8d7da', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+        <div style={{ background: 'var(--bg-error)', padding: 15, borderRadius: 8, marginBottom: 20 }}>
           {error}
         </div>
       )}
 
       {/* Organization Details */}
-      <div style={{ background: 'white', padding: 20, borderRadius: 8, marginBottom: 20 }}>
+      <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
           <h3 style={{ margin: 0 }}>Organization Details</h3>
           {isAdmin && !editing && (
-            <button className="btn btn-sm" onClick={() => setEditing(true)} style={{ background: '#ff9800', color: 'white' }}>
+            <button className="btn btn-sm" onClick={() => setEditing(true)} style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}>
               ✏️ Edit
             </button>
           )}
@@ -271,12 +271,12 @@ export default function OrgSettings() {
       </div>
 
       {/* Team Members */}
-      <div style={{ background: 'white', padding: 20, borderRadius: 8, marginBottom: 20 }}>
+      <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginBottom: 20 }}>
         <h3 style={{ marginBottom: 15 }}>Team Members ({members.length})</h3>
         
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ background: '#f5f5f5' }}>
+            <tr style={{ background: 'var(--bg-surface-2)' }}>
               <th style={{ padding: 10, textAlign: 'left' }}>Email</th>
               <th style={{ padding: 10, textAlign: 'left' }}>Role</th>
               <th style={{ padding: 10, textAlign: 'left' }}>Joined</th>
@@ -285,7 +285,7 @@ export default function OrgSettings() {
           </thead>
           <tbody>
             {members.map(member => (
-              <tr key={member.id} style={{ borderBottom: '1px solid #eee' }}>
+              <tr key={member.id} style={{ borderBottom: '1px solid var(--border)' }}>
                 <td style={{ padding: 10 }}>{member.email}</td>
                 <td style={{ padding: 10 }}>
                   {isAdmin && member.role !== 'admin' ? (
@@ -303,14 +303,14 @@ export default function OrgSettings() {
                       padding: '3px 8px',
                       borderRadius: 4,
                       background: member.role === 'admin' ? '#2d5f3f' : '#6c757d',
-                      color: 'white',
+                      color: 'var(--text-on-dark)',
                       fontSize: 12
                     }}>
                       {member.role}
                     </span>
                   )}
                 </td>
-                <td style={{ padding: 10, color: '#666', fontSize: 13 }}>
+                <td style={{ padding: 10, color: 'var(--text-muted)', fontSize: 13 }}>
                   {new Date(member.joinedAt).toLocaleDateString()}
                 </td>
                 {isAdmin && (
@@ -333,7 +333,7 @@ export default function OrgSettings() {
 
       {/* Invite Codes */}
       {isAdmin && (
-        <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
+        <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8 }}>
           <h3 style={{ marginBottom: 15 }}>Invite Codes</h3>
           
           <form onSubmit={handleCreateInviteCode} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
@@ -361,7 +361,7 @@ export default function OrgSettings() {
             </button>
           </form>
           
-          <p style={{ fontSize: 13, color: '#666', marginBottom: 15 }}>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 15 }}>
             Share the invite code with employees. They enter it when signing up to join your organization.
           </p>
           
@@ -369,7 +369,7 @@ export default function OrgSettings() {
           {inviteCodes.length > 0 && (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: '#f5f5f5' }}>
+                <tr style={{ background: 'var(--bg-surface-2)' }}>
                   <th style={{ padding: 10, textAlign: 'left' }}>Code</th>
                   <th style={{ padding: 10, textAlign: 'left' }}>Role</th>
                   <th style={{ padding: 10, textAlign: 'left' }}>Uses</th>
@@ -380,10 +380,10 @@ export default function OrgSettings() {
               </thead>
               <tbody>
                 {inviteCodes.map(code => (
-                  <tr key={code.code} style={{ borderBottom: '1px solid #eee' }}>
+                  <tr key={code.code} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: 10 }}>
                       <code style={{ 
-                        background: '#f0f0f0', 
+                        background: 'var(--bg-surface-3)', 
                         padding: '4px 8px', 
                         borderRadius: 4,
                         fontSize: 14,
@@ -407,7 +407,7 @@ export default function OrgSettings() {
                         {code.status}
                       </span>
                     </td>
-                    <td style={{ padding: 10, fontSize: 12, color: '#666' }}>
+                    <td style={{ padding: 10, fontSize: 12, color: 'var(--text-muted)' }}>
                       {new Date(code.expiresAt).toLocaleDateString()}
                     </td>
                     <td style={{ padding: 10 }}>
@@ -430,9 +430,9 @@ export default function OrgSettings() {
 
       {/* Employee Management */}
       {isAdmin && (
-        <div style={{ background: 'white', padding: 20, borderRadius: 8, marginTop: 20 }}>
+        <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginTop: 20 }}>
           <h3 style={{ marginBottom: 15 }}>👥 Employee Names</h3>
-          <p style={{ marginBottom: 15, color: '#666', fontSize: 14 }}>
+          <p style={{ marginBottom: 15, color: 'var(--text-muted)', fontSize: 14 }}>
             Manage employee names that appear in "Assigned To" and "Completed By" dropdowns throughout the system.
           </p>
           
@@ -443,7 +443,7 @@ export default function OrgSettings() {
               placeholder="Enter employee name..."
               value={newEmployeeName}
               onChange={e => setNewEmployeeName(e.target.value)}
-              style={{ flex: 1, padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+              style={{ flex: 1, padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
               onKeyPress={e => {
                 if (e.key === 'Enter' && newEmployeeName.trim()) {
                   const updated = [...employees, newEmployeeName.trim()];
@@ -473,7 +473,7 @@ export default function OrgSettings() {
           
           {/* Employee list */}
           {employees.length === 0 ? (
-            <p style={{ color: '#999', fontStyle: 'italic' }}>No employees added yet.</p>
+            <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No employees added yet.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {employees.map((emp, idx) => (
@@ -482,7 +482,7 @@ export default function OrgSettings() {
                   alignItems: 'center', 
                   gap: 10, 
                   padding: 10, 
-                  background: '#f5f5f5', 
+                  background: 'var(--bg-surface-2)', 
                   borderRadius: 4 
                 }}>
                   {editingEmployee === idx ? (
@@ -491,7 +491,7 @@ export default function OrgSettings() {
                         type="text"
                         value={editEmployeeName}
                         onChange={e => setEditEmployeeName(e.target.value)}
-                        style={{ flex: 1, padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                        style={{ flex: 1, padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                         autoFocus
                         onKeyPress={e => {
                           if (e.key === 'Enter' && editEmployeeName.trim()) {
@@ -522,7 +522,7 @@ export default function OrgSettings() {
                       <button
                         className="btn btn-sm"
                         onClick={() => setEditingEmployee(null)}
-                        style={{ background: '#6c757d', color: 'white' }}
+                        style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
                       >
                         Cancel
                       </button>
@@ -536,7 +536,7 @@ export default function OrgSettings() {
                           setEditingEmployee(idx);
                           setEditEmployeeName(emp);
                         }}
-                        style={{ background: '#2196F3', color: 'white' }}
+                        style={{ background: '#2196F3', color: 'var(--text-on-dark)' }}
                       >
                         ✏️ Edit
                       </button>
@@ -564,9 +564,9 @@ export default function OrgSettings() {
 
       {/* Danger Zone */}
       {isAdmin && (
-        <div style={{ background: 'white', padding: 20, borderRadius: 8, marginTop: 20, border: '1px solid #dc3545' }}>
+        <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginTop: 20, border: '1px solid #dc3545' }}>
           <h3 style={{ marginBottom: 15, color: '#dc3545' }}>⚠️ Danger Zone</h3>
-          <p style={{ marginBottom: 15, color: '#666' }}>
+          <p style={{ marginBottom: 15, color: 'var(--text-muted)' }}>
             These actions are irreversible. Please be certain.
           </p>
           <button 

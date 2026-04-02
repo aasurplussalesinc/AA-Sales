@@ -225,7 +225,7 @@ export default function Reports() {
       <div className="page-content">
         <h2 style={{ marginBottom: 20 }}>Reports</h2>
         <div style={{ 
-          background: '#fff3cd', 
+          background: 'var(--bg-warning)', 
           padding: 30, 
           borderRadius: 8, 
           textAlign: 'center',
@@ -274,49 +274,49 @@ export default function Reports() {
             gap: 15, 
             marginBottom: 20 
           }}>
-            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#2d5f3f' }}>
+            <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent)' }}>
                 {summaryStats.totalItems.toLocaleString()}
               </div>
-              <div style={{ color: '#666', fontSize: 13 }}>Total Items</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Total Items</div>
             </div>
-            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#2d5f3f' }}>
+            <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--accent)' }}>
                 {summaryStats.totalStock.toLocaleString()}
               </div>
-              <div style={{ color: '#666', fontSize: 13 }}>Total Units</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Total Units</div>
             </div>
-            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#4CAF50' }}>
+            <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-success)' }}>
                 ${summaryStats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
-              <div style={{ color: '#666', fontSize: 13 }}>Total Value</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Total Value</div>
             </div>
-            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center', borderLeft: '4px solid #f44336' }}>
-              <div style={{ fontSize: 28, fontWeight: 700, color: '#f44336' }}>
+            <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, textAlign: 'center', borderLeft: '4px solid var(--text-error)' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-error)' }}>
                 {summaryStats.outOfStock}
               </div>
-              <div style={{ color: '#666', fontSize: 13 }}>Out of Stock</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Out of Stock</div>
             </div>
-            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center', borderLeft: '4px solid #ff9800' }}>
+            <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, textAlign: 'center', borderLeft: '4px solid var(--text-badge-orange)' }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#ff9800' }}>
                 {summaryStats.lowStock}
               </div>
-              <div style={{ color: '#666', fontSize: 13 }}>Low Stock</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Low Stock</div>
             </div>
-            <div style={{ background: 'white', padding: 20, borderRadius: 8, textAlign: 'center' }}>
+            <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, textAlign: 'center' }}>
               <div style={{ fontSize: 28, fontWeight: 700, color: '#2196F3' }}>
                 {summaryStats.categories}
               </div>
-              <div style={{ color: '#666', fontSize: 13 }}>Categories</div>
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Categories</div>
             </div>
           </div>
 
           {/* Category Breakdown */}
-          <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
+          <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8 }}>
             <h3 style={{ marginBottom: 15 }}>📊 Value by Category</h3>
             {categoryData.length === 0 ? (
-              <p style={{ color: '#666' }}>No category data available</p>
+              <p style={{ color: 'var(--text-muted)' }}>No category data available</p>
             ) : (
               <div>
                 {categoryData.slice(0, 10).map((cat, idx) => {
@@ -325,11 +325,11 @@ export default function Reports() {
                     <div key={cat.category} style={{ marginBottom: 12 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                         <span style={{ fontWeight: 500 }}>{cat.category}</span>
-                        <span style={{ color: '#666', fontSize: 13 }}>
+                        <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
                           {cat.items} items | {cat.stock} units | ${cat.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </span>
                       </div>
-                      <div style={{ background: '#eee', borderRadius: 4, height: 20, overflow: 'hidden' }}>
+                      <div style={{ background: 'var(--bg-surface-3)', borderRadius: 4, height: 20, overflow: 'hidden' }}>
                         <div style={{
                           width: `${(cat.value / maxValue) * 100}%`,
                           height: '100%',
@@ -349,7 +349,7 @@ export default function Reports() {
       {/* Value Report Tab */}
       {activeTab === 'value' && (
         <div>
-          <div style={{ background: 'white', padding: 20, borderRadius: 8, marginBottom: 20 }}>
+          <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginBottom: 20 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
               <h3>💰 Inventory Value Report</h3>
               <button
@@ -371,27 +371,27 @@ export default function Reports() {
               gap: 15,
               marginBottom: 20,
               padding: 15,
-              background: '#f9f9f9',
+              background: 'var(--bg-surface-2)',
               borderRadius: 8
             }}>
               <div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: '#4CAF50' }}>
+                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-success)' }}>
                   ${summaryStats.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </div>
-                <div style={{ color: '#666', fontSize: 12 }}>Total Inventory Value</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Total Inventory Value</div>
               </div>
               <div>
                 <div style={{ fontSize: 24, fontWeight: 700, color: '#2196F3' }}>
                   ${summaryStats.avgItemValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                 </div>
-                <div style={{ color: '#666', fontSize: 12 }}>Average Item Price</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>Average Item Price</div>
               </div>
             </div>
 
             <h4 style={{ marginBottom: 10 }}>Top 15 Items by Value</h4>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: '#f5f5f5' }}>
+                <tr style={{ background: 'var(--bg-surface-2)' }}>
                   <th style={{ padding: 10, textAlign: 'left' }}>SKU</th>
                   <th style={{ padding: 10, textAlign: 'left' }}>Item Name</th>
                   <th style={{ padding: 10, textAlign: 'left' }}>Category</th>
@@ -402,13 +402,13 @@ export default function Reports() {
               </thead>
               <tbody>
                 {topValueItems.map((item, idx) => (
-                  <tr key={item.id} style={{ borderBottom: '1px solid #eee', background: idx < 3 ? '#fffde7' : 'white' }}>
+                  <tr key={item.id} style={{ borderBottom: '1px solid var(--border)', background: idx < 3 ? '#fffde7' : 'white' }}>
                     <td style={{ padding: 10, fontFamily: 'monospace' }}>{item.partNumber || '-'}</td>
                     <td style={{ padding: 10 }}>{item.name}</td>
-                    <td style={{ padding: 10, color: '#666' }}>{item.category || '-'}</td>
+                    <td style={{ padding: 10, color: 'var(--text-muted)' }}>{item.category || '-'}</td>
                     <td style={{ padding: 10, textAlign: 'right' }}>{item.stock || 0}</td>
                     <td style={{ padding: 10, textAlign: 'right' }}>${(item.price || 0).toFixed(2)}</td>
-                    <td style={{ padding: 10, textAlign: 'right', fontWeight: 600, color: '#4CAF50' }}>
+                    <td style={{ padding: 10, textAlign: 'right', fontWeight: 600, color: 'var(--text-success)' }}>
                       ${item.totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                   </tr>
@@ -422,7 +422,7 @@ export default function Reports() {
       {/* Low Stock Tab */}
       {activeTab === 'lowstock' && (
         <div>
-          <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
+          <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
               <h3>⚠️ Low Stock Report</h3>
               <button
@@ -452,34 +452,34 @@ export default function Reports() {
               gap: 15,
               marginBottom: 20
             }}>
-              <div style={{ background: '#ffebee', padding: 15, borderRadius: 8, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#c62828' }}>
+              <div style={{ background: 'var(--bg-badge-red)', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-error)' }}>
                   {items.filter(i => (i.stock || 0) === 0).length}
                 </div>
-                <div style={{ color: '#c62828', fontSize: 12 }}>Out of Stock</div>
+                <div style={{ color: 'var(--text-error)', fontSize: 12 }}>Out of Stock</div>
               </div>
-              <div style={{ background: '#fff3e0', padding: 15, borderRadius: 8, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#e65100' }}>
+              <div style={{ background: 'var(--bg-badge-orange)', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-badge-orange)' }}>
                   {summaryStats.lowStock}
                 </div>
-                <div style={{ color: '#e65100', fontSize: 12 }}>Low Stock</div>
+                <div style={{ color: 'var(--text-badge-orange)', fontSize: 12 }}>Low Stock</div>
               </div>
-              <div style={{ background: '#e3f2fd', padding: 15, borderRadius: 8, textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: '#1565c0' }}>
+              <div style={{ background: 'var(--bg-badge-blue)', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-badge-blue)' }}>
                   {summaryStats.needsReorder}
                 </div>
-                <div style={{ color: '#1565c0', fontSize: 12 }}>Needs Reorder</div>
+                <div style={{ color: 'var(--text-badge-blue)', fontSize: 12 }}>Needs Reorder</div>
               </div>
             </div>
 
             {lowStockItems.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                 🎉 All items are well stocked!
               </div>
             ) : (
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
-                  <tr style={{ background: '#f5f5f5' }}>
+                  <tr style={{ background: 'var(--bg-surface-2)' }}>
                     <th style={{ padding: 10, textAlign: 'left' }}>Status</th>
                     <th style={{ padding: 10, textAlign: 'left' }}>SKU</th>
                     <th style={{ padding: 10, textAlign: 'left' }}>Item Name</th>
@@ -495,7 +495,7 @@ export default function Reports() {
                     const isLow = stock > 0 && stock <= (item.lowStockThreshold || 10);
                     return (
                       <tr key={item.id} style={{ 
-                        borderBottom: '1px solid #eee',
+                        borderBottom: '1px solid var(--border)',
                         background: isOutOfStock ? '#ffebee' : isLow ? '#fff3e0' : 'white'
                       }}>
                         <td style={{ padding: 10 }}>
@@ -505,7 +505,7 @@ export default function Reports() {
                             fontSize: 11,
                             fontWeight: 600,
                             background: isOutOfStock ? '#f44336' : isLow ? '#ff9800' : '#2196F3',
-                            color: 'white'
+                            color: 'var(--text-on-dark)'
                           }}>
                             {isOutOfStock ? 'OUT' : isLow ? 'LOW' : 'REORDER'}
                           </span>
@@ -515,8 +515,8 @@ export default function Reports() {
                         <td style={{ padding: 10, textAlign: 'right', fontWeight: 600, color: isOutOfStock ? '#c62828' : '#e65100' }}>
                           {stock}
                         </td>
-                        <td style={{ padding: 10, textAlign: 'right', color: '#666' }}>{item.lowStockThreshold || 10}</td>
-                        <td style={{ padding: 10, textAlign: 'right', color: '#666' }}>{item.reorderPoint || '-'}</td>
+                        <td style={{ padding: 10, textAlign: 'right', color: 'var(--text-muted)' }}>{item.lowStockThreshold || 10}</td>
+                        <td style={{ padding: 10, textAlign: 'right', color: 'var(--text-muted)' }}>{item.reorderPoint || '-'}</td>
                       </tr>
                     );
                   })}
@@ -530,9 +530,9 @@ export default function Reports() {
       {/* Dead Stock Tab */}
       {activeTab === 'deadstock' && (
         <div>
-          <div style={{ background: 'white', padding: 20, borderRadius: 8, marginBottom: 20 }}>
+          <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginBottom: 20 }}>
             <h3 style={{ marginBottom: 15 }}>Dead Stock Report</h3>
-            <p style={{ color: '#666', marginBottom: 15 }}>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 15 }}>
               Items with no movement in the specified number of days.
             </p>
             
@@ -558,7 +558,7 @@ export default function Reports() {
               </button>
               
               {deadStock.length > 0 && (
-                <button className="btn" onClick={exportDeadStock} style={{ background: '#17a2b8', color: 'white' }}>
+                <button className="btn" onClick={exportDeadStock} style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>
                   📥 Export CSV
                 </button>
               )}
@@ -567,7 +567,7 @@ export default function Reports() {
 
           {deadStock.length > 0 && (
             <div className="data-table">
-              <p style={{ marginBottom: 10, color: '#666' }}>
+              <p style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
                 Found <strong>{deadStock.length}</strong> items with no movement in {deadStockDays}+ days
               </p>
               <table>
@@ -607,9 +607,9 @@ export default function Reports() {
       {/* Inventory Turnover Tab */}
       {activeTab === 'turnover' && (
         <div>
-          <div style={{ background: 'white', padding: 20, borderRadius: 8, marginBottom: 20 }}>
+          <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginBottom: 20 }}>
             <h3 style={{ marginBottom: 15 }}>Inventory Turnover Report</h3>
-            <p style={{ color: '#666', marginBottom: 15 }}>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 15 }}>
               See which items are moving fastest (most picked) and slowest.
             </p>
             
@@ -635,7 +635,7 @@ export default function Reports() {
               </button>
               
               {turnover.length > 0 && (
-                <button className="btn" onClick={exportTurnover} style={{ background: '#17a2b8', color: 'white' }}>
+                <button className="btn" onClick={exportTurnover} style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>
                   📥 Export CSV
                 </button>
               )}
@@ -644,7 +644,7 @@ export default function Reports() {
 
           {turnover.length > 0 && (
             <div className="data-table">
-              <p style={{ marginBottom: 10, color: '#666' }}>
+              <p style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
                 Showing movement stats for the last {turnoverDays} days
               </p>
               <table>
@@ -668,10 +668,10 @@ export default function Reports() {
                         {item.name}
                       </td>
                       <td>{item.stock || 0}</td>
-                      <td style={{ color: '#f44336', fontWeight: item.totalPicked > 0 ? 600 : 400 }}>
+                      <td style={{ color: 'var(--text-error)', fontWeight: item.totalPicked > 0 ? 600 : 400 }}>
                         {item.totalPicked}
                       </td>
-                      <td style={{ color: '#4CAF50' }}>{item.totalAdded}</td>
+                      <td style={{ color: 'var(--text-success)' }}>{item.totalAdded}</td>
                       <td style={{ color: '#2196F3' }}>{item.totalMoved}</td>
                       <td>{item.movementCount}</td>
                     </tr>
@@ -686,9 +686,9 @@ export default function Reports() {
       {/* Custom Report Tab */}
       {activeTab === 'custom' && (
         <div>
-          <div style={{ background: 'white', padding: 20, borderRadius: 8, marginBottom: 20 }}>
+          <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginBottom: 20 }}>
             <h3 style={{ marginBottom: 15 }}>Custom Report Builder</h3>
-            <p style={{ color: '#666', marginBottom: 15 }}>
+            <p style={{ color: 'var(--text-muted)', marginBottom: 15 }}>
               Filter movements by date range, type, and user.
             </p>
             
@@ -757,7 +757,7 @@ export default function Reports() {
               </button>
               
               {customData.length > 0 && (
-                <button className="btn" onClick={exportCustom} style={{ background: '#17a2b8', color: 'white' }}>
+                <button className="btn" onClick={exportCustom} style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>
                   📥 Export CSV
                 </button>
               )}
@@ -768,7 +768,7 @@ export default function Reports() {
                   setCustomFilters({ dateFrom: '', dateTo: '', type: '', user: '' });
                   setCustomData([]);
                 }}
-                style={{ background: '#6c757d', color: 'white' }}
+                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
               >
                 Clear
               </button>
@@ -777,7 +777,7 @@ export default function Reports() {
 
           {customData.length > 0 && (
             <div className="data-table">
-              <p style={{ marginBottom: 10, color: '#666' }}>
+              <p style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
                 Found <strong>{customData.length}</strong> movements
               </p>
               <table>
@@ -803,7 +803,7 @@ export default function Reports() {
                           fontSize: 11,
                           fontWeight: 600,
                           background: m.type === 'PICK' ? '#f44336' : m.type === 'ADD' ? '#4CAF50' : '#2196F3',
-                          color: 'white'
+                          color: 'var(--text-on-dark)'
                         }}>
                           {m.type}
                         </span>
@@ -818,7 +818,7 @@ export default function Reports() {
                 </tbody>
               </table>
               {customData.length > 200 && (
-                <p style={{ padding: 10, color: '#666', textAlign: 'center' }}>
+                <p style={{ padding: 10, color: 'var(--text-muted)', textAlign: 'center' }}>
                   Showing first 200 results. Export to CSV for full data.
                 </p>
               )}

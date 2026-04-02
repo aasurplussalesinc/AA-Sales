@@ -139,7 +139,7 @@ export default function Scanner() {
 
   return (
     <div className="page-content">
-      <div style={{background: 'white', padding: 30, borderRadius: 8, maxWidth: 600, margin: '0 auto'}}>
+      <div style={{background: 'var(--bg-surface)', padding: 30, borderRadius: 8, maxWidth: 600, margin: '0 auto'}}>
         <h2 style={{marginBottom: 20}}>QR Scanner</h2>
         
         {scanning && (
@@ -202,8 +202,8 @@ export default function Scanner() {
         )}
 
         {!scanning && (
-          <div style={{marginTop: 30, padding: 15, background: '#f8f9fa', borderRadius: 6}}>
-            <p style={{fontSize: 14, color: '#666'}}>
+          <div style={{marginTop: 30, padding: 15, background: 'var(--bg-surface-2)', borderRadius: 6}}>
+            <p style={{fontSize: 14, color: 'var(--text-muted)'}}>
               Use camera to scan QR codes or enter them manually above.
             </p>
           </div>
@@ -226,36 +226,36 @@ export default function Scanner() {
           padding: 20
         }}>
           <div style={{
-            background: 'white',
+            background: 'var(--bg-surface)',
             borderRadius: 12,
             padding: 30,
             maxWidth: 500,
             width: '100%',
             maxHeight: '80vh',
             overflow: 'auto',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
+            boxShadow: 'var(--shadow-modal)'
           }}>
             {/* ITEM SCAN */}
             {scannedData.type === 'item' && scannedData.item && (
               <>
                 <h2 style={{marginBottom: 20, textAlign: 'center'}}>📦 Item Scanned</h2>
                 
-                <div style={{ padding: 15, background: '#e8f5e9', borderRadius: 8, marginBottom: 15 }}>
+                <div style={{ padding: 15, background: 'var(--bg-badge-green)', borderRadius: 8, marginBottom: 15 }}>
                   <div style={{ fontWeight: 600, fontSize: 18 }}>{scannedData.item.name}</div>
-                  <div style={{ color: '#666', fontSize: 13 }}>SKU: {scannedData.item.partNumber || 'N/A'}</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>SKU: {scannedData.item.partNumber || 'N/A'}</div>
                 </div>
                 
                 <div style={{marginBottom: 25}}>
-                  <div style={{padding: 15, background: '#f8f9fa', borderRadius: 8, marginBottom: 10}}>
-                    <p style={{fontSize: 14, color: '#666', marginBottom: 5}}>Current Inventory</p>
-                    <p style={{fontSize: 24, fontWeight: 'bold', color: '#2d5f3f'}}>
+                  <div style={{padding: 15, background: 'var(--bg-surface-2)', borderRadius: 8, marginBottom: 10}}>
+                    <p style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 5}}>Current Inventory</p>
+                    <p style={{fontSize: 24, fontWeight: 'bold', color: 'var(--accent)'}}>
                       {scannedData.currentInventory} units
                     </p>
                   </div>
                   
-                  <div style={{padding: 15, background: '#f8f9fa', borderRadius: 8}}>
-                    <p style={{fontSize: 14, color: '#666', marginBottom: 5}}>Current Location</p>
-                    <p style={{fontSize: 20, fontWeight: 'bold', color: '#2d5f3f'}}>
+                  <div style={{padding: 15, background: 'var(--bg-surface-2)', borderRadius: 8}}>
+                    <p style={{fontSize: 14, color: 'var(--text-muted)', marginBottom: 5}}>Current Location</p>
+                    <p style={{fontSize: 20, fontWeight: 'bold', color: 'var(--accent)'}}>
                       {scannedData.currentLocation}
                     </p>
                   </div>
@@ -297,7 +297,7 @@ export default function Scanner() {
                   background: 'linear-gradient(135deg, #2d5f3f, #1a3a26)', 
                   borderRadius: 8, 
                   marginBottom: 20,
-                  color: 'white',
+                  color: 'var(--text-on-dark)',
                   textAlign: 'center'
                 }}>
                   <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: 2 }}>
@@ -306,17 +306,17 @@ export default function Scanner() {
                 </div>
                 
                 <div style={{ marginBottom: 20 }}>
-                  <h3 style={{ fontSize: 16, marginBottom: 10, color: '#666' }}>
+                  <h3 style={{ fontSize: 16, marginBottom: 10, color: 'var(--text-muted)' }}>
                     Items at this location ({scannedData.locationItems?.length || 0})
                   </h3>
                   
                   {(!scannedData.locationItems || scannedData.locationItems.length === 0) ? (
                     <div style={{ 
                       padding: 30, 
-                      background: '#f5f5f5', 
+                      background: 'var(--bg-surface-2)', 
                       borderRadius: 8, 
                       textAlign: 'center',
-                      color: '#666'
+                      color: 'var(--text-muted)'
                     }}>
                       No items at this location
                     </div>
@@ -337,13 +337,13 @@ export default function Scanner() {
                         >
                           <div>
                             <div style={{ fontWeight: 600 }}>{item.name}</div>
-                            <div style={{ fontSize: 12, color: '#666' }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                               {item.partNumber || 'No SKU'}
                             </div>
                           </div>
                           <div style={{
-                            background: '#2d5f3f',
-                            color: 'white',
+                            background: 'var(--btn-primary-bg)',
+                            color: 'var(--text-on-dark)',
                             padding: '5px 12px',
                             borderRadius: 20,
                             fontWeight: 600
@@ -361,7 +361,7 @@ export default function Scanner() {
             <button
               className="btn"
               onClick={() => setShowPopup(false)}
-              style={{width: '100%', padding: 12, background: '#6c757d', color: 'white'}}
+              style={{width: '100%', padding: 12, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)'}}
             >
               Close
             </button>

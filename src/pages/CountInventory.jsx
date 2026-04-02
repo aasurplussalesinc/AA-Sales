@@ -83,12 +83,12 @@ export default function CountInventory() {
       {items.map(item => (
         <div key={item.id} className="card">
           <div>
-            <p style={{fontSize: 14, color: '#666', fontWeight: 600}}>
+            <p style={{fontSize: 14, color: 'var(--text-muted)', fontWeight: 600}}>
               {item.partNumber}
             </p>
             <h3 style={{fontSize: 18, marginTop: 5}}>{item.name}</h3>
             {item.price > 0 && (
-              <p style={{fontSize: 14, color: '#4CAF50', marginTop: 5}}>
+              <p style={{fontSize: 14, color: 'var(--text-success)', marginTop: 5}}>
                 ${item.price.toFixed(2)}
               </p>
             )}
@@ -121,7 +121,7 @@ export default function CountInventory() {
 
       {items.length === 0 && !loading && (
         <div className="card">
-          <p style={{color: '#666', textAlign: 'center'}}>
+          <p style={{color: 'var(--text-muted)', textAlign: 'center'}}>
             Search for items to count
           </p>
         </div>

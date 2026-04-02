@@ -25,7 +25,7 @@ export default function Movements() {
 
   return (
     <div className="page-content">
-      <div style={{background: 'white', padding: 20, borderRadius: 8}}>
+      <div style={{background: 'var(--bg-surface)', padding: 20, borderRadius: 8}}>
         <h2 style={{marginBottom: 15}}>Movement History</h2>
         <div className="data-table">
           <table>
@@ -44,7 +44,7 @@ export default function Movements() {
               {movements.map(mov => (
                 <tr key={mov.id}>
                   <td>{formatDate(mov.timestamp)}</td>
-                  <td style={{ fontSize: 12, color: '#666' }}>
+                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                     {mov.userEmail || 'Unknown'}
                   </td>
                   <td>{mov.itemName}</td>
@@ -59,7 +59,7 @@ export default function Movements() {
                       fontWeight: 'bold',
                       background: mov.type === 'ADD' ? '#4CAF50' : 
                                  mov.type === 'PICK' ? '#f44336' : '#2196F3',
-                      color: 'white'
+                      color: 'var(--text-on-dark)'
                     }}>
                       {mov.type}
                     </span>

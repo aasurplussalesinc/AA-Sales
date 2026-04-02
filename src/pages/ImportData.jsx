@@ -77,7 +77,7 @@ export default function ImportData() {
 
       <div className="card">
         <h3>Upload File</h3>
-        <p style={{color: '#666', fontSize: 14, marginBottom: 15}}>
+        <p style={{color: 'var(--text-muted)', fontSize: 14, marginBottom: 15}}>
           Supported columns: SKU, Item Name, Category, Quantity, Price, Location, Weight
         </p>
         
@@ -90,15 +90,15 @@ export default function ImportData() {
         />
 
         {importing && (
-          <div style={{ marginTop: 15, padding: 15, background: '#e3f2fd', borderRadius: 8 }}>
+          <div style={{ marginTop: 15, padding: 15, background: 'var(--bg-badge-blue)', borderRadius: 8 }}>
             <p>⏳ Importing... Please wait...</p>
           </div>
         )}
 
         {preview && !result && (
-          <div style={{ marginTop: 15, padding: 15, background: '#f5f5f5', borderRadius: 8 }}>
+          <div style={{ marginTop: 15, padding: 15, background: 'var(--bg-surface-2)', borderRadius: 8 }}>
             <p><strong>Preview:</strong> Found {preview.total} rows, {preview.valid} valid items</p>
-            <p style={{ fontSize: 12, color: '#666' }}>Columns detected: {preview.columns.join(', ')}</p>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Columns detected: {preview.columns.join(', ')}</p>
           </div>
         )}
 
@@ -121,7 +121,7 @@ export default function ImportData() {
 
       <div className="card">
         <h3>Import Notes</h3>
-        <ul style={{color: '#666', fontSize: 14, lineHeight: 1.8}}>
+        <ul style={{color: 'var(--text-muted)', fontSize: 14, lineHeight: 1.8}}>
           <li><strong>Weight field</strong> will be saved and used for contract cost calculations</li>
           <li>Items are matched by <strong>SKU/Part Number</strong> - existing items will be updated</li>
           <li>Items without a name will be skipped</li>

@@ -1435,14 +1435,14 @@ ${labelsHtml}
                 <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Customer / Company</label>
                 <input type="text" placeholder="Search customers..." value={searchCustomer || newPO.customerName}
                   onChange={e => { setSearchCustomer(e.target.value); setNewPO({ ...newPO, customerName: e.target.value }); }}
-                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
                 {filteredCustomers.length > 0 && (
-                  <div style={{ border: '1px solid #ddd', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
                     {filteredCustomers.slice(0, 5).map(c => (
-                      <div key={c.id} onClick={() => selectCustomerForPO(c)} style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}>
+                      <div key={c.id} onClick={() => selectCustomerForPO(c)} style={{ padding: 10, borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
                         <strong>{c.company || c.customerName}</strong>
-                        {c.company && c.customerName && <span style={{ color: '#666', marginLeft: 10 }}>({c.customerName})</span>}
-                        <span style={{ color: '#888', marginLeft: 10, fontSize: 12 }}>{c.email}</span>
+                        {c.company && c.customerName && <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>({c.customerName})</span>}
+                        <span style={{ color: 'var(--text-muted)', marginLeft: 10, fontSize: 12 }}>{c.email}</span>
                       </div>
                     ))}
                   </div>
@@ -1451,10 +1451,10 @@ ${labelsHtml}
 
               {/* Contact Name */}
               <div style={{ marginBottom: 20 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Contact Name <span style={{ fontWeight: 400, color: '#888', fontSize: 12 }}>(Attn: on invoice)</span></label>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Contact Name <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: 12 }}>(Attn: on invoice)</span></label>
                 <input type="text" placeholder="Contact person name..." value={newPO.customerContact || ''}
                   onChange={e => setNewPO({ ...newPO, customerContact: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
               </div>
 
               {/* Ship To Address */}
@@ -1472,7 +1472,7 @@ ${labelsHtml}
                     placeholder="Enter ship to address..."
                     value={newPO.shipToAddress || ''}
                     onChange={e => setNewPO({ ...newPO, shipToAddress: e.target.value })}
-                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd', marginTop: 10, minHeight: 80 }}
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', marginTop: 10, minHeight: 80 }}
                   />
                 )}
               </div>
@@ -1485,20 +1485,20 @@ ${labelsHtml}
                     type="button"
                     onClick={() => setShowOneOffModal(true)}
                     className="btn btn-sm"
-                    style={{ background: '#ff9800', color: 'white', fontSize: 12 }}
+                    style={{ background: '#ff9800', color: 'var(--text-on-dark)', fontSize: 12 }}
                   >
                     + One-Off Item
                   </button>
                 </div>
                 <input type="text" placeholder="Search items..." value={searchItem} onChange={e => setSearchItem(e.target.value)}
-                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }} />
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
                 {filteredItems.length > 0 && (
-                  <div style={{ border: '1px solid #ddd', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
                     {filteredItems.slice(0, 10).map(item => (
-                      <div key={item.id} onClick={() => addItemToPO(item)} style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}>
+                      <div key={item.id} onClick={() => addItemToPO(item)} style={{ padding: 10, borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
                         <strong>{item.name}</strong>
-                        <span style={{ color: '#666', marginLeft: 10 }}>{item.partNumber}</span>
-                        <span style={{ color: '#2d5f3f', marginLeft: 10 }}>Stock: {item.stock || 0}</span>
+                        <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>{item.partNumber}</span>
+                        <span style={{ color: 'var(--accent)', marginLeft: 10 }}>Stock: {item.stock || 0}</span>
                       </div>
                     ))}
                   </div>
@@ -1510,22 +1510,22 @@ ${labelsHtml}
                 <div style={{ marginBottom: 20, overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
-                      <tr style={{ background: '#f5f5f5' }}>
+                      <tr style={{ background: 'var(--bg-surface-2)' }}>
                         <th style={{ padding: 8, textAlign: 'left' }}>Item</th>
                         <th style={{ padding: 8, width: 140 }}>Source</th>
                         <th style={{ padding: 8, width: 70 }}>Qty Ord</th>
                         <th style={{ padding: 8, width: 70 }}>Qty Ship</th>
                         <th style={{ padding: 8, width: 80 }}>Price</th>
-                        <th style={{ padding: 8, width: 80, background: '#e8f5e9' }}>Total</th>
+                        <th style={{ padding: 8, width: 80, background: 'var(--bg-badge-green)' }}>Total</th>
                         <th style={{ padding: 8, width: 40 }}></th>
                       </tr>
                     </thead>
                     <tbody>
                       {newPO.items.map((item, index) => (
-                        <tr key={index} style={{ borderBottom: '1px solid #eee' }}>
+                        <tr key={index} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: 8 }}>
                             <strong>{item.itemName}</strong>
-                            <div style={{ fontSize: 11, color: '#666' }}>{item.partNumber}</div>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.partNumber}</div>
                           </td>
                           <td style={{ padding: 8 }}>
                             <select value={item.source || 'inventory'} onChange={e => updatePOItem(index, 'source', e.target.value)}
@@ -1561,10 +1561,10 @@ ${labelsHtml}
                             <input type="number" value={item.unitPrice === '' || item.unitPrice === undefined || item.unitPrice === null ? '' : item.unitPrice} onChange={e => updatePOItem(index, 'unitPrice', e.target.value === '' ? '' : parseFloat(e.target.value) || 0)}
                               style={{ width: '100%', padding: 4, textAlign: 'right' }} step="0.01" min="0" placeholder="0.00" />
                           </td>
-                          <td style={{ padding: 8, textAlign: 'right', fontWeight: 600, background: '#e8f5e9' }}>${(item.lineTotal || 0).toFixed(2)}</td>
+                          <td style={{ padding: 8, textAlign: 'right', fontWeight: 600, background: 'var(--bg-badge-green)' }}>${(item.lineTotal || 0).toFixed(2)}</td>
                           <td style={{ padding: 8 }}>
                             <button onClick={() => removeItemFromPO(index)}
-                              style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}>✕</button>
+                              style={{ background: '#f44336', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}>✕</button>
                           </td>
                         </tr>
                       ))}
@@ -1573,15 +1573,15 @@ ${labelsHtml}
 
                   {/* Totals */}
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 15 }}>
-                    <div style={{ width: 220, background: '#e8f5e9', padding: 15, borderRadius: 8, border: '2px solid #388e3c' }}>
-                      <div style={{ fontWeight: 600, color: '#388e3c', marginBottom: 10, fontSize: 14 }}>💵 INVOICE</div>
+                    <div style={{ width: 220, background: 'var(--bg-badge-green)', padding: 15, borderRadius: 8, border: '2px solid #388e3c' }}>
+                      <div style={{ fontWeight: 600, color: 'var(--text-badge-green)', marginBottom: 10, fontSize: 14 }}>💵 INVOICE</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Subtotal:</span><span>${(newPO.subtotal || 0).toFixed(2)}</span></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>Tax:</span>
                         <input type="number" value={newPO.tax === '' || newPO.tax === undefined || newPO.tax === null ? '' : newPO.tax} onChange={e => updateTaxShipping('tax', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" placeholder="0.00" /></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>Shipping:</span>
                         <input type="number" value={newPO.shipping === '' || newPO.shipping === undefined || newPO.shipping === null ? '' : newPO.shipping} onChange={e => updateTaxShipping('shipping', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" placeholder="0.00" /></div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #388e3c', fontWeight: 'bold', fontSize: 18, color: '#388e3c' }}><span>Total:</span><span>${(newPO.total || 0).toFixed(2)}</span></div>
-                      <div style={{ fontSize: 9, color: '#888', marginTop: 5, fontStyle: 'italic', textAlign: 'center' }}>Payments by credit card are subject to a 3.5% processing fee</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #388e3c', fontWeight: 'bold', fontSize: 18, color: 'var(--text-badge-green)' }}><span>Total:</span><span>${(newPO.total || 0).toFixed(2)}</span></div>
+                      <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 5, fontStyle: 'italic', textAlign: 'center' }}>Payments by credit card are subject to a 3.5% processing fee</div>
                     </div>
                   </div>
                 </div>
@@ -1594,7 +1594,7 @@ ${labelsHtml}
                   <select
                     value={newPO.terms || 'Net 30'}
                     onChange={e => setNewPO({ ...newPO, terms: e.target.value })}
-                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   >
                     {termsOptions.map(term => (
                       <option key={term} value={term}>{term}</option>
@@ -1607,20 +1607,20 @@ ${labelsHtml}
                     type="date" 
                     value={newPO.invoiceDate || ''} 
                     onChange={e => setNewPO({ ...newPO, invoiceDate: e.target.value })}
-                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   />
-                  <div style={{ fontSize: 11, color: '#666', marginTop: 3 }}>Leave blank to use created date</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Leave blank to use created date</div>
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Notes</label>
                   <textarea placeholder="Order notes..." value={newPO.notes} onChange={e => setNewPO({ ...newPO, notes: e.target.value })}
-                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd', minHeight: 60 }} />
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', minHeight: 60 }} />
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn btn-primary" onClick={createPurchaseOrder} style={{ flex: 1 }}>{editMode ? 'Save Changes' : 'Create Order'}</button>
-                <button className="btn" onClick={() => { setShowCreate(false); setEditMode(false); resetForm(); }} style={{ flex: 1, background: '#6c757d', color: 'white' }}>Cancel</button>
+                <button className="btn" onClick={() => { setShowCreate(false); setEditMode(false); resetForm(); }} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>Cancel</button>
               </div>
             </div>
           </div>
@@ -1632,11 +1632,11 @@ ${labelsHtml}
         <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) closeOrderModal(); }}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header">
-              <div><h3 style={{ margin: 0 }}>{selectedOrder.poNumber}</h3><p style={{ color: '#666', margin: '5px 0 0 0' }}>{selectedOrder.customerName}</p></div>
-              <span style={{ padding: '6px 16px', borderRadius: 20, fontSize: 14, fontWeight: 600, background: getStatusColor(selectedOrder.status), color: 'white' }}>{selectedOrder.status?.toUpperCase() || 'DRAFT'}</span>
+              <div><h3 style={{ margin: 0 }}>{selectedOrder.poNumber}</h3><p style={{ color: 'var(--text-muted)', margin: '5px 0 0 0' }}>{selectedOrder.customerName}</p></div>
+              <span style={{ padding: '6px 16px', borderRadius: 20, fontSize: 14, fontWeight: 600, background: getStatusColor(selectedOrder.status), color: 'var(--text-on-dark)' }}>{selectedOrder.status?.toUpperCase() || 'DRAFT'}</span>
             </div>
             <div className="modal-body" style={{ padding: 20 }}>
-              <div style={{ background: '#f9f9f9', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+              <div style={{ background: 'var(--bg-surface-2)', padding: 15, borderRadius: 8, marginBottom: 20 }}>
                 <p style={{ margin: '3px 0' }}><strong>Customer:</strong> {selectedOrder.customerName}</p>
                 {selectedOrder.customerContact && <p style={{ margin: '3px 0' }}><strong>Contact:</strong> {selectedOrder.customerContact}</p>}
                 {selectedOrder.customerPhone && <p style={{ margin: '3px 0' }}>Phone: {selectedOrder.customerPhone}</p>}
@@ -1651,11 +1651,11 @@ ${labelsHtml}
               </div>
 
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20, fontSize: 13 }}>
-                <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 10, textAlign: 'left' }}>Item</th><th style={{ padding: 10, textAlign: 'center' }}>Source</th><th style={{ padding: 10, textAlign: 'right' }}>Qty</th><th style={{ padding: 10, textAlign: 'right' }}>Price</th><th style={{ padding: 10, textAlign: 'right' }}>Total</th></tr></thead>
+                <thead><tr style={{ background: 'var(--bg-surface-2)' }}><th style={{ padding: 10, textAlign: 'left' }}>Item</th><th style={{ padding: 10, textAlign: 'center' }}>Source</th><th style={{ padding: 10, textAlign: 'right' }}>Qty</th><th style={{ padding: 10, textAlign: 'right' }}>Price</th><th style={{ padding: 10, textAlign: 'right' }}>Total</th></tr></thead>
                 <tbody>
                   {selectedOrder.items?.map((item, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
-                      <td style={{ padding: 10 }}>{item.itemName}<div style={{ fontSize: 11, color: '#666' }}>{item.partNumber}</div>{item.boxNumber && <div style={{ fontSize: 11, color: '#9c27b0' }}>📦 Box {item.boxNumber}</div>}</td>
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: 10 }}>{item.itemName}<div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.partNumber}</div>{item.boxNumber && <div style={{ fontSize: 11, color: 'var(--text-badge-purple)' }}>📦 Box {item.boxNumber}</div>}</td>
                       <td style={{ padding: 10, textAlign: 'center' }}><span style={{ padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: item.source === 'direct_contract' ? '#fce4ec' : item.source === 'inventory_contract' ? '#fff3e0' : '#e3f2fd', color: item.source === 'direct_contract' ? '#c2185b' : item.source === 'inventory_contract' ? '#f57c00' : '#1976d2' }}>{getSourceLabel(item.source)}</span></td>
                       <td style={{ padding: 10, textAlign: 'right' }}>{item.qtyShipped || item.quantity}</td>
                       <td style={{ padding: 10, textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>
@@ -1674,41 +1674,41 @@ ${labelsHtml}
                 </div>
               </div>
 
-              {selectedOrder.notes && <div style={{ background: '#fffde7', padding: 15, borderRadius: 8, marginBottom: 20 }}><strong>Notes:</strong> {selectedOrder.notes}</div>}
+              {selectedOrder.notes && <div style={{ background: 'var(--bg-badge-orange)', padding: 15, borderRadius: 8, marginBottom: 20 }}><strong>Notes:</strong> {selectedOrder.notes}</div>}
 
               {selectedOrder.paymentMethod && (
-                <div style={{ background: '#e8f5e9', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+                <div style={{ background: 'var(--bg-badge-green)', padding: 15, borderRadius: 8, marginBottom: 20 }}>
                   <strong>💰 Payment:</strong> {
                     { cash: '💵 Cash', credit_card: '💳 Credit Card', paypal: '🅿️ PayPal', squarespace_paylink: '🔗 Squarespace Paylink', zelle: '📱 Zelle', venmo: '📲 Venmo', apple_pay: '🍎 Apple Pay', ach: '🏦 ACH', wire: '🔌 Wire Transfer', check: '📝 Check' }[selectedOrder.paymentMethod] || selectedOrder.paymentMethod
                   }
-                  {selectedOrder.paidAt && <span style={{ marginLeft: 15, color: '#666', fontSize: 13 }}>on {formatDate(selectedOrder.paidAt)}</span>}
+                  {selectedOrder.paidAt && <span style={{ marginLeft: 15, color: 'var(--text-muted)', fontSize: 13 }}>on {formatDate(selectedOrder.paidAt)}</span>}
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {canEdit && <button className="btn" onClick={() => openEditOrder(selectedOrder)} style={{ background: '#ff9800', color: 'white' }}>✏️ Edit</button>}
-                <button className="btn" onClick={() => printPO(selectedOrder, 'estimate')} style={{ background: '#1976d2', color: 'white' }}>📋 Estimate</button>
-                <button className="btn" onClick={() => printPO(selectedOrder, 'invoice')} style={{ background: '#388e3c', color: 'white' }}>💵 Invoice</button>
-                <button className="btn" onClick={() => emailInvoice(selectedOrder)} style={{ background: '#7b1fa2', color: 'white' }}>📧 Email</button>
+                {canEdit && <button className="btn" onClick={() => openEditOrder(selectedOrder)} style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}>✏️ Edit</button>}
+                <button className="btn" onClick={() => printPO(selectedOrder, 'estimate')} style={{ background: '#1976d2', color: 'var(--text-on-dark)' }}>📋 Estimate</button>
+                <button className="btn" onClick={() => printPO(selectedOrder, 'invoice')} style={{ background: '#388e3c', color: 'var(--text-on-dark)' }}>💵 Invoice</button>
+                <button className="btn" onClick={() => emailInvoice(selectedOrder)} style={{ background: '#7b1fa2', color: 'var(--text-on-dark)' }}>📧 Email</button>
                 {canEdit && (!selectedOrder.status || selectedOrder.status === 'draft') && <button className="btn btn-primary" onClick={() => confirmAndCreatePickList(selectedOrder)}>✓ Confirm & Pick List</button>}
-                {pickLists.find(pl => pl.purchaseOrderId === selectedOrder.id) && <button className="btn" onClick={() => printPickList(selectedOrder)} style={{ background: '#2d5f3f', color: 'white' }}>📋 Print Pick List</button>}
-                {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.status === 'packing') && <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>{selectedOrder.status === 'packing' ? '📦 Continue Packing' : '📦 Pack Order'}</button>}
+                {pickLists.find(pl => pl.purchaseOrderId === selectedOrder.id) && <button className="btn" onClick={() => printPickList(selectedOrder)} style={{ background: 'var(--btn-primary-bg)', color: 'var(--text-on-dark)' }}>📋 Print Pick List</button>}
+                {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.status === 'packing') && <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}>{selectedOrder.status === 'packing' ? '📦 Continue Packing' : '📦 Pack Order'}</button>}
                 {selectedOrder.packingComplete && (
                   <>
-                    <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white' }}>📦 Edit Packing</button>
-                    <button className="btn" onClick={() => printClientPackingList(selectedOrder)} style={{ background: '#17a2b8', color: 'white' }}>🖨️ Client Packing List</button>
-                    <button className="btn" onClick={() => printInternalPackingList(selectedOrder)} style={{ background: '#ff9800', color: 'white' }}>📊 Internal Analysis</button>
+                    <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}>📦 Edit Packing</button>
+                    <button className="btn" onClick={() => printClientPackingList(selectedOrder)} style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>🖨️ Client Packing List</button>
+                    <button className="btn" onClick={() => printInternalPackingList(selectedOrder)} style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}>📊 Internal Analysis</button>
                   </>
                 )}
                 {selectedOrder.packingComplete && selectedOrder.triwalls && selectedOrder.triwalls.length > 0 && (
                   <div style={{ display: 'flex', gap: 5 }}>
-                    <button className="btn" onClick={() => printAllShippingLabels(selectedOrder)} style={{ background: '#795548', color: 'white' }}>
+                    <button className="btn" onClick={() => printAllShippingLabels(selectedOrder)} style={{ background: '#795548', color: 'var(--text-on-dark)' }}>
                       🏷️ Print All Labels ({selectedOrder.triwalls.length})
                     </button>
                     {selectedOrder.triwalls.length > 1 && (
                       <select
                         onChange={e => { if (e.target.value) { printShippingLabel(selectedOrder, parseInt(e.target.value)); e.target.value = ''; } }}
-                        style={{ padding: '8px 12px', border: '1px solid #795548', borderRadius: 4, background: 'white', cursor: 'pointer' }}
+                        style={{ padding: '8px 12px', border: '1px solid #795548', borderRadius: 4, background: 'var(--bg-surface)', cursor: 'pointer' }}
                       >
                         <option value="">Print Single...</option>
                         {selectedOrder.triwalls.map((tw, idx) => (
@@ -1718,10 +1718,10 @@ ${labelsHtml}
                     )}
                   </div>
                 )}
-                {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.packingComplete) && <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: '#4CAF50', color: 'white' }}>🚚 Mark Shipped</button>}
-                {canEdit && selectedOrder.status === 'shipped' && <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#4CAF50', color: 'white' }}>💰 Mark Paid</button>}
-                {canEdit && <button className="btn" onClick={() => deleteOrder(selectedOrder)} style={{ background: '#f44336', color: 'white' }}>🗑️ Delete</button>}
-                <button className="btn" onClick={closeOrderModal} style={{ background: '#6c757d', color: 'white', marginLeft: 'auto' }}>Close</button>
+                {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.packingComplete) && <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: '#4CAF50', color: 'var(--text-on-dark)' }}>🚚 Mark Shipped</button>}
+                {canEdit && selectedOrder.status === 'shipped' && <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#4CAF50', color: 'var(--text-on-dark)' }}>💰 Mark Paid</button>}
+                {canEdit && <button className="btn" onClick={() => deleteOrder(selectedOrder)} style={{ background: '#f44336', color: 'var(--text-on-dark)' }}>🗑️ Delete</button>}
+                <button className="btn" onClick={closeOrderModal} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', marginLeft: 'auto' }}>Close</button>
               </div>
             </div>
           </div>
@@ -1734,9 +1734,9 @@ ${labelsHtml}
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700, maxHeight: '90vh', overflow: 'auto' }}>
             <div className="modal-header"><h3 style={{ margin: 0 }}>📦 Pack Order - {packingOrder.poNumber}</h3><button className="modal-close" onClick={() => setShowPackOrder(false)}>×</button></div>
             <div className="modal-body" style={{ padding: 20 }}>
-              <div style={{ background: '#e3f2fd', padding: 12, borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
+              <div style={{ background: 'var(--bg-badge-blue)', padding: 12, borderRadius: 8, marginBottom: 20, fontSize: 13 }}>
                 <strong>📋 Quantities from Pick List</strong>
-                <span style={{ color: '#666', marginLeft: 10 }}>Packing quantities are based on what was actually picked.</span>
+                <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>Packing quantities are based on what was actually picked.</span>
               </div>
               
               {(packingOrder.items || []).map((item, idx) => {
@@ -1751,9 +1751,9 @@ ${labelsHtml}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                       <div>
                         <strong>{item.itemName}</strong>
-                        {item.partNumber && <span style={{ color: '#666', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
+                        {item.partNumber && <span style={{ color: 'var(--text-muted)', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
                         {hasShortage && (
-                          <div style={{ fontSize: 11, color: '#f57c00', marginTop: 2 }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-badge-orange)', marginTop: 2 }}>
                             ⚠️ Shortage: Ordered {orderedQty}, Picked {pickedQty}
                           </div>
                         )}
@@ -1762,7 +1762,7 @@ ${labelsHtml}
                         <span style={{ fontWeight: 'bold', color: isValid ? '#4CAF50' : '#ff9800' }}>
                           {distributedQty} / {pickedQty}
                         </span>
-                        <div style={{ fontSize: 10, color: '#666' }}>packed / picked</div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>packed / picked</div>
                         {!isValid && <div style={{ fontSize: 11, color: '#ff9800' }}>⚠️ {distributedQty < pickedQty ? `${pickedQty - distributedQty} remaining` : `${distributedQty - pickedQty} over`}</div>}
                       </div>
                     </div>
@@ -1789,7 +1789,7 @@ ${labelsHtml}
                         {(boxAssignments[idx] || []).length > 1 && (
                           <button
                             onClick={() => removeBoxDistribution(idx, distIdx)}
-                            style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
+                            style={{ background: '#f44336', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}
                           >✕</button>
                         )}
                       </div>
@@ -1797,7 +1797,7 @@ ${labelsHtml}
                     
                     <button
                       onClick={() => addBoxDistribution(idx)}
-                      style={{ background: '#e3f2fd', color: '#1976d2', border: '1px dashed #1976d2', borderRadius: 4, padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 5 }}
+                      style={{ background: 'var(--bg-badge-blue)', color: 'var(--text-link)', border: '1px dashed #1976d2', borderRadius: 4, padding: '6px 12px', cursor: 'pointer', fontSize: 12, marginTop: 5 }}
                     >+ Add to another box</button>
                   </div>
                 );
@@ -1805,11 +1805,11 @@ ${labelsHtml}
               
               <div style={{ marginTop: 20, padding: 15, background: validatePacking() ? '#e8f5e9' : '#ffebee', borderRadius: 8 }}>
                 <strong>Summary:</strong> {new Set(Object.values(boxAssignments).flatMap(d => d.map(x => x.box))).size} boxes
-                {!validatePacking() && <span style={{ color: '#f44336', marginLeft: 10 }}>⚠️ Fix quantity mismatches before saving</span>}
+                {!validatePacking() && <span style={{ color: 'var(--text-error)', marginLeft: 10 }}>⚠️ Fix quantity mismatches before saving</span>}
               </div>
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: 15, borderTop: '1px solid #eee' }}>
-              <button className="btn" onClick={() => setShowPackOrder(false)} style={{ background: '#6c757d', color: 'white' }}>Cancel</button>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: 15, borderTop: '1px solid var(--border)' }}>
+              <button className="btn" onClick={() => setShowPackOrder(false)} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>Cancel</button>
               <button className="btn btn-primary" onClick={savePackOrder} disabled={!validatePacking()}>Save Packing</button>
             </div>
           </div>
@@ -1821,11 +1821,11 @@ ${labelsHtml}
         {[
           { value: 'all',       label: 'All Orders', statuses: null,          icon: '📋', color: '#455a64', bg: '#eceff1' },
           { value: 'draft',     label: 'Draft',      statuses: ['draft'],     icon: '✏️',  color: '#78909c', bg: '#f5f5f5' },
-          { value: 'confirmed', label: 'Confirmed',  statuses: ['confirmed'], icon: '✅',  color: '#1976d2', bg: '#e3f2fd' },
-          { value: 'picking',   label: 'Picking',    statuses: ['picking'],   icon: '🔍',  color: '#f57c00', bg: '#fff3e0' },
-          { value: 'packed',    label: 'Packed',     statuses: ['packed'],    icon: '📦',  color: '#7b1fa2', bg: '#f3e5f5' },
-          { value: 'shipped',   label: 'Shipped',    statuses: ['shipped'],   icon: '🚚',  color: '#388e3c', bg: '#e8f5e9' },
-          { value: 'paid',      label: 'Paid',       statuses: ['paid'],      icon: '💰',  color: '#2e7d32', bg: '#c8e6c9' },
+          { value: 'confirmed', label: 'Confirmed',  statuses: ['confirmed'], icon: '✅',  color: 'var(--text-link)', bg: '#e3f2fd' },
+          { value: 'picking',   label: 'Picking',    statuses: ['picking'],   icon: '🔍',  color: 'var(--text-badge-orange)', bg: '#fff3e0' },
+          { value: 'packed',    label: 'Packed',     statuses: ['packed'],    icon: '📦',  color: 'var(--text-badge-purple)', bg: '#f3e5f5' },
+          { value: 'shipped',   label: 'Shipped',    statuses: ['shipped'],   icon: '🚚',  color: 'var(--text-badge-green)', bg: '#e8f5e9' },
+          { value: 'paid',      label: 'Paid',       statuses: ['paid'],      icon: '💰',  color: 'var(--text-badge-green)', bg: '#c8e6c9' },
         ].map(tab => {
           const count = tab.statuses ? orders.filter(o => tab.statuses.includes(o.status)).length : orders.length;
           const isActive = activeTab === tab.value;
@@ -1865,13 +1865,13 @@ ${labelsHtml}
             placeholder="Search PO# or customer..."
             value={filterSearch}
             onChange={e => setFilterSearch(e.target.value)}
-            style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, width: 220 }}
+            style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, width: 220 }}
           />
           
           <select
             value={sortBy}
             onChange={e => setSortBy(e.target.value)}
-            style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+            style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4 }}
           >
             <option value="date-desc">Date (Newest)</option>
             <option value="date-asc">Date (Oldest)</option>
@@ -1885,13 +1885,13 @@ ${labelsHtml}
         </div>
         
         {showFilters && (
-          <div style={{ marginTop: 15, padding: 15, background: '#f9f9f9', borderRadius: 8, display: 'flex', gap: 15, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ marginTop: 15, padding: 15, background: 'var(--bg-surface-2)', borderRadius: 8, display: 'flex', gap: 15, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>Status</label>
               <select
                 value={filterStatus}
                 onChange={e => setFilterStatus(e.target.value)}
-                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, minWidth: 120 }}
+                style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, minWidth: 120 }}
               >
                 <option value="">All Statuses</option>
                 <option value="draft">Draft</option>
@@ -1908,7 +1908,7 @@ ${labelsHtml}
               <select
                 value={filterPayment}
                 onChange={e => setFilterPayment(e.target.value)}
-                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4, minWidth: 120 }}
+                style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, minWidth: 120 }}
               >
                 <option value="">All</option>
                 <option value="paid">Paid</option>
@@ -1922,7 +1922,7 @@ ${labelsHtml}
                 type="date"
                 value={filterDateFrom}
                 onChange={e => setFilterDateFrom(e.target.value)}
-                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+                style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4 }}
               />
             </div>
             
@@ -1932,14 +1932,14 @@ ${labelsHtml}
                 type="date"
                 value={filterDateTo}
                 onChange={e => setFilterDateTo(e.target.value)}
-                style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: 4 }}
+                style={{ padding: '8px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4 }}
               />
             </div>
             
             <button
               className="btn btn-sm"
               onClick={() => { setFilterSearch(''); setFilterStatus(''); setFilterPayment(''); setFilterDateFrom(''); setFilterDateTo(''); }}
-              style={{ background: '#6c757d', color: 'white', padding: '8px 12px' }}
+              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', padding: '8px 12px' }}
             >
               Clear Filters
             </button>
@@ -1949,8 +1949,8 @@ ${labelsHtml}
 
       {/* Orders Table */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden' }}>
-          <thead><tr style={{ background: '#f5f5f5' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Packing</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Quick Action</th></tr></thead>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-surface)', borderRadius: 8, overflow: 'hidden' }}>
+          <thead><tr style={{ background: 'var(--bg-surface-2)' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid var(--border)' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Packing</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Actions</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Quick Action</th></tr></thead>
           <tbody>
             {(() => {
               // Filter orders
@@ -2017,37 +2017,37 @@ ${labelsHtml}
               const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
               if (filtered.length === 0) {
-                return <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: '#999' }}>{orders.length === 0 ? 'No purchase orders yet. Click "+ New Order" to create one.' : 'No orders match your filters.'}</td></tr>;
+                return <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>{orders.length === 0 ? 'No purchase orders yet. Click "+ New Order" to create one.' : 'No orders match your filters.'}</td></tr>;
               }
               
               return paginated.map(order => (
-                <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
+                <tr key={order.id} style={{ borderBottom: '1px solid var(--border)' }}>
                   <td style={{ padding: 12 }}><strong>{order.poNumber}</strong></td>
                   <td style={{ padding: 12 }}>{order.customerName}</td>
                   <td style={{ padding: 12, textAlign: 'center' }}>{order.items?.length || 0}</td>
                   <td style={{ padding: 12, textAlign: 'right', fontWeight: 600 }}>{formatCurrency(order.total)}</td>
                   <td style={{ padding: 12, textAlign: 'center' }}>
                     {order.packingMode === 'triwalls' ? (
-                      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#fff8e1', color: '#f57f17', border: '1px solid #ffe082', whiteSpace: 'nowrap' }}>
+                      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'var(--bg-badge-orange)', color: 'var(--text-warning)', border: '1px solid #ffe082', whiteSpace: 'nowrap' }}>
                         🪵 Triwall ({order.triwalls?.length || 0})
                       </span>
                     ) : order.packingMode === 'boxes' || order.boxDetails ? (
-                      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#e8f5e9', color: '#2e7d32', border: '1px solid #a5d6a7', whiteSpace: 'nowrap' }}>
+                      <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'var(--bg-badge-green)', color: 'var(--text-badge-green)', border: '1px solid #a5d6a7', whiteSpace: 'nowrap' }}>
                         📦 Boxes ({Object.keys(order.boxDetails || {}).length || 1})
                       </span>
                     ) : (
-                      <span style={{ color: '#ccc', fontSize: 12 }}>—</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
                     )}
                   </td>
                   <td style={{ padding: 12, textAlign: 'center' }}>
-                    <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: getStatusColor(order.status), color: 'white' }}>{order.status || 'draft'}</span>
-                    {order.packingComplete && <span style={{ marginLeft: 5, fontSize: 11, color: '#9c27b0' }}>📦</span>}
+                    <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: getStatusColor(order.status), color: 'var(--text-on-dark)' }}>{order.status || 'draft'}</span>
+                    {order.packingComplete && <span style={{ marginLeft: 5, fontSize: 11, color: 'var(--text-badge-purple)' }}>📦</span>}
                   </td>
                   <td style={{ padding: 12, textAlign: 'center' }}>
                     {order.paymentMethod ? (
-                      <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: '#4CAF50', color: 'white' }}>✓ Paid</span>
+                      <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: '#4CAF50', color: 'var(--text-on-dark)' }}>✓ Paid</span>
                     ) : (
-                      <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: '#ff9800', color: 'white' }}>Unpaid</span>
+                      <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: '#ff9800', color: 'var(--text-on-dark)' }}>Unpaid</span>
                     )}
                   </td>
                   <td style={{ padding: 12, textAlign: 'center', fontSize: 13 }}>{formatDate(order.createdAt)}</td>
@@ -2060,7 +2060,7 @@ ${labelsHtml}
                         title="Mark as Shipped"
                         style={{
                           padding: '5px 12px', background: processingOrder[order.id] ? '#ccc' : '#388e3c',
-                          color: 'white', border: 'none', borderRadius: 6,
+                          color: 'var(--text-on-dark)', border: 'none', borderRadius: 6,
                           cursor: processingOrder[order.id] ? 'not-allowed' : 'pointer',
                           fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                         }}
@@ -2073,14 +2073,14 @@ ${labelsHtml}
                         title="Mark as Paid"
                         style={{
                           padding: '5px 12px', background: '#1976d2',
-                          color: 'white', border: 'none', borderRadius: 6,
+                          color: 'var(--text-on-dark)', border: 'none', borderRadius: 6,
                           cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                         }}
                       >
                         💰 Paid
                       </button>
                     ) : (
-                      <span style={{ color: '#ccc', fontSize: 12 }}>—</span>
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
                     )}
                   </td>
                 </tr>
@@ -2111,15 +2111,15 @@ ${labelsHtml}
         return (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16, padding: '12px 0' }}>
             <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1} style={{
-              padding: '7px 16px', borderRadius: 6, border: '1px solid #ddd', cursor: safePage === 1 ? 'not-allowed' : 'pointer',
+              padding: '7px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: safePage === 1 ? 'not-allowed' : 'pointer',
               background: safePage === 1 ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
             }}>‹</button>
-            <span style={{ fontSize: 13, color: '#666' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               Page <strong>{Math.min(currentPage, totalPages)}</strong> of <strong>{totalPages}</strong>
-              <span style={{ marginLeft: 8, color: '#999' }}>({filtered.length} orders)</span>
+              <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>({filtered.length} orders)</span>
             </span>
             <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} style={{
-              padding: '7px 16px', borderRadius: 6, border: '1px solid #ddd', cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
+              padding: '7px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
               background: safePage === totalPages ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
             }}>›</button>
           </div>
@@ -2134,24 +2134,24 @@ ${labelsHtml}
           justifyContent: 'center', zIndex: 2000, padding: 20
         }}>
           <div style={{
-            background: 'white', borderRadius: 12, padding: 30,
-            maxWidth: 450, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
+            background: 'var(--bg-surface)', borderRadius: 12, padding: 30,
+            maxWidth: 450, width: '100%', boxShadow: 'var(--shadow-modal)'
           }}>
-            <h3 style={{ marginTop: 0, color: '#f44336' }}>🗑️ Delete Order</h3>
+            <h3 style={{ marginTop: 0, color: 'var(--text-error)' }}>🗑️ Delete Order</h3>
             <p style={{ fontSize: 16, marginBottom: 15 }}>
               Delete order <strong>{orderToDelete.poNumber}</strong>?
             </p>
             
             {/* Show linked pick list info */}
             {pickLists.find(pl => pl.purchaseOrderId === orderToDelete.id) && (
-              <p style={{ fontSize: 13, color: '#666', marginBottom: 15 }}>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 15 }}>
                 📋 The linked pick list will also be deleted.
               </p>
             )}
             
             {getRestorableItems(orderToDelete).length > 0 && (
               <div style={{
-                padding: 15, background: '#fff3e0', borderRadius: 8, marginBottom: 20,
+                padding: 15, background: 'var(--bg-badge-orange)', borderRadius: 8, marginBottom: 20,
                 border: '1px solid #ffb74d'
               }}>
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
@@ -2162,12 +2162,12 @@ ${labelsHtml}
                     style={{ marginTop: 3, width: 18, height: 18 }}
                   />
                   <div>
-                    <strong style={{ color: '#e65100' }}>Restore inventory</strong>
-                    <p style={{ margin: '5px 0 0', fontSize: 13, color: '#666' }}>
+                    <strong style={{ color: 'var(--text-badge-orange)' }}>Restore inventory</strong>
+                    <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
                       Add picked/shipped quantities back to stock. Use this if the order was cancelled or returned.
                     </p>
                     {deleteRestoreInventory && (
-                      <div style={{ marginTop: 10, fontSize: 12, color: '#2e7d32' }}>
+                      <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-badge-green)' }}>
                         Will restore:
                         <ul style={{ margin: '5px 0', paddingLeft: 20 }}>
                           {getRestorableItems(orderToDelete).map(i => (
@@ -2194,7 +2194,7 @@ ${labelsHtml}
               <button
                 onClick={confirmDelete}
                 style={{
-                  flex: 1, padding: '12px 20px', background: '#f44336', color: 'white',
+                  flex: 1, padding: '12px 20px', background: '#f44336', color: 'var(--text-on-dark)',
                   border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600
                 }}
               >
@@ -2213,15 +2213,15 @@ ${labelsHtml}
           justifyContent: 'center', zIndex: 2000, padding: 20
         }}>
           <div style={{
-            background: 'white', borderRadius: 12, padding: 30,
-            maxWidth: 450, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
+            background: 'var(--bg-surface)', borderRadius: 12, padding: 30,
+            maxWidth: 450, width: '100%', boxShadow: 'var(--shadow-modal)'
           }}>
-            <h3 style={{ marginTop: 0, color: '#388e3c' }}>💰 Confirm Payment</h3>
+            <h3 style={{ marginTop: 0, color: 'var(--text-badge-green)' }}>💰 Confirm Payment</h3>
             <p style={{ fontSize: 16, marginBottom: 15 }}>
               Mark order <strong>{paymentOrder.poNumber}</strong> as paid.
             </p>
-            <p style={{ fontSize: 14, color: '#666', marginBottom: 20 }}>
-              Total: <strong style={{ color: '#388e3c', fontSize: 18 }}>{formatCurrency(paymentOrder.total)}</strong>
+            <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20 }}>
+              Total: <strong style={{ color: 'var(--text-badge-green)', fontSize: 18 }}>{formatCurrency(paymentOrder.total)}</strong>
             </p>
             
             <div style={{ marginBottom: 20 }}>
@@ -2229,7 +2229,7 @@ ${labelsHtml}
               <select
                 value={paymentMethod}
                 onChange={e => setPaymentMethod(e.target.value)}
-                style={{ width: '100%', padding: '10px 12px', border: '1px solid #ddd', borderRadius: 6, fontSize: 14 }}
+                style={{ width: '100%', padding: '10px 12px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 6, fontSize: 14 }}
               >
                 <option value="">-- Select Payment Method --</option>
                 <option value="cash">💵 Cash</option>
@@ -2249,7 +2249,7 @@ ${labelsHtml}
               <button
                 onClick={() => { setShowPaymentModal(false); setPaymentOrder(null); setPaymentMethod(''); }}
                 style={{
-                  flex: 1, padding: '12px 20px', background: '#6c757d', color: 'white',
+                  flex: 1, padding: '12px 20px', background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)',
                   border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600
                 }}
               >
@@ -2259,7 +2259,7 @@ ${labelsHtml}
                 onClick={confirmPayment}
                 disabled={!paymentMethod}
                 style={{
-                  flex: 1, padding: '12px 20px', background: paymentMethod ? '#388e3c' : '#ccc', color: 'white',
+                  flex: 1, padding: '12px 20px', background: paymentMethod ? '#388e3c' : '#ccc', color: 'var(--text-on-dark)',
                   border: 'none', borderRadius: 6, cursor: paymentMethod ? 'pointer' : 'not-allowed', fontSize: 14, fontWeight: 600
                 }}
               >
@@ -2279,7 +2279,7 @@ ${labelsHtml}
               <button className="modal-close" onClick={() => setShowOneOffModal(false)}>×</button>
             </div>
             <div className="modal-body" style={{ padding: 20 }}>
-              <p style={{ background: '#fff3e0', padding: 12, borderRadius: 6, fontSize: 13, marginBottom: 20, border: '1px solid #ffcc80' }}>
+              <p style={{ background: 'var(--bg-badge-orange)', padding: 12, borderRadius: 6, fontSize: 13, marginBottom: 20, border: '1px solid #ffcc80' }}>
                 <strong>🔸 One-Off Items</strong> get an auto-generated SKU starting with "A" (e.g., A1001). 
                 These items are added to your inventory and can be filtered/cleaned up later.
               </p>
@@ -2291,7 +2291,7 @@ ${labelsHtml}
                   placeholder="Enter item name..."
                   value={oneOffItem.name}
                   onChange={e => setOneOffItem({ ...oneOffItem, name: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   autoFocus
                 />
               </div>
@@ -2303,7 +2303,7 @@ ${labelsHtml}
                   placeholder="0.00"
                   value={oneOffItem.price}
                   onChange={e => setOneOffItem({ ...oneOffItem, price: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   step="0.01"
                   min="0"
                 />
@@ -2316,7 +2316,7 @@ ${labelsHtml}
                   placeholder="One-Off"
                   value={oneOffItem.category}
                   onChange={e => setOneOffItem({ ...oneOffItem, category: e.target.value })}
-                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid #ddd' }}
+                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                 />
               </div>
               
@@ -2324,7 +2324,7 @@ ${labelsHtml}
                 <button
                   onClick={() => { setShowOneOffModal(false); setOneOffItem({ name: '', price: '', category: 'One-Off' }); }}
                   className="btn"
-                  style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                  style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
                 >
                   Cancel
                 </button>

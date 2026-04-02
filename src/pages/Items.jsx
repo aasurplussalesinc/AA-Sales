@@ -212,7 +212,7 @@ export default function Items() {
       };
       return {
         icon: actionIcons[entry.action] || '📝',
-        color: '#666',
+        color: 'var(--text-muted)',
         title: entry.action?.replace(/_/g, ' ') || 'Activity',
         description: entry.details?.note || JSON.stringify(entry.details || {}),
         user: entry.userEmail || 'System',
@@ -1224,7 +1224,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         <button 
           className={`btn ${showFilters ? 'btn-primary' : ''}`}
           onClick={() => setShowFilters(!showFilters)}
-          style={{ background: showFilters ? '#2d5f3f' : '#6c757d', color: 'white' }}
+          style={{ background: showFilters ? '#2d5f3f' : '#6c757d', color: 'var(--text-on-dark)' }}
         >
           🔍 Filters {hasActiveFilters && `(${Object.values(filters).filter(v => v).length})`}
         </button>
@@ -1233,7 +1233,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           <button 
             className="btn"
             onClick={clearFilters}
-            style={{ background: '#dc3545', color: 'white' }}
+            style={{ background: '#dc3545', color: 'var(--text-on-dark)' }}
           >
             ✕ Clear Filters
           </button>
@@ -1256,7 +1256,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               className="btn"
               onClick={saveAllChanges}
               disabled={saving}
-              style={{ background: '#4CAF50', color: 'white' }}
+              style={{ background: '#4CAF50', color: 'var(--text-on-dark)' }}
             >
               {saving ? '⏳ Saving...' : '💾 Save Changes'}
             </button>
@@ -1264,7 +1264,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               className="btn"
               onClick={discardChanges}
               disabled={saving}
-              style={{ background: '#f44336', color: 'white' }}
+              style={{ background: '#f44336', color: 'var(--text-on-dark)' }}
             >
               ↩️ Discard
             </button>
@@ -1285,7 +1285,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             className="btn"
             onClick={() => fileInputRef.current?.click()}
             disabled={importing}
-            style={{ background: '#17a2b8', color: 'white' }}
+            style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}
           >
             {importing ? '⏳ Importing...' : '📤 Import CSV'}
           </button>
@@ -1294,7 +1294,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         <button 
           className="btn"
           onClick={downloadTemplate}
-          style={{ background: '#6c757d', color: 'white' }}
+          style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
         >
           📋 Download Template
         </button>
@@ -1310,7 +1310,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           <button 
             className="btn"
             onClick={() => setShowBatchCategory(true)}
-            style={{ background: '#ff9800', color: 'white' }}
+            style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}
           >
             📁 Batch Category
           </button>
@@ -1320,7 +1320,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           <button 
             className="btn"
             onClick={() => setShowBatchLocation(true)}
-            style={{ background: '#2196f3', color: 'white' }}
+            style={{ background: '#2196f3', color: 'var(--text-on-dark)' }}
           >
             📍 Batch Location
           </button>
@@ -1329,7 +1329,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         <button 
           className="btn"
           onClick={() => setShowLabelModal(true)}
-          style={{ background: '#9c27b0', color: 'white' }}
+          style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}
         >
           🏷️ Print Labels
         </button>
@@ -1350,11 +1350,11 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 <button className="btn btn-primary btn-sm" onClick={selectAllFiltered}>
                   Select All Filtered ({sortedItems.length})
                 </button>
-                <button className="btn btn-sm" onClick={() => setSelectedItems(paginatedItems.map(i => i.id))} style={{ background: '#17a2b8', color: 'white' }}>
+                <button className="btn btn-sm" onClick={() => setSelectedItems(paginatedItems.map(i => i.id))} style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>
                   Select This Page ({paginatedItems.length})
                 </button>
                 {selectedItems.length > 0 && (
-                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: '#6c757d', color: 'white' }}>
+                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
                     Clear Selection
                   </button>
                 )}
@@ -1378,7 +1378,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <option key={cat} value={cat} />
                 ))}
               </datalist>
-              <p style={{ fontSize: 12, color: '#666' }}>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Leave blank to clear category from selected items
               </p>
             </div>
@@ -1413,7 +1413,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               <button
                 className="btn"
                 onClick={() => { setShowBatchCategory(false); setBatchCategory(''); }}
-                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
               >
                 Cancel
               </button>
@@ -1445,11 +1445,11 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 <button className="btn btn-primary btn-sm" onClick={selectAllFiltered}>
                   Select All Filtered ({sortedItems.length})
                 </button>
-                <button className="btn btn-sm" onClick={() => setSelectedItems(paginatedItems.map(i => i.id))} style={{ background: '#17a2b8', color: 'white' }}>
+                <button className="btn btn-sm" onClick={() => setSelectedItems(paginatedItems.map(i => i.id))} style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>
                   Select This Page ({paginatedItems.length})
                 </button>
                 {selectedItems.length > 0 && (
-                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: '#6c757d', color: 'white' }}>
+                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
                     Clear Selection
                   </button>
                 )}
@@ -1470,7 +1470,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <option key={loc} value={loc}>{loc}</option>
                 ))}
               </select>
-              <p style={{ fontSize: 12, color: '#666' }}>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 Select a location to assign to all selected items
               </p>
             </div>
@@ -1505,7 +1505,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               <button
                 className="btn"
                 onClick={() => { setShowBatchLocation(false); setBatchLocation(''); }}
-                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
               >
                 Cancel
               </button>
@@ -1513,7 +1513,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 className="btn"
                 onClick={applyBatchLocation}
                 disabled={selectedItems.length === 0 || !batchLocation}
-                style={{ flex: 1, background: '#2196f3', color: 'white' }}
+                style={{ flex: 1, background: '#2196f3', color: 'var(--text-on-dark)' }}
               >
                 Apply to {selectedItems.length} Items
               </button>
@@ -1538,7 +1538,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   Select All Filtered ({sortedItems.length})
                 </button>
                 {selectedItems.length > 0 && (
-                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: '#6c757d', color: 'white' }}>
+                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
                     Clear Selection
                   </button>
                 )}
@@ -1566,7 +1566,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   </button>
                 ))}
               </div>
-              <p style={{ fontSize: 12, color: '#666', marginTop: 5 }}>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>
                 {labelSize === 'small' && '2" × 1" - For small bins'}
                 {labelSize === 'medium' && '2.5" × 1.5" - Standard labels'}
                 {labelSize === 'large' && '4" × 2" - Large shelf labels'}
@@ -1596,7 +1596,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             <button
               className="btn"
               onClick={() => setShowLabelModal(false)}
-              style={{ width: '100%', background: '#6c757d', color: 'white' }}
+              style={{ width: '100%', background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
             >
               Cancel
             </button>
@@ -1607,11 +1607,11 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       {/* Filter panel */}
       {showFilters && (
         <div style={{ 
-          background: 'white', 
+          background: 'var(--bg-surface)', 
           padding: 20, 
           borderRadius: 8, 
           marginBottom: 15,
-          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+          boxShadow: 'var(--shadow-sm)'
         }}>
           <h3 style={{ marginBottom: 15, fontSize: 16 }}>Filter Items</h3>
           <div style={{ 
@@ -1754,7 +1754,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         flexWrap: 'wrap',
         gap: 10
       }}>
-        <p style={{ color: '#666', margin: 0 }}>
+        <p style={{ color: 'var(--text-muted)', margin: 0 }}>
           Showing {startIndex + 1}-{Math.min(endIndex, sortedItems.length)} of {sortedItems.length} items
           {hasActiveFilters && ' (filtered)'}
         </p>
@@ -1764,7 +1764,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           <select 
             value={itemsPerPage} 
             onChange={e => { setItemsPerPage(Number(e.target.value)); setCurrentPage(1); }}
-            style={{ padding: '6px 10px', borderRadius: 4, border: '1px solid #ddd' }}
+            style={{ padding: '6px 10px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
           >
             <option value={25}>25 per page</option>
             <option value={50}>50 per page</option>
@@ -1778,7 +1778,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               disabled={currentPage === 1}
               style={{
                 padding: '6px 10px',
-                border: '1px solid #ddd',
+                border: '1px solid var(--border)',
                 borderRadius: 4,
                 background: currentPage === 1 ? '#f5f5f5' : 'white',
                 cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
@@ -1791,7 +1791,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               disabled={currentPage === 1}
               style={{
                 padding: '6px 10px',
-                border: '1px solid #ddd',
+                border: '1px solid var(--border)',
                 borderRadius: 4,
                 background: currentPage === 1 ? '#f5f5f5' : 'white',
                 cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
@@ -1809,7 +1809,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               disabled={currentPage >= totalPages}
               style={{
                 padding: '6px 10px',
-                border: '1px solid #ddd',
+                border: '1px solid var(--border)',
                 borderRadius: 4,
                 background: currentPage >= totalPages ? '#f5f5f5' : 'white',
                 cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer'
@@ -1822,7 +1822,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               disabled={currentPage >= totalPages}
               style={{
                 padding: '6px 10px',
-                border: '1px solid #ddd',
+                border: '1px solid var(--border)',
                 borderRadius: 4,
                 background: currentPage >= totalPages ? '#f5f5f5' : 'white',
                 cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer'
@@ -1929,7 +1929,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         title={`Low stock! Below threshold of ${item.lowStockThreshold}`}
                         style={{
                           background: '#f44336',
-                          color: 'white',
+                          color: 'var(--text-on-dark)',
                           borderRadius: '50%',
                           width: 18,
                           height: 18,
@@ -1946,7 +1946,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         title={`Consider reordering - at or below reorder point of ${item.reorderPoint}`}
                         style={{
                           background: '#ff9800',
-                          color: 'white',
+                          color: 'var(--text-on-dark)',
                           borderRadius: '50%',
                           width: 18,
                           height: 18,
@@ -1975,7 +1975,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       onClick={() => setAdjustingItem({ ...item, adjustQty: 1, adjustType: 'add' })}
                       style={{
                         background: '#4CAF50',
-                        color: 'white',
+                        color: 'var(--text-on-dark)',
                         border: 'none',
                         borderRadius: 4,
                         width: 24,
@@ -1992,7 +1992,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       onClick={() => setAdjustingItem({ ...item, adjustQty: 1, adjustType: 'subtract' })}
                       style={{
                         background: '#f44336',
-                        color: 'white',
+                        color: 'var(--text-on-dark)',
                         border: 'none',
                         borderRadius: 4,
                         width: 24,
@@ -2037,7 +2037,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     <span style={{ fontSize: 13 }}>{normalizeLocationCode(item.location) || '-'}</span>
                   )}
                 </td>
-                <td style={{ whiteSpace: 'nowrap', color: '#666', fontSize: 12 }}>
+                <td style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: 12 }}>
                   {formatDate(item.createdAt)}
                 </td>
                 <td>
@@ -2047,7 +2047,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         className="btn btn-sm"
                         onClick={() => openEditItem(item)}
                         title="Edit Item"
-                        style={{ background: '#ff9800', color: 'white' }}
+                        style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}
                       >
                         ✏️
                       </button>
@@ -2057,7 +2057,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         className="btn btn-sm"
                         onClick={() => duplicateItem(item)}
                         title="Duplicate Item"
-                        style={{ background: '#607d8b', color: 'white' }}
+                        style={{ background: '#607d8b', color: 'var(--text-on-dark)' }}
                       >
                         📋
                       </button>
@@ -2066,7 +2066,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       className="btn btn-sm"
                       onClick={() => setViewingItemLocations(item)}
                       title="View Locations"
-                      style={{ background: '#17a2b8', color: 'white' }}
+                      style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}
                     >
                       📍
                     </button>
@@ -2074,7 +2074,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       className="btn btn-sm"
                       onClick={() => loadItemHistory(item)}
                       title="View History"
-                      style={{ background: '#9c27b0', color: 'white' }}
+                      style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}
                     >
                       📜
                     </button>
@@ -2129,7 +2129,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             {saveSuccessMsg && (
               <div style={{
                 background: '#4CAF50',
-                color: 'white',
+                color: 'var(--text-on-dark)',
                 padding: '10px 15px',
                 fontWeight: 600,
                 display: 'flex',
@@ -2206,7 +2206,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
 
               {/* Location Mode Toggle */}
               <div style={{ 
-                background: '#f5f5f5', 
+                background: 'var(--bg-surface-2)', 
                 padding: 15, 
                 borderRadius: 8, 
                 marginBottom: 15 
@@ -2294,7 +2294,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                           }}
                           style={{ 
                             background: '#f44336', 
-                            color: 'white', 
+                            color: 'var(--text-on-dark)', 
                             border: 'none', 
                             borderRadius: 4, 
                             padding: '8px 12px',
@@ -2316,7 +2316,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     }}
                     style={{ 
                       background: '#2196F3', 
-                      color: 'white', 
+                      color: 'var(--text-on-dark)', 
                       border: 'none', 
                       borderRadius: 4, 
                       padding: '8px 15px',
@@ -2329,7 +2329,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <div style={{ 
                     marginTop: 10, 
                     padding: 10, 
-                    background: '#e8f5e9', 
+                    background: 'var(--bg-badge-green)', 
                     borderRadius: 4,
                     fontWeight: 500 
                   }}>
@@ -2349,7 +2349,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     min="0"
                     title="Alert when stock falls below this number (0 = no alert)"
                   />
-                  <small style={{ color: '#666', fontSize: 11 }}>0 = no alert</small>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>0 = no alert</small>
                 </div>
                 <div className="form-group">
                   <label>Reorder Point</label>
@@ -2361,7 +2361,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     min="0"
                     title="Recommended reorder when stock falls to this level (0 = no alert)"
                   />
-                  <small style={{ color: '#666', fontSize: 11 }}>0 = no alert</small>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>0 = no alert</small>
                 </div>
               </div>
             </div>
@@ -2371,7 +2371,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 <button 
                   className="btn" 
                   onClick={() => addNewItem(true)}
-                  style={{ background: '#ff9800', color: 'white' }}
+                  style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}
                   title="Save this item and keep the form open to add another variant"
                 >
                   Save & Add Another
@@ -2464,7 +2464,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
 
               {/* Location Mode Toggle */}
               <div style={{ 
-                background: '#f5f5f5', 
+                background: 'var(--bg-surface-2)', 
                 padding: 15, 
                 borderRadius: 8, 
                 marginBottom: 15 
@@ -2551,7 +2551,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                           }}
                           style={{ 
                             background: '#f44336', 
-                            color: 'white', 
+                            color: 'var(--text-on-dark)', 
                             border: 'none', 
                             borderRadius: 4, 
                             padding: '8px 12px',
@@ -2570,7 +2570,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     }}
                     style={{ 
                       background: '#2196F3', 
-                      color: 'white', 
+                      color: 'var(--text-on-dark)', 
                       border: 'none', 
                       borderRadius: 4, 
                       padding: '8px 15px',
@@ -2583,7 +2583,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <div style={{ 
                     marginTop: 10, 
                     padding: 10, 
-                    background: '#e8f5e9', 
+                    background: 'var(--bg-badge-green)', 
                     borderRadius: 4,
                     fontWeight: 500 
                   }}>
@@ -2602,7 +2602,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     onChange={e => setEditingItem({ ...editingItem, lowStockThreshold: e.target.value === '' ? 0 : parseInt(e.target.value) })}
                     min="0"
                   />
-                  <small style={{ color: '#666', fontSize: 11 }}>0 = no alert</small>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>0 = no alert</small>
                 </div>
                 <div className="form-group">
                   <label>Reorder Point</label>
@@ -2613,13 +2613,13 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     onChange={e => setEditingItem({ ...editingItem, reorderPoint: e.target.value === '' ? 0 : parseInt(e.target.value) })}
                     min="0"
                   />
-                  <small style={{ color: '#666', fontSize: 11 }}>0 = no alert</small>
+                  <small style={{ color: 'var(--text-muted)', fontSize: 11 }}>0 = no alert</small>
                 </div>
               </div>
             </div>
             <div style={{ 
               padding: '15px 20px', 
-              borderTop: '1px solid #eee',
+              borderTop: '1px solid var(--border)',
               display: 'flex',
               justifyContent: 'flex-end',
               gap: 10
@@ -2627,7 +2627,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               <button 
                 className="btn" 
                 onClick={() => { setShowEditItem(false); setEditUseMultiLocation(false); }}
-                style={{ background: '#6c757d', color: 'white' }}
+                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
               >
                 Cancel
               </button>
@@ -2663,7 +2663,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             {/* Header */}
             <div style={{ 
               background: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336',
-              color: 'white',
+              color: 'var(--text-on-dark)',
               padding: '12px 15px',
               display: 'flex',
               justifyContent: 'space-between',
@@ -2677,7 +2677,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 style={{ 
                   background: 'none', 
                   border: 'none', 
-                  color: 'white', 
+                  color: 'var(--text-on-dark)', 
                   fontSize: 20, 
                   cursor: 'pointer' 
                 }}
@@ -2690,7 +2690,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             <div style={{ padding: 15 }}>
               <div style={{ textAlign: 'center', marginBottom: 15 }}>
                 <div style={{ fontWeight: 'bold', fontSize: 14 }}>{adjustingItem.name || 'Unnamed Item'}</div>
-                <div style={{ color: '#666', fontSize: 12 }}>{adjustingItem.partNumber || 'No SKU'}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>{adjustingItem.partNumber || 'No SKU'}</div>
               </div>
               
               <div style={{ 
@@ -2701,7 +2701,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 marginBottom: 15
               }}>
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, color: '#666' }}>Current</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>Current</div>
                   <div style={{ fontSize: 22, fontWeight: 'bold' }}>{adjustingItem.stock || 0}</div>
                 </div>
                 
@@ -2719,16 +2719,16 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     fontSize: 20, 
                     textAlign: 'center',
                     padding: 8,
-                    border: '2px solid #ddd',
+                    border: '2px solid var(--border)',
                     borderRadius: 6
                   }}
                   autoFocus
                 />
                 
-                <div style={{ fontSize: 20, color: '#666' }}>=</div>
+                <div style={{ fontSize: 20, color: 'var(--text-muted)' }}>=</div>
                 
                 <div style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 10, color: '#666' }}>New</div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>New</div>
                   <div style={{ 
                     fontSize: 22, 
                     fontWeight: 'bold',
@@ -2770,9 +2770,9 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   style={{ 
                     flex: 1,
                     padding: '10px',
-                    border: '1px solid #ddd',
+                    border: '1px solid var(--border)',
                     borderRadius: 6,
-                    background: 'white',
+                    background: 'var(--bg-surface)',
                     cursor: 'pointer'
                   }}
                 >
@@ -2786,7 +2786,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     border: 'none',
                     borderRadius: 6,
                     background: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336',
-                    color: 'white',
+                    color: 'var(--text-on-dark)',
                     cursor: 'pointer',
                     fontWeight: 'bold'
                   }}
@@ -2819,7 +2819,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             {/* Header */}
             <div style={{ 
               background: '#17a2b8',
-              color: 'white',
+              color: 'var(--text-on-dark)',
               padding: '12px 15px',
               display: 'flex',
               justifyContent: 'space-between',
@@ -2833,7 +2833,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 style={{ 
                   background: 'none', 
                   border: 'none', 
-                  color: 'white', 
+                  color: 'var(--text-on-dark)', 
                   fontSize: 20, 
                   cursor: 'pointer' 
                 }}
@@ -2848,7 +2848,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 <div style={{ fontWeight: 'bold', fontSize: 16 }}>
                   {viewingItemLocations.name || 'Unnamed Item'}
                 </div>
-                <div style={{ color: '#666', fontSize: 13 }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
                   SKU: {viewingItemLocations.partNumber || 'N/A'}
                 </div>
               </div>
@@ -2857,22 +2857,22 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 <>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                     <thead>
-                      <tr style={{ background: '#f5f5f5' }}>
-                        <th style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Location</th>
-                        <th style={{ padding: 10, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Qty</th>
+                      <tr style={{ background: 'var(--bg-surface-2)' }}>
+                        <th style={{ padding: 10, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>Location</th>
+                        <th style={{ padding: 10, textAlign: 'right', borderBottom: '2px solid var(--border)' }}>Qty</th>
                       </tr>
                     </thead>
                     <tbody>
                       {getItemLocations(viewingItemLocations.id).map((loc, idx) => (
                         <tr key={idx}>
-                          <td style={{ padding: 10, borderBottom: '1px solid #eee' }}>
+                          <td style={{ padding: 10, borderBottom: '1px solid var(--border)' }}>
                             {loc.locationCode}
                             {loc.isUnmapped && (
                               <span style={{ 
                                 marginLeft: 8, 
                                 fontSize: 11, 
                                 color: '#ff9800',
-                                background: '#fff3e0',
+                                background: 'var(--bg-badge-orange)',
                                 padding: '2px 6px',
                                 borderRadius: 4
                               }}>
@@ -2880,16 +2880,16 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                               </span>
                             )}
                           </td>
-                          <td style={{ padding: 10, borderBottom: '1px solid #eee', textAlign: 'right', fontWeight: 'bold' }}>
+                          <td style={{ padding: 10, borderBottom: '1px solid var(--border)', textAlign: 'right', fontWeight: 'bold' }}>
                             {loc.quantity}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                     <tfoot>
-                      <tr style={{ background: '#e8f5e9' }}>
+                      <tr style={{ background: 'var(--bg-badge-green)' }}>
                         <td style={{ padding: 10, fontWeight: 'bold' }}>Total in Locations</td>
-                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 'bold', fontSize: 16, color: '#2d5f3f' }}>
+                        <td style={{ padding: 10, textAlign: 'right', fontWeight: 'bold', fontSize: 16, color: 'var(--accent)' }}>
                           {getTotalInLocations(viewingItemLocations.id)}
                         </td>
                       </tr>
@@ -2901,7 +2901,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     <div style={{ 
                       marginTop: 15, 
                       padding: 10, 
-                      background: '#fff3cd', 
+                      background: 'var(--bg-warning)', 
                       borderRadius: 6,
                       fontSize: 13
                     }}>
@@ -2913,8 +2913,8 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 <div style={{ 
                   textAlign: 'center', 
                   padding: 30, 
-                  color: '#666',
-                  background: '#f5f5f5',
+                  color: 'var(--text-muted)',
+                  background: 'var(--bg-surface-2)',
                   borderRadius: 8
                 }}>
                   <div style={{ fontSize: 40, marginBottom: 10 }}>📦</div>
@@ -2927,15 +2927,15 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             </div>
             
             {/* Footer */}
-            <div style={{ padding: 15, borderTop: '1px solid #eee' }}>
+            <div style={{ padding: 15, borderTop: '1px solid var(--border)' }}>
               <button 
                 onClick={() => setViewingItemLocations(null)}
                 style={{ 
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid var(--border)',
                   borderRadius: 6,
-                  background: 'white',
+                  background: 'var(--bg-surface)',
                   cursor: 'pointer'
                 }}
               >
@@ -2961,16 +2961,16 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               <button className="modal-close" onClick={() => setViewingItemHistory(null)}>×</button>
             </div>
             
-            <div style={{ padding: '15px 20px', borderBottom: '1px solid #eee', background: '#f9f9f9' }}>
+            <div style={{ padding: '15px 20px', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface-2)' }}>
               <div style={{ fontWeight: 600, fontSize: 16 }}>{viewingItemHistory.name}</div>
-              <div style={{ color: '#666', fontSize: 13 }}>
+              <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>
                 SKU: {viewingItemHistory.partNumber || 'N/A'} | 
                 Current Stock: {viewingItemHistory.stock || 0}
               </div>
             </div>
             
             {/* Tabs */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #ddd' }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid var(--border)' }}>
               <button
                 onClick={() => setHistoryTab('orders')}
                 style={{
@@ -3005,7 +3005,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             
             <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
               {loadingHistory ? (
-                <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                   Loading history...
                 </div>
               ) : historyTab === 'orders' ? (
@@ -3041,7 +3041,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   );
                   
                   return itemOrderHistory.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                    <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                       No orders found for this item
                     </div>
                   ) : (
@@ -3053,23 +3053,23 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         gap: 15, 
                         marginBottom: 15 
                       }}>
-                        <div style={{ background: '#e3f2fd', padding: 12, borderRadius: 8, textAlign: 'center' }}>
-                          <div style={{ fontSize: 22, fontWeight: 700, color: '#1976d2' }}>
+                        <div style={{ background: 'var(--bg-badge-blue)', padding: 12, borderRadius: 8, textAlign: 'center' }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-link)' }}>
                             {totalOrders}
                           </div>
-                          <div style={{ fontSize: 11, color: '#666' }}>Orders</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Orders</div>
                         </div>
-                        <div style={{ background: '#e8f5e9', padding: 12, borderRadius: 8, textAlign: 'center' }}>
-                          <div style={{ fontSize: 22, fontWeight: 700, color: '#388e3c' }}>
+                        <div style={{ background: 'var(--bg-badge-green)', padding: 12, borderRadius: 8, textAlign: 'center' }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-badge-green)' }}>
                             {totalUnits.toLocaleString()}
                           </div>
-                          <div style={{ fontSize: 11, color: '#666' }}>Units Sold</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Units Sold</div>
                         </div>
-                        <div style={{ background: '#fff3e0', padding: 12, borderRadius: 8, textAlign: 'center' }}>
-                          <div style={{ fontSize: 22, fontWeight: 700, color: '#f57c00' }}>
+                        <div style={{ background: 'var(--bg-badge-orange)', padding: 12, borderRadius: 8, textAlign: 'center' }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-badge-orange)' }}>
                             ${totalRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
-                          <div style={{ fontSize: 11, color: '#666' }}>Revenue</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Revenue</div>
                         </div>
                       </div>
                       
@@ -3080,31 +3080,31 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         alignItems: 'center', 
                         marginBottom: 15,
                         padding: 10,
-                        background: '#f9f9f9',
+                        background: 'var(--bg-surface-2)',
                         borderRadius: 6,
                         flexWrap: 'wrap'
                       }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: '#666' }}>Filter:</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>Filter:</span>
                         <input
                           type="date"
                           value={orderHistoryDateFrom}
                           onChange={e => { setOrderHistoryDateFrom(e.target.value); setOrderHistoryPage(1); }}
-                          style={{ padding: '5px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}
+                          style={{ padding: '5px 8px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, fontSize: 12 }}
                         />
-                        <span style={{ color: '#999' }}>to</span>
+                        <span style={{ color: 'var(--text-muted)' }}>to</span>
                         <input
                           type="date"
                           value={orderHistoryDateTo}
                           onChange={e => { setOrderHistoryDateTo(e.target.value); setOrderHistoryPage(1); }}
-                          style={{ padding: '5px 8px', border: '1px solid #ddd', borderRadius: 4, fontSize: 12 }}
+                          style={{ padding: '5px 8px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, fontSize: 12 }}
                         />
                         {(orderHistoryDateFrom || orderHistoryDateTo) && (
                           <button
                             onClick={() => { setOrderHistoryDateFrom(''); setOrderHistoryDateTo(''); setOrderHistoryPage(1); }}
                             style={{ 
                               padding: '5px 10px', 
-                              background: '#6c757d', 
-                              color: 'white', 
+                              background: 'var(--btn-secondary-bg)', 
+                              color: 'var(--text-on-dark)', 
                               border: 'none', 
                               borderRadius: 4, 
                               fontSize: 11,
@@ -3114,27 +3114,27 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                             Clear
                           </button>
                         )}
-                        <span style={{ marginLeft: 'auto', fontSize: 11, color: '#666' }}>
+                        <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)' }}>
                           Showing {paginatedOrders.length} of {filteredOrders.length} orders
                         </span>
                       </div>
                       
                       {/* Orders list */}
                       {filteredOrders.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: 30, color: '#666' }}>
+                        <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)' }}>
                           No orders match the selected date range
                         </div>
                       ) : (
                         <>
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                             <thead>
-                              <tr style={{ background: '#f5f5f5' }}>
-                                <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Order</th>
-                                <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Customer</th>
-                                <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Qty</th>
-                                <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Value</th>
-                                <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th>
-                                <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Date</th>
+                              <tr style={{ background: 'var(--bg-surface-2)' }}>
+                                <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>Order</th>
+                                <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>Customer</th>
+                                <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Qty</th>
+                                <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid var(--border)' }}>Value</th>
+                                <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Status</th>
+                                <th style={{ padding: 8, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Date</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -3145,14 +3145,14 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                                 };
                                 const orderDate = order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt);
                                 return (
-                                  <tr key={order.id} style={{ borderBottom: '1px solid #eee' }}>
+                                  <tr key={order.id} style={{ borderBottom: '1px solid var(--border)' }}>
                                     <td style={{ padding: 8 }}>
                                       <a
                                         href={`/purchase-orders?po=${order.id}`}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         style={{ 
-                                          color: '#1976d2', 
+                                          color: 'var(--text-link)', 
                                           textDecoration: 'none',
                                           fontWeight: 600,
                                           cursor: 'pointer'
@@ -3166,7 +3166,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                                     </td>
                                     <td style={{ padding: 8, fontSize: 12 }}>{order.customerName}</td>
                                     <td style={{ padding: 8, textAlign: 'center', fontWeight: 600 }}>{order.itemQty}</td>
-                                    <td style={{ padding: 8, textAlign: 'right', fontWeight: 600, color: '#388e3c' }}>
+                                    <td style={{ padding: 8, textAlign: 'right', fontWeight: 600, color: 'var(--text-badge-green)' }}>
                                       ${order.itemValue?.toFixed(2)}
                                     </td>
                                     <td style={{ padding: 8, textAlign: 'center' }}>
@@ -3176,12 +3176,12 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                                         fontSize: 10,
                                         fontWeight: 600,
                                         background: statusColors[order.status] || '#9e9e9e',
-                                        color: 'white'
+                                        color: 'var(--text-on-dark)'
                                       }}>
                                         {order.status || 'draft'}
                                       </span>
                                     </td>
-                                    <td style={{ padding: 8, textAlign: 'center', fontSize: 11, color: '#666' }}>
+                                    <td style={{ padding: 8, textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>
                                       {orderDate.toLocaleDateString()}
                                     </td>
                                   </tr>
@@ -3199,7 +3199,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                               gap: 10,
                               marginTop: 15,
                               paddingTop: 15,
-                              borderTop: '1px solid #eee'
+                              borderTop: '1px solid var(--border)'
                             }}>
                               <button
                                 onClick={() => setOrderHistoryPage(p => Math.max(1, p - 1))}
@@ -3216,7 +3216,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                               >
                                 ← Prev
                               </button>
-                              <span style={{ fontSize: 13, color: '#666' }}>
+                              <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                                 Page {orderHistoryPage} of {totalPages}
                               </span>
                               <button
@@ -3244,7 +3244,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               ) : (
                 /* Activity Tab */
                 itemHistory.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: 40, color: '#666' }}>
+                  <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
                     No activity history found for this item
                   </div>
                 ) : (
@@ -3299,14 +3299,14 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                             }}>
                               {formatted.title}
                             </span>
-                            <span style={{ fontSize: 11, color: '#999' }}>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                               {new Date(formatted.timestamp).toLocaleString()}
                             </span>
                           </div>
-                          <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>
+                          <div style={{ fontSize: 13, color: 'var(--text-primary)', marginBottom: 4 }}>
                             {formatted.description}
                           </div>
-                          <div style={{ fontSize: 11, color: '#666' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                             by {formatted.user}
                           </div>
                         </div>

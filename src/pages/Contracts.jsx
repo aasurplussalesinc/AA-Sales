@@ -140,10 +140,10 @@ export default function Contracts() {
 
   const getStatusBadge = (status) => {
     const styles = {
-      active: { background: '#4CAF50', color: 'white' },
-      expired: { background: '#f44336', color: 'white' },
-      upcoming: { background: '#2196F3', color: 'white' },
-      unknown: { background: '#9e9e9e', color: 'white' }
+      active: { background: '#4CAF50', color: 'var(--text-on-dark)' },
+      expired: { background: '#f44336', color: 'var(--text-on-dark)' },
+      upcoming: { background: '#2196F3', color: 'var(--text-on-dark)' },
+      unknown: { background: '#9e9e9e', color: 'var(--text-on-dark)' }
     };
     return (
       <span style={{
@@ -280,21 +280,21 @@ export default function Contracts() {
             className="btn"
             onClick={() => fileInputRef.current?.click()}
             disabled={importing}
-            style={{ background: '#17a2b8', color: 'white' }}
+            style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}
           >
             {importing ? '⏳ Importing...' : '📤 Import CSV'}
           </button>
           <button
             className="btn"
             onClick={downloadTemplate}
-            style={{ background: '#6c757d', color: 'white' }}
+            style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
           >
             📋 Template
           </button>
           <button
             className="btn"
             onClick={exportToCSV}
-            style={{ background: '#28a745', color: 'white' }}
+            style={{ background: '#28a745', color: 'var(--text-on-dark)' }}
           >
             📥 Export CSV
           </button>
@@ -313,12 +313,12 @@ export default function Contracts() {
           placeholder="Search contracts..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid #ddd', minWidth: 200 }}
+          style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', minWidth: 200 }}
         />
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid #ddd' }}
+          style={{ padding: '8px 12px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
         >
           <option value="all">All Status</option>
           <option value="active">Active</option>
@@ -329,41 +329,41 @@ export default function Contracts() {
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 15, marginBottom: 20 }}>
-        <div style={{ background: '#e3f2fd', padding: 15, borderRadius: 8, textAlign: 'center' }}>
-          <div style={{ fontSize: 24, fontWeight: 'bold', color: '#1976d2' }}>{contracts.length}</div>
-          <div style={{ fontSize: 12, color: '#666' }}>Total Contracts</div>
+        <div style={{ background: 'var(--bg-badge-blue)', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+          <div style={{ fontSize: 24, fontWeight: 'bold', color: 'var(--text-link)' }}>{contracts.length}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Total Contracts</div>
         </div>
-        <div style={{ background: '#e8f5e9', padding: 15, borderRadius: 8, textAlign: 'center' }}>
-          <div style={{ fontSize: 24, fontWeight: 'bold', color: '#388e3c' }}>
+        <div style={{ background: 'var(--bg-badge-green)', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+          <div style={{ fontSize: 24, fontWeight: 'bold', color: 'var(--text-badge-green)' }}>
             {contracts.filter(c => getContractStatus(c) === 'active').length}
           </div>
-          <div style={{ fontSize: 12, color: '#666' }}>Active</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Active</div>
         </div>
-        <div style={{ background: '#fff3e0', padding: 15, borderRadius: 8, textAlign: 'center' }}>
-          <div style={{ fontSize: 24, fontWeight: 'bold', color: '#f57c00' }}>
+        <div style={{ background: 'var(--bg-badge-orange)', padding: 15, borderRadius: 8, textAlign: 'center' }}>
+          <div style={{ fontSize: 24, fontWeight: 'bold', color: 'var(--text-badge-orange)' }}>
             ${contracts.filter(c => getContractStatus(c) === 'active').reduce((sum, c) => sum + (c.costPerLb || 0), 0).toFixed(2)}
           </div>
-          <div style={{ fontSize: 12, color: '#666' }}>Avg $/lb (Active)</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Avg $/lb (Active)</div>
         </div>
       </div>
 
       {/* Contracts Table */}
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'white', borderRadius: 8, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-surface)', borderRadius: 8, overflow: 'hidden' }}>
           <thead>
-            <tr style={{ background: '#f5f5f5' }}>
-              <th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Contract #</th>
-              <th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Vendor</th>
-              <th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid #ddd' }}>$/lb</th>
-              <th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Dates</th>
-              <th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Status</th>
-              <th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid #ddd' }}>Actions</th>
+            <tr style={{ background: 'var(--bg-surface-2)' }}>
+              <th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>Contract #</th>
+              <th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>Vendor</th>
+              <th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid var(--border)' }}>$/lb</th>
+              <th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Dates</th>
+              <th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Status</th>
+              <th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {filteredContracts.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: 40, textAlign: 'center', color: '#999' }}>
+                <td colSpan={6} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
                   No contracts found. Click "+ New Contract" to add one.
                 </td>
               </tr>
@@ -373,14 +373,14 @@ export default function Contracts() {
                 return (
                   <tr 
                     key={contract.id} 
-                    style={{ borderBottom: '1px solid #eee', cursor: 'pointer' }}
+                    style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
                     onClick={() => selectContract(contract)}
                   >
                     <td style={{ padding: 12, fontWeight: 500 }}>{contract.contractNumber}</td>
                     <td style={{ padding: 12 }}>
                       <div>{contract.vendor}</div>
                       {contract.vendorContact && (
-                        <div style={{ fontSize: 12, color: '#666' }}>{contract.vendorContact}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{contract.vendorContact}</div>
                       )}
                     </td>
                     <td style={{ padding: 12, textAlign: 'right', fontWeight: 600, color: '#2196F3' }}>
@@ -390,7 +390,7 @@ export default function Contracts() {
                       {contract.startDate && contract.endDate ? (
                         <>{contract.startDate} → {contract.endDate}</>
                       ) : (
-                        <span style={{ color: '#999' }}>No dates set</span>
+                        <span style={{ color: 'var(--text-muted)' }}>No dates set</span>
                       )}
                     </td>
                     <td style={{ padding: 12, textAlign: 'center' }}>
@@ -430,20 +430,20 @@ export default function Contracts() {
                     value={form.contractNumber}
                     onChange={(e) => setForm({ ...form, contractNumber: e.target.value })}
                     placeholder="SP4500-24-C-0042"
-                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   />
                 </div>
                 <div>
                   <label style={{ display: 'block', marginBottom: 5, fontWeight: 500 }}>Cost per Lb *</label>
                   <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#666' }}>$</span>
+                    <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }}>$</span>
                     <input
                       type="number"
                       step="0.01"
                       value={form.costPerLb || ''}
                       onChange={(e) => setForm({ ...form, costPerLb: e.target.value })}
                       placeholder="0.05"
-                      style={{ width: '100%', padding: 8, paddingLeft: 25, borderRadius: 4, border: '1px solid #ddd' }}
+                      style={{ width: '100%', padding: 8, paddingLeft: 25, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                     />
                   </div>
                 </div>
@@ -456,7 +456,7 @@ export default function Contracts() {
                   value={form.vendor}
                   onChange={(e) => setForm({ ...form, vendor: e.target.value })}
                   placeholder="DLA Disposition Services East"
-                  style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                  style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -468,7 +468,7 @@ export default function Contracts() {
                     value={form.vendorContact}
                     onChange={(e) => setForm({ ...form, vendorContact: e.target.value })}
                     placeholder="John Smith"
-                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   />
                 </div>
                 <div>
@@ -478,7 +478,7 @@ export default function Contracts() {
                     value={form.vendorEmail}
                     onChange={(e) => setForm({ ...form, vendorEmail: e.target.value })}
                     placeholder="john@dla.mil"
-                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   />
                 </div>
                 <div>
@@ -488,7 +488,7 @@ export default function Contracts() {
                     value={form.vendorPhone}
                     onChange={(e) => setForm({ ...form, vendorPhone: e.target.value })}
                     placeholder="555-123-4567"
-                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   />
                 </div>
               </div>
@@ -500,7 +500,7 @@ export default function Contracts() {
                     type="date"
                     value={form.startDate}
                     onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   />
                 </div>
                 <div>
@@ -509,7 +509,7 @@ export default function Contracts() {
                     type="date"
                     value={form.endDate}
                     onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                    style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                   />
                 </div>
               </div>
@@ -521,7 +521,7 @@ export default function Contracts() {
                   value={form.description}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
                   placeholder="FY24 Surplus Contract - Triwalls from Fort Bragg"
-                  style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ddd' }}
+                  style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                 />
               </div>
 
@@ -532,37 +532,37 @@ export default function Contracts() {
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   placeholder="Any additional notes about this contract..."
                   rows={3}
-                  style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid #ddd', resize: 'vertical' }}
+                  style={{ width: '100%', padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', resize: 'vertical' }}
                 />
               </div>
 
               {selectedContract && (
-                <div style={{ marginTop: 20, padding: 15, background: '#f5f5f5', borderRadius: 8 }}>
+                <div style={{ marginTop: 20, padding: 15, background: 'var(--bg-surface-2)', borderRadius: 8 }}>
                   <h4 style={{ margin: '0 0 10px 0' }}>Contract Stats</h4>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, fontSize: 14 }}>
                     <div>
-                      <div style={{ color: '#666' }}>Status</div>
+                      <div style={{ color: 'var(--text-muted)' }}>Status</div>
                       <div>{getStatusBadge(getContractStatus(selectedContract))}</div>
                     </div>
                     <div>
-                      <div style={{ color: '#666' }}>Quick Sales</div>
+                      <div style={{ color: 'var(--text-muted)' }}>Quick Sales</div>
                       <div style={{ fontWeight: 600 }}>{selectedContract.quickSaleCount || 0}</div>
                     </div>
                     <div>
-                      <div style={{ color: '#666' }}>Total Revenue</div>
-                      <div style={{ fontWeight: 600, color: '#4CAF50' }}>${(selectedContract.totalRevenue || 0).toFixed(2)}</div>
+                      <div style={{ color: 'var(--text-muted)' }}>Total Revenue</div>
+                      <div style={{ fontWeight: 600, color: 'var(--text-success)' }}>${(selectedContract.totalRevenue || 0).toFixed(2)}</div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
-            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', padding: 15, borderTop: '1px solid #eee' }}>
+            <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', padding: 15, borderTop: '1px solid var(--border)' }}>
               <div>
                 {selectedContract && canEdit && (
                   <button
                     className="btn"
                     onClick={() => deleteContract(selectedContract)}
-                    style={{ background: '#f44336', color: 'white' }}
+                    style={{ background: '#f44336', color: 'var(--text-on-dark)' }}
                   >
                     🗑️ Delete
                   </button>

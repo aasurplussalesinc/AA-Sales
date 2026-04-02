@@ -159,7 +159,7 @@ export default function CreateLocation() {
       {qrImage && (
         <div className="qr-container">
           <img src={qrImage} alt="QR Code" style={{maxWidth: '100%'}} />
-          <p style={{fontSize: 12, color: '#999', marginTop: 10}}>{qrCode}</p>
+          <p style={{fontSize: 12, color: 'var(--text-muted)', marginTop: 10}}>{qrCode}</p>
           <button className="btn" onClick={printQR} style={{marginTop: 15}}>
             🖨️ Print QR Code
           </button>

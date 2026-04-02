@@ -18,7 +18,21 @@ import Customers from './pages/Customers';
 import Contracts from './pages/Contracts';
 import Shipping from './pages/Shipping';
 import { useTier } from './useTier';
+import { ThemeProvider, useTheme } from './ThemeContext';
 import './App.css';
+
+function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  return (
+    <button
+      onClick={toggleTheme}
+      className="theme-toggle"
+      title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+    >
+      {theme === 'light' ? '🌙' : '☀️'}
+    </button>
+  );
+}
 
 // Full-screen hard block for locked features
 export function TierGate({ feature, requiredPlan, children }) {
@@ -64,9 +78,10 @@ function NavBar() {
     }
   };
 
+  const { theme } = useTheme();
   const planColors = {
     trial: '#ffc107', starter: '#78909c', pro: '#1976d2',
-    business: '#7b1fa2', enterprise: '#2d5f3f', owner: '#c62828'
+    business: '#7b1fa2', enterprise: theme === 'dark' ? '#34d399' : '#2d5f3f', owner: '#c62828'
   };
   const planLabels = {
     trial: `Trial · ${subscriptionStatus?.trialDaysRemaining ?? 0}d left`,
@@ -110,6 +125,7 @@ function NavBar() {
               </span>
             )}
             <span style={{ fontSize: 14, opacity: 0.9 }}>👤 {user.email}</span>
+            <ThemeToggle />
             <button onClick={handleLogout} style={{
               background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white',
               padding: '6px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 13
@@ -299,10 +315,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+    <ThemeProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }

@@ -538,14 +538,14 @@ export default function Customers() {
         <button 
           className="btn" 
           onClick={closeDetail}
-          style={{ marginBottom: 20, background: '#6c757d', color: 'white' }}
+          style={{ marginBottom: 20, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
         >
           ← Back to Customers
         </button>
 
         <div style={{ display: 'grid', gridTemplateColumns: '350px 1fr', gap: 20 }}>
           {/* Sidebar - Customer Info */}
-          <div style={{ background: 'white', padding: 20, borderRadius: 8, height: 'fit-content' }}>
+          <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, height: 'fit-content' }}>
             <h3 style={{ marginBottom: 20 }}>Customer Information</h3>
 
             <div style={{ marginBottom: 15 }}>
@@ -598,7 +598,7 @@ export default function Customers() {
                 <select
                   value={editForm.phoneType}
                   onChange={e => setEditForm({ ...editForm, phoneType: e.target.value })}
-                  style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, minWidth: 90 }}
+                  style={{ padding: '8px 10px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, minWidth: 90 }}
                 >
                   {phoneTypeOptions.map(type => (
                     <option key={type} value={type}>{type}</option>
@@ -621,7 +621,7 @@ export default function Customers() {
                 <select
                   value={editForm.phone2Type}
                   onChange={e => setEditForm({ ...editForm, phone2Type: e.target.value })}
-                  style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, minWidth: 90 }}
+                  style={{ padding: '8px 10px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, minWidth: 90 }}
                 >
                   {phoneTypeOptions.map(type => (
                     <option key={type} value={type}>{type}</option>
@@ -738,7 +738,7 @@ export default function Customers() {
               <button 
                 className="btn" 
                 onClick={deleteCustomer} 
-                style={{ width: '100%', marginTop: 10, background: '#dc3545', color: 'white' }}
+                style={{ width: '100%', marginTop: 10, background: '#dc3545', color: 'var(--text-on-dark)' }}
               >
                 🗑️ Delete Customer
               </button>
@@ -746,7 +746,7 @@ export default function Customers() {
 
             {/* Stats */}
             {customerStats && (
-              <div style={{ marginTop: 20, padding: 15, background: '#f9f9f9', borderRadius: 8 }}>
+              <div style={{ marginTop: 20, padding: 15, background: 'var(--bg-surface-2)', borderRadius: 8 }}>
                 <h4 style={{ marginBottom: 10 }}>Account Summary</h4>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                   <span>Unpaid:</span>
@@ -756,7 +756,7 @@ export default function Customers() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span>Paid:</span>
-                  <span style={{ color: '#4CAF50', fontWeight: 600 }}>
+                  <span style={{ color: 'var(--text-success)', fontWeight: 600 }}>
                     {formatCurrency(customerStats.paidAmount)}
                   </span>
                 </div>
@@ -765,7 +765,7 @@ export default function Customers() {
           </div>
 
           {/* Main Area - Purchase Orders */}
-          <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
+          <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8 }}>
             <h3 style={{ marginBottom: 20 }}>Purchase Orders ({customerOrders.length})</h3>
 
             <div className="data-table">
@@ -792,7 +792,7 @@ export default function Customers() {
                         <td>
                           <span style={{
                             padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600,
-                            background: getStatusColor(order.status), color: 'white'
+                            background: getStatusColor(order.status), color: 'var(--text-on-dark)'
                           }}>
                             {order.status === 'paid' ? 'PAID' : 'UNPAID'}
                           </span>
@@ -838,24 +838,24 @@ export default function Customers() {
             justifyContent: 'center', zIndex: 1001, padding: 20
           }}>
             <div style={{
-              background: 'white', borderRadius: 12, padding: 30,
+              background: 'var(--bg-surface)', borderRadius: 12, padding: 30,
               maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto'
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
                 <div>
                   <h3 style={{ margin: 0 }}>{selectedOrder.poNumber}</h3>
-                  <p style={{ color: '#666', margin: '5px 0 0 0' }}>{selectedOrder.customerName}</p>
+                  <p style={{ color: 'var(--text-muted)', margin: '5px 0 0 0' }}>{selectedOrder.customerName}</p>
                 </div>
                 <span style={{
                   padding: '6px 16px', borderRadius: 20, fontSize: 14, fontWeight: 600,
-                  background: getStatusColor(selectedOrder.status), color: 'white'
+                  background: getStatusColor(selectedOrder.status), color: 'var(--text-on-dark)'
                 }}>
                   {selectedOrder.status?.toUpperCase()}
                 </span>
               </div>
 
               {/* Customer Info */}
-              <div style={{ background: '#f9f9f9', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+              <div style={{ background: 'var(--bg-surface-2)', padding: 15, borderRadius: 8, marginBottom: 20 }}>
                 <p style={{ margin: '3px 0' }}><strong>Customer:</strong> {selectedOrder.customerName}</p>
                 {selectedOrder.customerPhone && <p style={{ margin: '3px 0' }}>Phone: {selectedOrder.customerPhone}</p>}
                 {selectedOrder.customerEmail && <p style={{ margin: '3px 0' }}>Email: {selectedOrder.customerEmail}</p>}
@@ -865,7 +865,7 @@ export default function Customers() {
               {/* Items */}
               <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 20 }}>
                 <thead>
-                  <tr style={{ background: '#f5f5f5' }}>
+                  <tr style={{ background: 'var(--bg-surface-2)' }}>
                     <th style={{ padding: 10, textAlign: 'left' }}>Item</th>
                     <th style={{ padding: 10, textAlign: 'right' }}>Qty</th>
                     <th style={{ padding: 10, textAlign: 'right' }}>Unit Price</th>
@@ -874,10 +874,10 @@ export default function Customers() {
                 </thead>
                 <tbody>
                   {selectedOrder.items?.map((item, idx) => (
-                    <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                    <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: 10 }}>
                         <strong>{item.itemName}</strong>
-                        <div style={{ fontSize: 12, color: '#666' }}>{item.partNumber}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.partNumber}</div>
                       </td>
                       <td style={{ padding: 10, textAlign: 'right' }}>{item.quantity}</td>
                       <td style={{ padding: 10, textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>
@@ -914,7 +914,7 @@ export default function Customers() {
               </div>
 
               {selectedOrder.notes && (
-                <div style={{ background: '#fffde7', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+                <div style={{ background: 'var(--bg-badge-orange)', padding: 15, borderRadius: 8, marginBottom: 20 }}>
                   <strong>Notes:</strong> {selectedOrder.notes}
                 </div>
               )}
@@ -926,7 +926,7 @@ export default function Customers() {
                     setEditingOrder({...selectedOrder});
                     setSelectedOrder(null);
                   }}
-                  style={{ background: '#ff9800', color: 'white' }}
+                  style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}
                 >
                   ✏️ Edit
                 </button>
@@ -939,7 +939,7 @@ export default function Customers() {
                 <button 
                   className="btn" 
                   onClick={() => setSelectedOrder(null)} 
-                  style={{ background: '#6c757d', color: 'white', marginLeft: 'auto' }}
+                  style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', marginLeft: 'auto' }}
                 >
                   Close
                 </button>
@@ -956,13 +956,13 @@ export default function Customers() {
             justifyContent: 'center', zIndex: 1002, padding: 20
           }}>
             <div style={{
-              background: 'white', borderRadius: 12, padding: 30,
+              background: 'var(--bg-surface)', borderRadius: 12, padding: 30,
               maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto'
             }}>
               <h3 style={{ marginBottom: 20 }}>Edit Purchase Order - {editingOrder.poNumber}</h3>
 
               {/* Customer Info */}
-              <div style={{ padding: 15, background: '#f9f9f9', borderRadius: 8, marginBottom: 20 }}>
+              <div style={{ padding: 15, background: 'var(--bg-surface-2)', borderRadius: 8, marginBottom: 20 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 15 }}>
                   <div>
                     <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Customer Name *</label>
@@ -1037,7 +1037,7 @@ export default function Customers() {
                         items: [...(editingOrder.items || []), newItem]
                       });
                     }}
-                    style={{ background: '#4a5d23', color: 'white' }}
+                    style={{ background: '#4a5d23', color: 'var(--text-on-dark)' }}
                   >
                     + Add Item
                   </button>
@@ -1045,7 +1045,7 @@ export default function Customers() {
 
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
-                    <tr style={{ background: '#f5f5f5' }}>
+                    <tr style={{ background: 'var(--bg-surface-2)' }}>
                       <th style={{ padding: 10, textAlign: 'left' }}>Item Name</th>
                       <th style={{ padding: 10, textAlign: 'left', width: 100 }}>Part #</th>
                       <th style={{ padding: 10, textAlign: 'center', width: 80 }}>Qty</th>
@@ -1056,7 +1056,7 @@ export default function Customers() {
                   </thead>
                   <tbody>
                     {(editingOrder.items || []).map((item, idx) => (
-                      <tr key={item.itemId || idx} style={{ borderBottom: '1px solid #eee' }}>
+                      <tr key={item.itemId || idx} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: 8 }}>
                           <input
                             type="text"
@@ -1151,7 +1151,7 @@ export default function Customers() {
                                 total: subtotal + (editingOrder.tax || 0) + (editingOrder.shipping || 0)
                               });
                             }}
-                            style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer' }}
+                            style={{ background: '#f44336', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer' }}
                           >
                             ✕
                           </button>
@@ -1243,7 +1243,7 @@ export default function Customers() {
                 <button 
                   className="btn" 
                   onClick={() => setEditingOrder(null)} 
-                  style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                  style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
                 >
                   Cancel
                 </button>
@@ -1274,12 +1274,12 @@ export default function Customers() {
               className="btn"
               onClick={() => fileInputRef.current?.click()}
               disabled={importing}
-              style={{ background: '#17a2b8', color: 'white' }}
+              style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}
             >
               {importing ? '⏳ Importing...' : '📤 Import CSV'}
             </button>
           )}
-          <button className="btn" onClick={exportToCSV} style={{ background: '#6c757d', color: 'white' }}>
+          <button className="btn" onClick={exportToCSV} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
             📥 Export CSV
           </button>
           {canEdit && (
@@ -1316,7 +1316,7 @@ export default function Customers() {
             style={{
               padding: '8px 12px',
               borderRadius: 6,
-              border: '1px solid #ddd',
+              border: '1px solid var(--border)',
               fontSize: 14
             }}
           >
@@ -1335,7 +1335,7 @@ export default function Customers() {
           justifyContent: 'center', zIndex: 1000, padding: 20
         }}>
           <div style={{
-            background: 'white', borderRadius: 12, padding: 30,
+            background: 'var(--bg-surface)', borderRadius: 12, padding: 30,
             maxWidth: 500, width: '100%', maxHeight: '90vh', overflow: 'auto'
           }}>
             <h3 style={{ marginBottom: 20 }}>New Customer</h3>
@@ -1379,7 +1379,7 @@ export default function Customers() {
                 <select
                   value={editForm.phoneType}
                   onChange={e => setEditForm({ ...editForm, phoneType: e.target.value })}
-                  style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, minWidth: 90 }}
+                  style={{ padding: '8px 10px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, minWidth: 90 }}
                 >
                   {phoneTypeOptions.map(type => (
                     <option key={type} value={type}>{type}</option>
@@ -1402,7 +1402,7 @@ export default function Customers() {
                 <select
                   value={editForm.phone2Type}
                   onChange={e => setEditForm({ ...editForm, phone2Type: e.target.value })}
-                  style={{ padding: '8px 10px', border: '1px solid #ddd', borderRadius: 4, minWidth: 90 }}
+                  style={{ padding: '8px 10px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: 4, minWidth: 90 }}
                 >
                   {phoneTypeOptions.map(type => (
                     <option key={type} value={type}>{type}</option>
@@ -1490,7 +1490,7 @@ export default function Customers() {
               <button className="btn btn-primary" onClick={saveCustomer} style={{ flex: 1 }}>
                 Create Customer
               </button>
-              <button className="btn" onClick={() => setShowCreate(false)} style={{ flex: 1, background: '#6c757d', color: 'white' }}>
+              <button className="btn" onClick={() => setShowCreate(false)} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
                 Cancel
               </button>
             </div>
@@ -1529,10 +1529,10 @@ export default function Customers() {
                   <td>
                     {customer.phone ? (
                       <div>
-                        <span style={{ fontSize: 10, color: '#666' }}>{customer.phoneType || 'Cell'}:</span> {customer.phone}
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{customer.phoneType || 'Cell'}:</span> {customer.phone}
                         {customer.phone2 && (
                           <div style={{ fontSize: 12, marginTop: 2 }}>
-                            <span style={{ fontSize: 10, color: '#666' }}>{customer.phone2Type || 'Office'}:</span> {customer.phone2}
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{customer.phone2Type || 'Office'}:</span> {customer.phone2}
                           </div>
                         )}
                       </div>
@@ -1542,7 +1542,7 @@ export default function Customers() {
                   <td>
                     <span>{custOrders.length} orders</span>
                     {unpaid > 0 && (
-                      <span style={{ color: '#f44336', marginLeft: 10, fontSize: 12 }}>
+                      <span style={{ color: 'var(--text-error)', marginLeft: 10, fontSize: 12 }}>
                         ({formatCurrency(unpaid)} unpaid)
                       </span>
                     )}
@@ -1563,7 +1563,7 @@ export default function Customers() {
         </table>
       </div>
 
-      <p style={{ marginTop: 15, color: '#666' }}>
+      <p style={{ marginTop: 15, color: 'var(--text-muted)' }}>
         Showing {filteredCustomers.length} of {customers.length} customers
       </p>
     </div>

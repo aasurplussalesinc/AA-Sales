@@ -134,7 +134,7 @@ export default function ActivityLog() {
           <button className="btn btn-primary" onClick={loadActivities}>
             🔄 Refresh
           </button>
-          <button className="btn" onClick={exportLog} style={{ background: '#17a2b8', color: 'white' }}>
+          <button className="btn" onClick={exportLog} style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>
             📥 Export
           </button>
         </div>
@@ -142,11 +142,11 @@ export default function ActivityLog() {
 
       {/* Filters */}
       <div style={{ 
-        background: 'white', 
+        background: 'var(--bg-surface)', 
         padding: 20, 
         borderRadius: 8, 
         marginBottom: 20,
-        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+        boxShadow: 'var(--shadow-sm)'
       }}>
         <div style={{ 
           display: 'grid', 
@@ -219,7 +219,7 @@ export default function ActivityLog() {
           <button 
             className="btn"
             onClick={clearFilters}
-            style={{ background: '#dc3545', color: 'white' }}
+            style={{ background: '#dc3545', color: 'var(--text-on-dark)' }}
           >
             ✕ Clear Filters
           </button>
@@ -227,13 +227,13 @@ export default function ActivityLog() {
       </div>
 
       {/* Results count */}
-      <p style={{ marginBottom: 10, color: '#666' }}>
+      <p style={{ marginBottom: 10, color: 'var(--text-muted)' }}>
         Showing {filteredActivities.length} of {activities.length} activities
         {hasActiveFilters && ' (filtered)'}
       </p>
 
       {/* Activity list */}
-      <div style={{ background: 'white', borderRadius: 8, overflow: 'hidden' }}>
+      <div style={{ background: 'var(--bg-surface)', borderRadius: 8, overflow: 'hidden' }}>
         {filteredActivities.length === 0 ? (
           <div className="empty-state">
             <p>No activities found</p>
@@ -245,7 +245,7 @@ export default function ActivityLog() {
                 key={activity.id}
                 style={{
                   padding: 15,
-                  borderBottom: '1px solid #eee',
+                  borderBottom: '1px solid var(--border)',
                   display: 'flex',
                   gap: 15,
                   alignItems: 'flex-start'
@@ -257,7 +257,7 @@ export default function ActivityLog() {
                   height: 40,
                   borderRadius: '50%',
                   background: getActionColor(activity.action),
-                  color: 'white',
+                  color: 'var(--text-on-dark)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -276,16 +276,16 @@ export default function ActivityLog() {
                     }}>
                       {activity.action.replace(/_/g, ' ')}
                     </span>
-                    <span style={{ color: '#999', fontSize: 13 }}>
+                    <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
                       {formatDate(activity.timestamp)}
                     </span>
                   </div>
                   
-                  <div style={{ color: '#666', fontSize: 14, marginTop: 4 }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 14, marginTop: 4 }}>
                     {formatDetails(activity.details)}
                   </div>
                   
-                  <div style={{ color: '#999', fontSize: 12, marginTop: 4 }}>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 4 }}>
                     by {activity.userEmail || 'System'}
                   </div>
                 </div>

@@ -44,15 +44,15 @@ export default function Dashboard() {
           <h3>{stats.totalStock.toLocaleString()}</h3>
           <p>Total Stock</p>
         </div>
-        <div className="stat-card" style={{ borderLeft: '4px solid #f44336' }}>
+        <div className="stat-card" style={{ borderLeft: '4px solid var(--text-error)' }}>
           <h3>{stats.outOfStockItems}</h3>
           <p>Out of Stock</p>
         </div>
-        <div className="stat-card" style={{ borderLeft: '4px solid #f44336' }}>
+        <div className="stat-card" style={{ borderLeft: '4px solid var(--text-error)' }}>
           <h3>{stats.lowStockItems}</h3>
           <p>🔴 Low Stock</p>
         </div>
-        <div className="stat-card" style={{ borderLeft: '4px solid #ff9800' }}>
+        <div className="stat-card" style={{ borderLeft: '4px solid var(--text-badge-orange)' }}>
           <h3>{stats.reorderItems || 0}</h3>
           <p>🟠 Need Reorder</p>
         </div>
@@ -63,8 +63,8 @@ export default function Dashboard() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: 20, marginBottom: 20 }}>
           {/* Low Stock Items */}
           {stats.lowStockItemsList && stats.lowStockItemsList.length > 0 && (
-            <div style={{ background: '#ffebee', padding: 20, borderRadius: 8, border: '1px solid #f44336' }}>
-              <h3 style={{ marginBottom: 15, color: '#c62828' }}>🔴 Low Stock Alert</h3>
+            <div style={{ background: 'var(--bg-badge-red)', padding: 20, borderRadius: 8, border: '1px solid #f44336' }}>
+              <h3 style={{ marginBottom: 15, color: 'var(--text-error)' }}>🔴 Low Stock Alert</h3>
               <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                 {stats.lowStockItemsList.map(item => (
                   <div key={item.id} style={{ 
@@ -76,7 +76,7 @@ export default function Dashboard() {
                     <span style={{ fontWeight: 500 }}>{item.name || item.partNumber}</span>
                     <span style={{ 
                       background: '#f44336', 
-                      color: 'white', 
+                      color: 'var(--text-on-dark)', 
                       padding: '2px 8px', 
                       borderRadius: 4,
                       fontSize: 12,
@@ -91,7 +91,7 @@ export default function Dashboard() {
                 display: 'block', 
                 textAlign: 'center', 
                 marginTop: 15, 
-                color: '#c62828',
+                color: 'var(--text-error)',
                 fontWeight: 600 
               }}>
                 View All Low Stock Items →
@@ -101,8 +101,8 @@ export default function Dashboard() {
           
           {/* Reorder Items */}
           {stats.reorderItemsList && stats.reorderItemsList.length > 0 && (
-            <div style={{ background: '#fff3e0', padding: 20, borderRadius: 8, border: '1px solid #ff9800' }}>
-              <h3 style={{ marginBottom: 15, color: '#e65100' }}>🟠 Needs Reorder</h3>
+            <div style={{ background: 'var(--bg-badge-orange)', padding: 20, borderRadius: 8, border: '1px solid #ff9800' }}>
+              <h3 style={{ marginBottom: 15, color: 'var(--text-badge-orange)' }}>🟠 Needs Reorder</h3>
               <div style={{ maxHeight: 200, overflowY: 'auto' }}>
                 {stats.reorderItemsList.map(item => (
                   <div key={item.id} style={{ 
@@ -114,7 +114,7 @@ export default function Dashboard() {
                     <span style={{ fontWeight: 500 }}>{item.name || item.partNumber}</span>
                     <span style={{ 
                       background: '#ff9800', 
-                      color: 'white', 
+                      color: 'var(--text-on-dark)', 
                       padding: '2px 8px', 
                       borderRadius: 4,
                       fontSize: 12,
@@ -129,7 +129,7 @@ export default function Dashboard() {
                 display: 'block', 
                 textAlign: 'center', 
                 marginTop: 15, 
-                color: '#e65100',
+                color: 'var(--text-badge-orange)',
                 fontWeight: 600 
               }}>
                 View All Reorder Items →
@@ -143,7 +143,7 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 20, marginBottom: 20 }}>
         
         {/* Top Picked Items - Bar Chart */}
-        <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
+        <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8 }}>
           <h3 style={{ marginBottom: 15 }}>🏆 Top Picked Items (30 days)</h3>
           {stats.topPickedItems.length === 0 ? (
             <div className="empty-state"><p>No picks recorded yet</p></div>
@@ -155,7 +155,7 @@ export default function Dashboard() {
                     <span style={{ fontSize: 13, fontWeight: idx < 3 ? 600 : 400 }}>
                       {idx + 1}. {item.itemName || 'Unknown Item'}
                     </span>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#2d5f3f' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>
                       {item.totalPicked}
                     </span>
                   </div>
@@ -180,7 +180,7 @@ export default function Dashboard() {
         </div>
 
         {/* Daily Movement Trend - Bar Chart */}
-        <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
+        <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8 }}>
           <h3 style={{ marginBottom: 15 }}>📈 Daily Activity (7 days)</h3>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: 180, gap: 8 }}>
             {stats.dailyMovements.map((day, idx) => {
@@ -221,7 +221,7 @@ export default function Dashboard() {
                   {/* Label */}
                   <div style={{ 
                     fontSize: 10, 
-                    color: '#666', 
+                    color: 'var(--text-muted)', 
                     marginTop: 5,
                     textAlign: 'center'
                   }}>
@@ -242,7 +242,7 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div style={{ background: 'white', padding: 20, borderRadius: 8 }}>
+      <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8 }}>
         <h3 style={{ marginBottom: 15 }}>Quick Actions</h3>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <a href="/scanner" className="btn btn-primary">📷 Scan QR</a>

@@ -172,7 +172,7 @@ export default function Receiving() {
           justifyContent: 'center', zIndex: 1000, padding: 20
         }}>
           <div style={{
-            background: 'white', borderRadius: 12, padding: 30,
+            background: 'var(--bg-surface)', borderRadius: 12, padding: 30,
             maxWidth: 700, width: '100%', maxHeight: '90vh', overflow: 'auto'
           }}>
             <h3 style={{ marginBottom: 20 }}>New Receiving</h3>
@@ -224,15 +224,15 @@ export default function Receiving() {
                 style={{ width: '100%' }}
               />
               {filteredItems.length > 0 && (
-                <div style={{ border: '1px solid #ddd', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
                   {filteredItems.slice(0, 10).map(item => (
                     <div
                       key={item.id}
                       onClick={() => addItemToReceiving(item)}
-                      style={{ padding: 10, borderBottom: '1px solid #eee', cursor: 'pointer' }}
+                      style={{ padding: 10, borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
                     >
                       <strong>{item.name}</strong>
-                      <span style={{ color: '#666', marginLeft: 10 }}>{item.partNumber}</span>
+                      <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>{item.partNumber}</span>
                     </div>
                   ))}
                 </div>
@@ -245,15 +245,15 @@ export default function Receiving() {
                 <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>
                   Expected Items ({newReceiving.items.length})
                 </label>
-                <div style={{ border: '1px solid #ddd', borderRadius: 4 }}>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 4 }}>
                   {newReceiving.items.map(item => (
-                    <div key={item.itemId} style={{ padding: 10, borderBottom: '1px solid #eee', display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div key={item.itemId} style={{ padding: 10, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ flex: 1 }}>
                         <strong>{item.itemName}</strong>
-                        <div style={{ fontSize: 12, color: '#666' }}>{item.partNumber}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.partNumber}</div>
                       </div>
                       <div>
-                        <label style={{ fontSize: 11, color: '#666' }}>Expected</label>
+                        <label style={{ fontSize: 11, color: 'var(--text-muted)' }}>Expected</label>
                         <input
                           type="number"
                           value={item.expectedQty}
@@ -264,7 +264,7 @@ export default function Receiving() {
                       </div>
                       <button
                         onClick={() => removeItemFromReceiving(item.itemId)}
-                        style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer' }}
+                        style={{ background: '#f44336', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, padding: '5px 10px', cursor: 'pointer' }}
                       >
                         ✕
                       </button>
@@ -278,7 +278,7 @@ export default function Receiving() {
               <button className="btn btn-primary" onClick={createReceiving} style={{ flex: 1 }}>
                 Create Receiving
               </button>
-              <button className="btn" onClick={() => setShowCreate(false)} style={{ flex: 1, background: '#6c757d', color: 'white' }}>
+              <button className="btn" onClick={() => setShowCreate(false)} style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}>
                 Cancel
               </button>
             </div>
@@ -294,29 +294,29 @@ export default function Receiving() {
           justifyContent: 'center', zIndex: 1000, padding: 20
         }}>
           <div style={{
-            background: 'white', borderRadius: 12, padding: 30,
+            background: 'var(--bg-surface)', borderRadius: 12, padding: 30,
             maxWidth: 800, width: '100%', maxHeight: '90vh', overflow: 'auto'
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <h3>PO: {selectedReceiving.poNumber}</h3>
               <span style={{
                 padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-                background: getStatusColor(selectedReceiving.status), color: 'white'
+                background: getStatusColor(selectedReceiving.status), color: 'var(--text-on-dark)'
               }}>
                 {selectedReceiving.status?.toUpperCase()}
               </span>
             </div>
             
             {selectedReceiving.supplier && (
-              <p style={{ color: '#666', marginBottom: 5 }}>Supplier: {selectedReceiving.supplier}</p>
+              <p style={{ color: 'var(--text-muted)', marginBottom: 5 }}>Supplier: {selectedReceiving.supplier}</p>
             )}
             {selectedReceiving.notes && (
-              <p style={{ color: '#666', marginBottom: 15 }}>{selectedReceiving.notes}</p>
+              <p style={{ color: 'var(--text-muted)', marginBottom: 15 }}>{selectedReceiving.notes}</p>
             )}
 
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ background: '#f5f5f5' }}>
+                <tr style={{ background: 'var(--bg-surface-2)' }}>
                   <th style={{ padding: 10, textAlign: 'left' }}>Item</th>
                   <th style={{ padding: 10, textAlign: 'center', width: 80 }}>Expected</th>
                   <th style={{ padding: 10, textAlign: 'center', width: 100 }}>Received</th>
@@ -325,11 +325,11 @@ export default function Receiving() {
               </thead>
               <tbody>
                 {selectedReceiving.items?.map(item => (
-                  <tr key={item.itemId} style={{ borderBottom: '1px solid #eee' }}>
+                  <tr key={item.itemId} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: 10 }}>
                       <strong>{item.itemName}</strong>
-                      <div style={{ fontSize: 12, color: '#666' }}>{item.partNumber}</div>
-                      <div style={{ fontSize: 11, color: '#999' }}>Current stock: {item.currentStock}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.partNumber}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Current stock: {item.currentStock}</div>
                     </td>
                     <td style={{ padding: 10, textAlign: 'center' }}>{item.expectedQty}</td>
                     <td style={{ padding: 10, textAlign: 'center' }}>
@@ -382,7 +382,7 @@ export default function Receiving() {
               <button 
                 className="btn" 
                 onClick={() => setSelectedReceiving(null)} 
-                style={{ flex: 1, background: '#6c757d', color: 'white' }}
+                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
               >
                 Close
               </button>
@@ -414,7 +414,7 @@ export default function Receiving() {
                 <td>
                   <span style={{
                     padding: '4px 8px', borderRadius: 4, fontSize: 12,
-                    background: getStatusColor(rec.status), color: 'white'
+                    background: getStatusColor(rec.status), color: 'var(--text-on-dark)'
                   }}>
                     {rec.status}
                   </span>

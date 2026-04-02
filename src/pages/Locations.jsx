@@ -606,7 +606,7 @@ W2,2,C,3`;
             className="btn"
             onClick={() => fileInputRef.current?.click()}
             disabled={importing}
-            style={{ background: '#17a2b8', color: 'white' }}
+            style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}
           >
             {importing ? '⏳ Importing...' : '📤 Import CSV'}
           </button>
@@ -620,14 +620,14 @@ W2,2,C,3`;
         <button 
           className="btn"
           onClick={downloadTemplate}
-          style={{ background: '#6c757d', color: 'white' }}
+          style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
         >
           📋 Download Template
         </button>
       </div>
 
       {canEdit && (
-        <div style={{background: 'white', padding: 20, borderRadius: 8, marginBottom: 20}}>
+        <div style={{background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginBottom: 20}}>
           <h3 style={{marginBottom: 15}}>Add New Location</h3>
           <div className="form-row">
             <select
@@ -670,28 +670,28 @@ W2,2,C,3`;
               {saving ? 'Adding...' : '+ Add Location'}
             </button>
           </div>
-          <div style={{marginTop: 10, padding: 10, background: '#f0f0f0', borderRadius: 4, textAlign: 'center'}}>
+          <div style={{marginTop: 10, padding: 10, background: 'var(--bg-surface-3)', borderRadius: 4, textAlign: 'center'}}>
             <strong>Preview: </strong>
-            <span style={{fontSize: 18, color: '#2d5f3f'}}>
+            <span style={{fontSize: 18, color: 'var(--accent)'}}>
               {newLocation.warehouse}-R{newLocation.rack}-{newLocation.letter}{newLocation.shelf}
             </span>
           </div>
         </div>
       )}
 
-      <div style={{background: 'white', padding: 20, borderRadius: 8}}>
+      <div style={{background: 'var(--bg-surface)', padding: 20, borderRadius: 8}}>
         {/* Filters Row */}
         <div style={{ 
           display: 'flex', 
           gap: 15, 
           marginBottom: 20, 
           padding: 15, 
-          background: '#f8f9fa', 
+          background: 'var(--bg-surface-2)', 
           borderRadius: 8,
           flexWrap: 'wrap',
           alignItems: 'center'
         }}>
-          <div style={{ fontWeight: 600, color: '#2d5f3f' }}>🔍 Filter:</div>
+          <div style={{ fontWeight: 600, color: 'var(--accent)' }}>🔍 Filter:</div>
           
           <input
             type="text"
@@ -701,7 +701,7 @@ W2,2,C,3`;
             style={{
               padding: '6px 12px',
               borderRadius: 6,
-              border: '1px solid #ddd',
+              border: '1px solid var(--border)',
               fontSize: 14,
               minWidth: 150
             }}
@@ -713,7 +713,7 @@ W2,2,C,3`;
             style={{
               padding: '6px 12px',
               borderRadius: 6,
-              border: '1px solid #ddd',
+              border: '1px solid var(--border)',
               fontSize: 14
             }}
           >
@@ -729,7 +729,7 @@ W2,2,C,3`;
             style={{
               padding: '6px 12px',
               borderRadius: 6,
-              border: '1px solid #ddd',
+              border: '1px solid var(--border)',
               fontSize: 14
             }}
           >
@@ -745,7 +745,7 @@ W2,2,C,3`;
             style={{
               padding: '6px 12px',
               borderRadius: 6,
-              border: '1px solid #ddd',
+              border: '1px solid var(--border)',
               fontSize: 14
             }}
           >
@@ -763,7 +763,7 @@ W2,2,C,3`;
                 borderRadius: 6,
                 border: 'none',
                 background: '#dc3545',
-                color: 'white',
+                color: 'var(--text-on-dark)',
                 cursor: 'pointer',
                 fontSize: 14
               }}
@@ -790,7 +790,7 @@ W2,2,C,3`;
               style={{
                 padding: '6px 12px',
                 borderRadius: 6,
-                border: '1px solid #ddd',
+                border: '1px solid var(--border)',
                 fontSize: 14
               }}
             >
@@ -804,7 +804,7 @@ W2,2,C,3`;
           {/* Bulk actions */}
           {selectedLocations.length > 0 && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-              <span style={{ color: '#666' }}>{selectedLocations.length} selected</span>
+              <span style={{ color: 'var(--text-muted)' }}>{selectedLocations.length} selected</span>
               <button 
                 className="btn btn-danger btn-sm"
                 onClick={deleteSelectedLocations}
@@ -814,7 +814,7 @@ W2,2,C,3`;
               <button 
                 className="btn btn-sm"
                 onClick={clearSelection}
-                style={{ background: '#6c757d', color: 'white' }}
+                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)' }}
               >
                 Clear
               </button>
@@ -871,7 +871,7 @@ W2,2,C,3`;
                         className="btn btn-sm"
                         onClick={() => printSingleLocationQR(loc)}
                         title="Print location QR code"
-                        style={{ background: '#9c27b0', color: 'white' }}
+                        style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}
                       >
                         📍 QR
                       </button>
@@ -893,7 +893,7 @@ W2,2,C,3`;
                           <button 
                             className="btn btn-sm"
                             onClick={() => openEditLocation(loc)}
-                            style={{ background: '#ff9800', color: 'white' }}
+                            style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}
                           >
                             Edit
                           </button>
@@ -941,9 +941,9 @@ W2,2,C,3`;
           <div 
             onClick={e => e.stopPropagation()} 
             style={{ 
-              background: 'white',
+              background: 'var(--bg-surface)',
               borderRadius: 12,
-              boxShadow: '0 10px 40px rgba(0,0,0,0.3)',
+              boxShadow: 'var(--shadow-modal)',
               width: '90%',
               maxWidth: 500,
               maxHeight: '80vh',
@@ -955,7 +955,7 @@ W2,2,C,3`;
             {/* Header */}
             <div style={{ 
               background: '#4a5d23',
-              color: 'white',
+              color: 'var(--text-on-dark)',
               padding: '12px 15px',
               display: 'flex',
               justifyContent: 'space-between',
@@ -969,7 +969,7 @@ W2,2,C,3`;
                 style={{ 
                   background: 'none', 
                   border: 'none', 
-                  color: 'white', 
+                  color: 'var(--text-on-dark)', 
                   fontSize: 20, 
                   cursor: 'pointer' 
                 }}
@@ -983,7 +983,7 @@ W2,2,C,3`;
               <div style={{ 
                 marginBottom: 15, 
                 padding: 10, 
-                background: '#f5f5f5', 
+                background: 'var(--bg-surface-2)', 
                 borderRadius: 6,
                 fontSize: 13
               }}>
@@ -1000,39 +1000,39 @@ W2,2,C,3`;
               {getLocationItems(viewingLocation).length > 0 ? (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead>
-                    <tr style={{ background: '#f5f5f5' }}>
-                      <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #ddd' }}>SKU</th>
-                      <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid #ddd' }}>Item Name</th>
-                      <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid #ddd' }}>Qty</th>
+                    <tr style={{ background: 'var(--bg-surface-2)' }}>
+                      <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>SKU</th>
+                      <th style={{ padding: 8, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>Item Name</th>
+                      <th style={{ padding: 8, textAlign: 'right', borderBottom: '2px solid var(--border)' }}>Qty</th>
                     </tr>
                   </thead>
                   <tbody>
                     {getLocationItems(viewingLocation).map(item => (
                       <tr key={item.id}>
-                        <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{item.partNumber || '-'}</td>
-                        <td style={{ padding: 8, borderBottom: '1px solid #eee' }}>{item.name}</td>
-                        <td style={{ padding: 8, borderBottom: '1px solid #eee', textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>{item.partNumber || '-'}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid var(--border)' }}>{item.name}</td>
+                        <td style={{ padding: 8, borderBottom: '1px solid var(--border)', textAlign: 'right', fontWeight: 'bold' }}>{item.quantity}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <p style={{ color: '#666', fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
+                <p style={{ color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', padding: 20 }}>
                   No items in this location
                 </p>
               )}
             </div>
             
             {/* Footer */}
-            <div style={{ padding: 15, borderTop: '1px solid #eee' }}>
+            <div style={{ padding: 15, borderTop: '1px solid var(--border)' }}>
               <button 
                 onClick={() => setViewingLocation(null)}
                 style={{ 
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid #ddd',
+                  border: '1px solid var(--border)',
                   borderRadius: 6,
-                  background: 'white',
+                  background: 'var(--bg-surface)',
                   cursor: 'pointer'
                 }}
               >
@@ -1052,7 +1052,7 @@ W2,2,C,3`;
               <button className="modal-close" onClick={() => setEditingLocation(null)}>×</button>
             </div>
             <div className="modal-body">
-              <p style={{ marginBottom: 15, color: '#666' }}>
+              <p style={{ marginBottom: 15, color: 'var(--text-muted)' }}>
                 Current: <strong>{editingLocation.locationCode || 'Unknown'}</strong>
               </p>
               
@@ -1111,9 +1111,9 @@ W2,2,C,3`;
                 </div>
               </div>
 
-              <div style={{ marginTop: 15, padding: 10, background: '#e8f5e9', borderRadius: 4, textAlign: 'center' }}>
+              <div style={{ marginTop: 15, padding: 10, background: 'var(--bg-badge-green)', borderRadius: 4, textAlign: 'center' }}>
                 <strong>New Location Code: </strong>
-                <span style={{ fontSize: 18, color: '#2d5f3f' }}>
+                <span style={{ fontSize: 18, color: 'var(--accent)' }}>
                   {editingLocation.warehouse}-R{editingLocation.rack}-{editingLocation.letter}{editingLocation.shelf}
                 </span>
               </div>

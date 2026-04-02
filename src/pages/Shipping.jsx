@@ -408,13 +408,13 @@ export default function Shipping() {
   });
 
   const getStatusBadge = (order) => {
-    if (!order.shippingLabel) return { text: 'No Label', color: '#999', bg: '#f5f5f5' };
+    if (!order.shippingLabel) return { text: 'No Label', color: 'var(--text-muted)', bg: '#f5f5f5' };
     switch (order.shippingLabel.labelStatus) {
-      case 'purchased': return { text: '✅ Label Ready', color: '#2e7d32', bg: '#e8f5e9' };
-      case 'rates_ready': return { text: '💰 Rates Available', color: '#f57c00', bg: '#fff3e0' };
-      case 'error': return { text: '❌ Error', color: '#c62828', bg: '#ffebee' };
-      case 'failed': return { text: '⚠️ Failed', color: '#c62828', bg: '#ffebee' };
-      default: return { text: order.shippingLabel.labelStatus, color: '#666', bg: '#f5f5f5' };
+      case 'purchased': return { text: '✅ Label Ready', color: 'var(--text-badge-green)', bg: '#e8f5e9' };
+      case 'rates_ready': return { text: '💰 Rates Available', color: 'var(--text-badge-orange)', bg: '#fff3e0' };
+      case 'error': return { text: '❌ Error', color: 'var(--text-error)', bg: '#ffebee' };
+      case 'failed': return { text: '⚠️ Failed', color: 'var(--text-error)', bg: '#ffebee' };
+      default: return { text: order.shippingLabel.labelStatus, color: 'var(--text-muted)', bg: '#f5f5f5' };
     }
   };
 
@@ -524,7 +524,7 @@ export default function Shipping() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
         <div>
           <h2 style={{ margin: 0 }}>🚚 Shipping Center</h2>
-          <p style={{ margin: '5px 0 0', color: '#666', fontSize: 14 }}>
+          <p style={{ margin: '5px 0 0', color: 'var(--text-muted)', fontSize: 14 }}>
             {shippingEnabled
               ? `Auto-check daily at ${formatTime(checkHour, checkMinute)} EST`
               : 'Automated shipping is disabled'}
@@ -534,7 +534,7 @@ export default function Shipping() {
           <button
             onClick={generateEndOfDay}
             style={{
-              padding: '10px 20px', background: '#e65100', color: 'white', border: 'none',
+              padding: '10px 20px', background: '#e65100', color: 'var(--text-on-dark)', border: 'none',
               borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14
             }}
           >
@@ -544,7 +544,7 @@ export default function Shipping() {
             onClick={triggerManualCheck}
             disabled={processing.manual}
             style={{
-              padding: '10px 20px', background: '#1976d2', color: 'white', border: 'none',
+              padding: '10px 20px', background: '#1976d2', color: 'var(--text-on-dark)', border: 'none',
               borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14
             }}
           >
@@ -553,7 +553,7 @@ export default function Shipping() {
           <button
             onClick={() => setShowSettings(!showSettings)}
             style={{
-              padding: '10px 20px', background: showSettings ? '#666' : '#424242', color: 'white',
+              padding: '10px 20px', background: showSettings ? '#666' : '#424242', color: 'var(--text-on-dark)',
               border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14
             }}
           >
@@ -563,20 +563,20 @@ export default function Shipping() {
       </div>
 
       {/* Messages */}
-      {message && <div style={{ padding: '12px 16px', background: '#e8f5e9', color: '#2e7d32', borderRadius: 8, marginBottom: 15, fontWeight: 500 }}>{message}</div>}
-      {error && <div style={{ padding: '12px 16px', background: '#ffebee', color: '#c62828', borderRadius: 8, marginBottom: 15, fontWeight: 500 }}>{error}</div>}
+      {message && <div style={{ padding: '12px 16px', background: 'var(--bg-badge-green)', color: 'var(--text-badge-green)', borderRadius: 8, marginBottom: 15, fontWeight: 500 }}>{message}</div>}
+      {error && <div style={{ padding: '12px 16px', background: 'var(--bg-badge-red)', color: 'var(--text-error)', borderRadius: 8, marginBottom: 15, fontWeight: 500 }}>{error}</div>}
 
       {/* Settings Panel */}
       {showSettings && (
-        <div style={{ background: '#f8f9fa', border: '1px solid #dee2e6', borderRadius: 12, padding: 24, marginBottom: 20 }}>
+        <div style={{ background: 'var(--bg-surface-2)', border: '1px solid #dee2e6', borderRadius: 12, padding: 24, marginBottom: 20 }}>
           <h3 style={{ marginTop: 0 }}>⚙️ Shipping Settings</h3>
 
           {/* Shippo API Key */}
-          <div style={{ marginBottom: 20, padding: 16, background: 'white', borderRadius: 8, border: '2px solid #1976d2' }}>
-            <h4 style={{ margin: '0 0 10px', color: '#1976d2' }}>🔑 Shippo API Key</h4>
-            <p style={{ margin: '0 0 10px', color: '#666', fontSize: 13 }}>
+          <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '2px solid #1976d2' }}>
+            <h4 style={{ margin: '0 0 10px', color: 'var(--text-link)' }}>🔑 Shippo API Key</h4>
+            <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', fontSize: 13 }}>
               Each organization needs their own Shippo account. 
-              <a href="https://goshippo.com" target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2', marginLeft: 4 }}>
+              <a href="https://goshippo.com" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-link)', marginLeft: 4 }}>
                 Sign up free at goshippo.com →
               </a>
             </p>
@@ -587,14 +587,14 @@ export default function Shipping() {
                 onChange={e => setShippoApiKey(e.target.value)}
                 placeholder="shippo_live_xxxxxxxxxxxxxxxx"
                 style={{
-                  flex: 1, padding: '10px 12px', borderRadius: 6, border: '1px solid #ccc',
+                  flex: 1, padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)',
                   fontSize: 14, fontFamily: 'monospace'
                 }}
               />
               <button
                 onClick={() => setShowApiKey(!showApiKey)}
                 style={{
-                  padding: '10px 14px', background: '#f5f5f5', border: '1px solid #ccc',
+                  padding: '10px 14px', background: 'var(--bg-surface-2)', border: '1px solid var(--border)',
                   borderRadius: 6, cursor: 'pointer', fontSize: 13
                 }}
               >
@@ -615,58 +615,58 @@ export default function Shipping() {
                 style={{ width: 20, height: 20 }} />
               <span style={{ fontWeight: 600, fontSize: 16 }}>Enable Automated Shipping Labels</span>
             </label>
-            <p style={{ margin: '5px 0 0 30px', color: '#666', fontSize: 13 }}>
+            <p style={{ margin: '5px 0 0 30px', color: 'var(--text-muted)', fontSize: 13 }}>
               When enabled, the system will automatically check for packed orders and generate shipping labels at the scheduled time.
             </p>
           </div>
 
           {/* Schedule Time */}
-          <div style={{ marginBottom: 20, padding: 16, background: 'white', borderRadius: 8, border: '1px solid #e0e0e0' }}>
+          <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
             <h4 style={{ margin: '0 0 10px' }}>⏰ Daily Check Time (EST)</h4>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <select value={checkHour} onChange={e => setCheckHour(parseInt(e.target.value))}
-                style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc', fontSize: 15 }}>
+                style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 15 }}>
                 {Array.from({ length: 24 }, (_, i) => (
                   <option key={i} value={i}>{i === 0 ? '12' : i > 12 ? i - 12 : i}:00 {i >= 12 ? 'PM' : 'AM'}</option>
                 ))}
               </select>
-              <span style={{ color: '#666' }}>EST / Eastern Time</span>
+              <span style={{ color: 'var(--text-muted)' }}>EST / Eastern Time</span>
             </div>
-            <p style={{ margin: '8px 0 0', color: '#888', fontSize: 12 }}>
+            <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: 12 }}>
               The system checks for packed orders at this time every day. Orders with status "packed" that don't have labels yet will be processed.
             </p>
           </div>
 
           {/* Preferred Carrier */}
-          <div style={{ marginBottom: 20, padding: 16, background: 'white', borderRadius: 8, border: '1px solid #e0e0e0' }}>
+          <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
             <h4 style={{ margin: '0 0 10px' }}>📦 Preferred Carrier</h4>
             <select value={preferredCarrier} onChange={e => setPreferredCarrier(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid #ccc', fontSize: 15, minWidth: 200 }}>
+              style={{ padding: '8px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 15, minWidth: 200 }}>
               <option value="ups">UPS</option>
               <option value="usps">USPS</option>
               <option value="fedex">FedEx</option>
               <option value="dhl">DHL</option>
             </select>
-            <p style={{ margin: '8px 0 0', color: '#888', fontSize: 12 }}>
+            <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: 12 }}>
               When multiple rates are available, the system will prefer this carrier. Falls back to cheapest rate if unavailable.
             </p>
           </div>
 
           {/* Auto-Purchase */}
-          <div style={{ marginBottom: 20, padding: 16, background: 'white', borderRadius: 8, border: '1px solid #e0e0e0' }}>
+          <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={autoPurchase} onChange={e => setAutoPurchase(e.target.checked)}
                 style={{ width: 18, height: 18 }} />
               <span style={{ fontWeight: 600 }}>Auto-Purchase Labels</span>
             </label>
-            <p style={{ margin: '8px 0 0 28px', color: '#888', fontSize: 12 }}>
+            <p style={{ margin: '8px 0 0 28px', color: 'var(--text-muted)', fontSize: 12 }}>
               ⚠️ When enabled, labels will be automatically purchased using your preferred carrier during the scheduled check. 
               When disabled, the system will fetch rates and you'll need to manually select and purchase each label.
             </p>
           </div>
 
           {/* From Address */}
-          <div style={{ marginBottom: 20, padding: 16, background: 'white', borderRadius: 8, border: '1px solid #e0e0e0' }}>
+          <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
             <h4 style={{ margin: '0 0 15px' }}>📍 Ship From Address</h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {[
@@ -682,12 +682,12 @@ export default function Shipping() {
                 { key: 'email', label: 'Email', placeholder: 'shipping@aasurplus.com' },
               ].map(field => (
                 <div key={field.key}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>{field.label}</label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{field.label}</label>
                   <input
                     value={fromAddress[field.key]}
                     onChange={e => setFromAddress(prev => ({ ...prev, [field.key]: e.target.value }))}
                     placeholder={field.placeholder}
-                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc', fontSize: 14, boxSizing: 'border-box' }}
+                    style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 14, boxSizing: 'border-box' }}
                   />
                 </div>
               ))}
@@ -699,7 +699,7 @@ export default function Shipping() {
             onClick={saveSettings}
             disabled={savingSettings}
             style={{
-              padding: '12px 30px', background: '#4CAF50', color: 'white', border: 'none',
+              padding: '12px 30px', background: '#4CAF50', color: 'var(--text-on-dark)', border: 'none',
               borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 15
             }}
           >
@@ -712,18 +712,18 @@ export default function Shipping() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
         {[
           { label: 'Packed / Awaiting', count: orders.filter(o => o.status === 'packed' && !o.shippingLabel).length, color: '#ff9800', icon: '📦' },
-          { label: 'Labels Ready', count: orders.filter(o => o.shippingLabel?.labelStatus === 'purchased').length, color: '#4CAF50', icon: '✅' },
+          { label: 'Labels Ready', count: orders.filter(o => o.shippingLabel?.labelStatus === 'purchased').length, color: 'var(--text-success)', icon: '✅' },
           { label: 'Rates Pending', count: orders.filter(o => o.shippingLabel?.labelStatus === 'rates_ready').length, color: '#2196F3', icon: '💰' },
-          { label: 'Errors', count: orders.filter(o => o.shippingLabel?.labelStatus === 'error' || o.shippingLabel?.labelStatus === 'failed').length, color: '#f44336', icon: '❌' },
-          { label: 'Shipped', count: orders.filter(o => o.status === 'shipped').length, color: '#9c27b0', icon: '🚚' },
+          { label: 'Errors', count: orders.filter(o => o.shippingLabel?.labelStatus === 'error' || o.shippingLabel?.labelStatus === 'failed').length, color: 'var(--text-error)', icon: '❌' },
+          { label: 'Shipped', count: orders.filter(o => o.status === 'shipped').length, color: 'var(--text-badge-purple)', icon: '🚚' },
         ].map(card => (
           <div key={card.label} style={{
-            background: 'white', borderRadius: 10, padding: 16, border: `2px solid ${card.color}20`,
+            background: 'var(--bg-surface)', borderRadius: 10, padding: 16, border: `2px solid ${card.color}20`,
             textAlign: 'center'
           }}>
             <div style={{ fontSize: 28 }}>{card.icon}</div>
             <div style={{ fontSize: 24, fontWeight: 700, color: card.color }}>{card.count}</div>
-            <div style={{ fontSize: 12, color: '#666' }}>{card.label}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{card.label}</div>
           </div>
         ))}
       </div>
@@ -742,7 +742,7 @@ export default function Shipping() {
             key={f.value}
             onClick={() => setFilterStatus(f.value)}
             style={{
-              padding: '8px 16px', borderRadius: 20, border: '1px solid #ddd', cursor: 'pointer',
+              padding: '8px 16px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
               background: filterStatus === f.value ? '#1976d2' : 'white',
               color: filterStatus === f.value ? 'white' : '#333',
               fontWeight: filterStatus === f.value ? 600 : 400, fontSize: 13
@@ -759,7 +759,7 @@ export default function Shipping() {
           <button
             onClick={() => setHideTriwalls(prev => !prev)}
             style={{
-              padding: '6px 14px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer', fontSize: 12,
+              padding: '6px 14px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12,
               background: hideTriwalls ? '#fff8e1' : '#fff3e0',
               color: hideTriwalls ? '#f57f17' : '#e65100',
               fontWeight: 600,
@@ -777,19 +777,19 @@ export default function Shipping() {
       {selectedCount > 0 && (
         <div style={{
           display: 'flex', gap: 10, alignItems: 'center', padding: '12px 16px',
-          background: '#e3f2fd', borderRadius: 8, marginBottom: 15, flexWrap: 'wrap'
+          background: 'var(--bg-badge-blue)', borderRadius: 8, marginBottom: 15, flexWrap: 'wrap'
         }}>
           <span style={{ fontWeight: 600 }}>✅ {selectedCount} selected</span>
           <button onClick={batchGetRates} disabled={batchProcessing}
-            style={{ padding: '6px 16px', background: '#1976d2', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            style={{ padding: '6px 16px', background: '#1976d2', color: 'var(--text-on-dark)', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             {batchProcessing ? '⏳ Processing...' : '💰 Batch Get Rates'}
           </button>
           <button onClick={batchAutoPurchase} disabled={batchProcessing}
-            style={{ padding: '6px 16px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            style={{ padding: '6px 16px', background: '#4CAF50', color: 'var(--text-on-dark)', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             {batchProcessing ? '⏳ Processing...' : '⚡ Batch Auto-Purchase'}
           </button>
           <button onClick={clearSelection}
-            style={{ padding: '6px 16px', background: '#757575', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
+            style={{ padding: '6px 16px', background: '#757575', color: 'var(--text-on-dark)', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
             Clear
           </button>
         </div>
@@ -798,7 +798,7 @@ export default function Shipping() {
       {/* Batch Results */}
       {batchResults && (
         <div style={{
-          padding: '12px 16px', background: '#f1f8e9', borderRadius: 8, marginBottom: 15, fontSize: 13
+          padding: '12px 16px', background: 'var(--bg-badge-green)', borderRadius: 8, marginBottom: 15, fontSize: 13
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>
@@ -807,7 +807,7 @@ export default function Shipping() {
             <button onClick={() => setBatchResults(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16 }}>✕</button>
           </div>
           {batchResults.failed.length > 0 && (
-            <div style={{ marginTop: 8, color: '#c62828' }}>
+            <div style={{ marginTop: 8, color: 'var(--text-error)' }}>
               {batchResults.failed.map((f, i) => <div key={i}>❌ {f.orderId}: {f.error}</div>)}
             </div>
           )}
@@ -820,7 +820,7 @@ export default function Shipping() {
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)',
           display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         }}>
-          <div style={{ background: 'white', borderRadius: 12, padding: 24, maxWidth: 500, width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
+          <div style={{ background: 'var(--bg-surface)', borderRadius: 12, padding: 24, maxWidth: 500, width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <h3 style={{ margin: 0 }}>🌍 Customs Declaration</h3>
               <button onClick={() => setShowCustoms(null)} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer' }}>✕</button>
@@ -828,9 +828,9 @@ export default function Shipping() {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Destination Country</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Destination Country</label>
                 <select value={customsForm.destinationCountry} onChange={e => setCustomsForm(prev => ({ ...prev, destinationCountry: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
                   <option value="">Auto-detect from address</option>
                   <option value="CA">🇨🇦 Canada</option>
                   <option value="MX">🇲🇽 Mexico</option>
@@ -844,16 +844,16 @@ export default function Shipping() {
               </div>
 
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Contents Description</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Contents Description</label>
                 <input value={customsForm.description} onChange={e => setCustomsForm(prev => ({ ...prev, description: e.target.value }))}
                   placeholder="Military surplus tactical gear and equipment"
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc', boxSizing: 'border-box' }} />
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
               </div>
 
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Contents Type</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Contents Type</label>
                 <select value={customsForm.contentsType} onChange={e => setCustomsForm(prev => ({ ...prev, contentsType: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
                   <option value="MERCHANDISE">Merchandise</option>
                   <option value="GIFT">Gift</option>
                   <option value="SAMPLE">Sample</option>
@@ -863,27 +863,27 @@ export default function Shipping() {
               </div>
 
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>If Undeliverable</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>If Undeliverable</label>
                 <select value={customsForm.nonDeliveryOption} onChange={e => setCustomsForm(prev => ({ ...prev, nonDeliveryOption: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
                   <option value="RETURN">Return to Sender</option>
                   <option value="ABANDON">Abandon</option>
                 </select>
               </div>
 
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Incoterm (who pays duties)</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Incoterm (who pays duties)</label>
                 <select value={customsForm.incoterm} onChange={e => setCustomsForm(prev => ({ ...prev, incoterm: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
                   <option value="DDU">DDU - Buyer pays duties/taxes</option>
                   <option value="DDP">DDP - You pay duties/taxes</option>
                 </select>
               </div>
 
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>EEL/PFC (export compliance)</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>EEL/PFC (export compliance)</label>
                 <select value={customsForm.eelPfc} onChange={e => setCustomsForm(prev => ({ ...prev, eelPfc: e.target.value }))}
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc' }}>
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
                   <option value="NOEEI_30_37_a">NOEEI 30.37(a) - Under $2,500</option>
                   <option value="NOEEI_30_37_h">NOEEI 30.37(h) - Canada</option>
                   <option value="NOEEI_30_36">NOEEI 30.36 - Exempt</option>
@@ -892,21 +892,21 @@ export default function Shipping() {
               </div>
 
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#555' }}>Default HS Tariff Number (optional)</label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Default HS Tariff Number (optional)</label>
                 <input value={customsForm.defaultTariffNumber} onChange={e => setCustomsForm(prev => ({ ...prev, defaultTariffNumber: e.target.value }))}
                   placeholder="e.g. 6211.33"
-                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid #ccc', boxSizing: 'border-box' }} />
-                <p style={{ margin: '4px 0 0', fontSize: 11, color: '#888' }}>Harmonized System code for your goods. Military surplus clothing is typically 6211.33</p>
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+                <p style={{ margin: '4px 0 0', fontSize: 11, color: 'var(--text-muted)' }}>Harmonized System code for your goods. Military surplus clothing is typically 6211.33</p>
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
               <button onClick={saveCustomsInfo} disabled={savingCustoms}
-                style={{ flex: 1, padding: '10px 20px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+                style={{ flex: 1, padding: '10px 20px', background: '#4CAF50', color: 'var(--text-on-dark)', border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
                 {savingCustoms ? 'Saving...' : '💾 Save Customs Info'}
               </button>
               <button onClick={() => setShowCustoms(null)}
-                style={{ padding: '10px 20px', background: '#757575', color: 'white', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>
+                style={{ padding: '10px 20px', background: '#757575', color: 'var(--text-on-dark)', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14 }}>
                 Cancel
               </button>
             </div>
@@ -916,7 +916,7 @@ export default function Shipping() {
 
       {/* Orders Table */}
       {filteredOrders.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: '#999' }}>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
           <p style={{ fontSize: 48 }}>📭</p>
           <p>No orders match this filter</p>
         </div>
@@ -924,22 +924,22 @@ export default function Shipping() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
             <thead>
-              <tr style={{ background: '#f5f5f5', textAlign: 'left' }}>
-                <th style={{ padding: '12px 6px', borderBottom: '2px solid #ddd', width: 36 }}>
+              <tr style={{ background: 'var(--bg-surface-2)', textAlign: 'left' }}>
+                <th style={{ padding: '12px 6px', borderBottom: '2px solid var(--border)', width: 36 }}>
                   <input type="checkbox" onChange={e => e.target.checked ? selectAllVisible() : clearSelection()}
                     checked={selectedCount > 0 && selectedCount === filteredOrders.filter(o => o.status === 'packed' && !o.shippingLabel?.trackingNumber).length}
                     style={{ width: 16, height: 16 }} />
                 </th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>PO #</th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Customer</th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Ship To</th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Packages</th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Insurance</th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Bill To</th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Label Status</th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Tracking</th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Cost</th>
-                <th style={{ padding: '12px 10px', borderBottom: '2px solid #ddd' }}>Actions</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>PO #</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>Customer</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>Ship To</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>Packages</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>Insurance</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>Bill To</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>Label Status</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>Tracking</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>Cost</th>
+                <th style={{ padding: '12px 10px', borderBottom: '2px solid var(--border)' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -949,7 +949,7 @@ export default function Shipping() {
                 const intl = isLikelyInternational(order);
 
                 return (
-                  <tr key={order.id} style={{ borderBottom: '1px solid #eee', background: intl ? '#fffde7' : 'white' }}>
+                  <tr key={order.id} style={{ borderBottom: '1px solid var(--border)', background: intl ? '#fffde7' : 'white' }}>
                     <td style={{ padding: '12px 6px' }}>
                       {order.status === 'packed' && !label?.trackingNumber && (
                         <input type="checkbox" checked={!!selectedOrders[order.id]}
@@ -959,14 +959,14 @@ export default function Shipping() {
                     </td>
                     <td style={{ padding: '12px 10px', fontWeight: 600 }}>
                       {order.poNumber}
-                      {intl && <span style={{ marginLeft: 6, fontSize: 11, background: '#ff9800', color: 'white', padding: '1px 6px', borderRadius: 8 }}>🌍 INTL</span>}
+                      {intl && <span style={{ marginLeft: 6, fontSize: 11, background: '#ff9800', color: 'var(--text-on-dark)', padding: '1px 6px', borderRadius: 8 }}>🌍 INTL</span>}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
                       <div>{order.customerName}</div>
-                      {order.customerEmail && <div style={{ fontSize: 11, color: '#888' }}>{order.customerEmail}</div>}
+                      {order.customerEmail && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{order.customerEmail}</div>}
                     </td>
                     <td style={{ padding: '12px 10px', fontSize: 12, maxWidth: 200 }}>
-                      {order.shipToAddress || order.customerAddress || <span style={{ color: '#ccc' }}>No address</span>}
+                      {order.shipToAddress || order.customerAddress || <span style={{ color: 'var(--text-muted)' }}>No address</span>}
                     </td>
                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
                       {order.packingMode === 'triwalls'
@@ -981,16 +981,16 @@ export default function Shipping() {
                             <>
                               {Object.entries(boxInsuranceValues).sort((a,b) => parseInt(a[0]) - parseInt(b[0])).map(([boxNum, val]) => (
                                 <div key={boxNum} style={{ display: 'flex', gap: 3, alignItems: 'center', fontSize: 11 }}>
-                                  <span style={{ color: '#666', minWidth: 30 }}>Box {boxNum}</span>
+                                  <span style={{ color: 'var(--text-muted)', minWidth: 30 }}>Box {boxNum}</span>
                                   <span style={{ fontWeight: 600 }}>$</span>
                                   <input
                                     type="number" value={val}
                                     onChange={e => updateBoxInsurance(boxNum, e.target.value)}
-                                    style={{ width: 65, padding: '3px 5px', borderRadius: 4, border: '1px solid #ccc', fontSize: 11 }}
+                                    style={{ width: 65, padding: '3px 5px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 11 }}
                                   />
                                 </div>
                               ))}
-                              <div style={{ fontSize: 10, color: '#666', fontWeight: 600, borderTop: '1px solid #ddd', paddingTop: 3, marginTop: 2 }}>
+                              <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, borderTop: '1px solid var(--border)', paddingTop: 3, marginTop: 2 }}>
                                 Total: ${Object.values(boxInsuranceValues).reduce((s, v) => s + (parseFloat(v) || 0), 0).toFixed(0)}
                               </div>
                             </>
@@ -1000,18 +1000,18 @@ export default function Shipping() {
                               <input
                                 type="number" value={insuranceValue}
                                 onChange={e => setInsuranceValue(e.target.value)}
-                                style={{ width: 70, padding: '4px 6px', borderRadius: 4, border: '1px solid #ccc', fontSize: 12 }}
+                                style={{ width: 70, padding: '4px 6px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 12 }}
                                 autoFocus
                               />
                             </div>
                           )}
                           <div style={{ display: 'flex', gap: 3 }}>
                             <button onClick={() => saveInsurance(order.id)} disabled={savingInsurance}
-                              style={{ padding: '3px 8px', background: '#4CAF50', color: 'white', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
+                              style={{ padding: '3px 8px', background: '#4CAF50', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
                               ✓
                             </button>
                             <button onClick={() => setInsuranceEditing(null)}
-                              style={{ padding: '3px 6px', background: '#999', color: 'white', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
+                              style={{ padding: '3px 6px', background: '#999', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, fontSize: 11, cursor: 'pointer' }}>
                               ✕
                             </button>
                           </div>
@@ -1023,14 +1023,14 @@ export default function Shipping() {
                           title={order.status === 'packed' && !label?.trackingNumber ? 'Click to set insurance value' : ''}
                         >
                           {(order.insuranceAmount > 0 || label?.insuranceAmount > 0) ? (
-                            <span style={{ padding: '3px 8px', borderRadius: 8, background: '#e8f5e9', color: '#2e7d32', fontSize: 12, fontWeight: 600 }}>
+                            <span style={{ padding: '3px 8px', borderRadius: 8, background: 'var(--bg-badge-green)', color: 'var(--text-badge-green)', fontSize: 12, fontWeight: 600 }}>
                               🛡️ ${parseFloat(order.insuranceAmount || label?.insuranceAmount).toFixed(0)}
                             </span>
                           ) : (
                             order.status === 'packed' && !label?.trackingNumber ? (
-                              <span style={{ fontSize: 11, color: '#aaa', textDecoration: 'underline' }}>+ Add</span>
+                              <span style={{ fontSize: 11, color: 'var(--text-muted)', textDecoration: 'underline' }}>+ Add</span>
                             ) : (
-                              <span style={{ color: '#ccc', fontSize: 12 }}>—</span>
+                              <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
                             )
                           )}
                         </div>
@@ -1044,14 +1044,14 @@ export default function Shipping() {
                         if (custAcct) {
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
-                              <span style={{ padding: '2px 8px', borderRadius: 8, background: '#e3f2fd', color: '#1565c0', fontSize: 11, fontWeight: 700 }}>
+                              <span style={{ padding: '2px 8px', borderRadius: 8, background: 'var(--bg-badge-blue)', color: 'var(--text-badge-blue)', fontSize: 11, fontWeight: 700 }}>
                                 🏢 {custAcct}
                               </span>
-                              <span style={{ fontSize: 10, color: '#888' }}>Customer UPS</span>
+                              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Customer UPS</span>
                             </div>
                           );
                         }
-                        return <span style={{ color: '#ccc', fontSize: 12 }}>AA Acct</span>;
+                        return <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>AA Acct</span>;
                       })()}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
@@ -1063,7 +1063,7 @@ export default function Shipping() {
                       </span>
                       {label?.international && <div style={{ fontSize: 10, color: '#ff9800', marginTop: 2 }}>International • {label.destinationCountry}</div>}
                       {label?.labelError && (
-                        <div style={{ fontSize: 11, color: '#c62828', marginTop: 4 }}>{label.labelError}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-error)', marginTop: 4 }}>{label.labelError}</div>
                       )}
                     </td>
                     <td style={{ padding: '12px 10px', fontSize: 12 }}>
@@ -1072,10 +1072,10 @@ export default function Shipping() {
                           <div style={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 11 }}>{label.trackingNumber}</div>
                           {label.trackingUrl && (
                             <a href={label.trackingUrl} target="_blank" rel="noopener noreferrer"
-                              style={{ color: '#1976d2', fontSize: 11 }}>Track (Master) →</a>
+                              style={{ color: 'var(--text-link)', fontSize: 11 }}>Track (Master) →</a>
                           )}
                           {label.allLabels && label.allLabels.length > 1 && (
-                            <div style={{ marginTop: 4, fontSize: 10, color: '#666' }}>
+                            <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-muted)' }}>
                               {label.allLabels.map((lbl, idx) => (
                                 <div key={idx}>Box {idx + 1}: {lbl.trackingNumber}</div>
                               ))}
@@ -1083,19 +1083,19 @@ export default function Shipping() {
                           )}
                         </div>
                       ) : (
-                        <span style={{ color: '#ccc' }}>—</span>
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
                       )}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
                       {label?.selectedRate ? (
                         <div>
                           <div style={{ fontWeight: 600 }}>${label.selectedRate.amount}</div>
-                          <div style={{ fontSize: 11, color: '#666' }}>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                             {label.selectedRate.provider} {label.selectedRate.servicelevel}
                           </div>
                         </div>
                       ) : (
-                        <span style={{ color: '#ccc' }}>—</span>
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
                       )}
                     </td>
                     <td style={{ padding: '12px 10px' }}>
@@ -1106,7 +1106,7 @@ export default function Shipping() {
                             onClick={() => getRates(order.id)}
                             disabled={processing[order.id]}
                             style={{
-                              padding: '6px 12px', background: '#1976d2', color: 'white', border: 'none',
+                              padding: '6px 12px', background: '#1976d2', color: 'var(--text-on-dark)', border: 'none',
                               borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                             }}
                           >
@@ -1120,7 +1120,7 @@ export default function Shipping() {
                             <button
                               onClick={() => setShowRates(showRates === order.id ? null : order.id)}
                               style={{
-                                padding: '6px 12px', background: '#ff9800', color: 'white', border: 'none',
+                                padding: '6px 12px', background: '#ff9800', color: 'var(--text-on-dark)', border: 'none',
                                 borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                               }}
                             >
@@ -1130,7 +1130,7 @@ export default function Shipping() {
                               onClick={() => getRates(order.id)}
                               disabled={processing[order.id]}
                               style={{
-                                padding: '6px 12px', background: '#1976d2', color: 'white', border: 'none',
+                                padding: '6px 12px', background: '#1976d2', color: 'var(--text-on-dark)', border: 'none',
                                 borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                               }}
                             >
@@ -1163,7 +1163,7 @@ export default function Shipping() {
                                     }
                                   }}
                                   style={{
-                                    padding: '6px 12px', background: '#2e7d32', color: 'white', border: 'none',
+                                    padding: '6px 12px', background: '#2e7d32', color: 'var(--text-on-dark)', border: 'none',
                                     borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap'
                                   }}
                                 >
@@ -1176,7 +1176,7 @@ export default function Shipping() {
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       style={{
-                                        padding: '4px 8px', background: '#66bb6a', color: 'white', border: 'none',
+                                        padding: '4px 8px', background: '#66bb6a', color: 'var(--text-on-dark)', border: 'none',
                                         borderRadius: 4, cursor: 'pointer', fontSize: 10, fontWeight: 600, textDecoration: 'none',
                                         display: 'inline-block', whiteSpace: 'nowrap'
                                       }}
@@ -1192,7 +1192,7 @@ export default function Shipping() {
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 style={{
-                                  padding: '6px 12px', background: '#4CAF50', color: 'white', border: 'none',
+                                  padding: '6px 12px', background: '#4CAF50', color: 'var(--text-on-dark)', border: 'none',
                                   borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, textDecoration: 'none',
                                   display: 'inline-block', whiteSpace: 'nowrap'
                                 }}
@@ -1204,7 +1204,7 @@ export default function Shipping() {
                               <button
                                 onClick={() => markShipped(order.id)}
                                 style={{
-                                  padding: '6px 12px', background: '#9c27b0', color: 'white', border: 'none',
+                                  padding: '6px 12px', background: '#9c27b0', color: 'var(--text-on-dark)', border: 'none',
                                   borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                                 }}
                               >
@@ -1220,7 +1220,7 @@ export default function Shipping() {
                             onClick={() => getRates(order.id)}
                             disabled={processing[order.id]}
                             style={{
-                              padding: '6px 12px', background: '#f44336', color: 'white', border: 'none',
+                              padding: '6px 12px', background: '#f44336', color: 'var(--text-on-dark)', border: 'none',
                               borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                             }}
                           >
@@ -1235,7 +1235,7 @@ export default function Shipping() {
                             disabled={processing[order.id]}
                             title="Auto-select best rate and purchase label"
                             style={{
-                              padding: '6px 12px', background: '#607d8b', color: 'white', border: 'none',
+                              padding: '6px 12px', background: '#607d8b', color: 'var(--text-on-dark)', border: 'none',
                               borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                             }}
                           >
@@ -1249,7 +1249,7 @@ export default function Shipping() {
                             onClick={() => openCustomsModal(order)}
                             title="Edit customs declaration for international shipment"
                             style={{
-                              padding: '6px 12px', background: order.customsInfo ? '#43a047' : '#ff9800', color: 'white', border: 'none',
+                              padding: '6px 12px', background: order.customsInfo ? '#43a047' : '#ff9800', color: 'var(--text-on-dark)', border: 'none',
                               borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                             }}
                           >
@@ -1301,38 +1301,38 @@ export default function Shipping() {
 
             return (
               <div style={{
-                background: '#fafafa', border: '2px solid #1976d2', borderRadius: 12,
+                background: 'var(--bg-surface-2)', border: '2px solid #1976d2', borderRadius: 12,
                 padding: 20, marginTop: 10, marginBottom: 10
               }}>
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 10 }}>
                   <div>
                     <h4 style={{ margin: 0 }}>💰 Shipping Rates for {order.poNumber}</h4>
-                    <span style={{ fontSize: 12, color: '#666' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {allRates.length} rate{allRates.length !== 1 ? 's' : ''} from {carriers.length} carrier{carriers.length !== 1 ? 's' : ''}
                       {' • '}{order.customerName} → {order.shipToAddress || order.customerAddress || 'N/A'}
                     </span>
                     {hasCustomerRates && order.thirdPartyBilling?.account && (
                       <div style={{ marginTop: 4, display: 'flex', gap: 8 }}>
-                        <span style={{ padding: '2px 8px', borderRadius: 8, background: '#e8f5e9', color: '#2e7d32', fontSize: 11, fontWeight: 600 }}>🏢 AA Account rates included</span>
-                        <span style={{ padding: '2px 8px', borderRadius: 8, background: '#e3f2fd', color: '#1565c0', fontSize: 11, fontWeight: 600 }}>📦 Customer UPS ({order.thirdPartyBilling.account}) rates included</span>
+                        <span style={{ padding: '2px 8px', borderRadius: 8, background: 'var(--bg-badge-green)', color: 'var(--text-badge-green)', fontSize: 11, fontWeight: 600 }}>🏢 AA Account rates included</span>
+                        <span style={{ padding: '2px 8px', borderRadius: 8, background: 'var(--bg-badge-blue)', color: 'var(--text-badge-blue)', fontSize: 11, fontWeight: 600 }}>📦 Customer UPS ({order.thirdPartyBilling.account}) rates included</span>
                       </div>
                     )}
                   </div>
                   <button onClick={() => { setShowRates(null); setRateFilterCarrier('all'); setRateFilterBilling('all'); }} style={{
-                    background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#999', padding: '0 4px'
+                    background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', padding: '0 4px'
                   }}>✕</button>
                 </div>
 
                 {/* Quick Stats */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 15, flexWrap: 'wrap' }}>
                   {cheapest && (
-                    <div style={{ padding: '8px 14px', background: '#e8f5e9', borderRadius: 8, fontSize: 13 }}>
+                    <div style={{ padding: '8px 14px', background: 'var(--bg-badge-green)', borderRadius: 8, fontSize: 13 }}>
                       💚 Cheapest: <strong>${cheapest.amount}</strong> ({cheapest.provider} {cheapest.servicelevel})
                     </div>
                   )}
                   {fastest && fastest.rateId !== cheapest?.rateId && (
-                    <div style={{ padding: '8px 14px', background: '#e3f2fd', borderRadius: 8, fontSize: 13 }}>
+                    <div style={{ padding: '8px 14px', background: 'var(--bg-badge-blue)', borderRadius: 8, fontSize: 13 }}>
                       ⚡ Fastest: <strong>{fastest.estimatedDays} day{fastest.estimatedDays !== 1 ? 's' : ''}</strong> — ${fastest.amount} ({fastest.provider} {fastest.servicelevel})
                     </div>
                   )}
@@ -1342,7 +1342,7 @@ export default function Shipping() {
                 <div style={{ display: 'flex', gap: 10, marginBottom: 15, flexWrap: 'wrap', alignItems: 'center' }}>
                   {/* Sort */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Sort:</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Sort:</span>
                     {[
                       { value: 'cheapest', label: '💲 Cheapest' },
                       { value: 'expensive', label: '💎 Most Expensive' },
@@ -1353,7 +1353,7 @@ export default function Shipping() {
                         key={s.value}
                         onClick={() => setRateSortBy(s.value)}
                         style={{
-                          padding: '5px 12px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer',
+                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
                           background: rateSortBy === s.value ? '#1976d2' : 'white',
                           color: rateSortBy === s.value ? 'white' : '#333',
                           fontWeight: rateSortBy === s.value ? 600 : 400, fontSize: 12
@@ -1366,11 +1366,11 @@ export default function Shipping() {
 
                   {/* Carrier Filter */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10 }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Carrier:</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Carrier:</span>
                     <button
                       onClick={() => setRateFilterCarrier('all')}
                       style={{
-                        padding: '5px 12px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer',
+                        padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
                         background: rateFilterCarrier === 'all' ? '#424242' : 'white',
                         color: rateFilterCarrier === 'all' ? 'white' : '#333',
                         fontWeight: rateFilterCarrier === 'all' ? 600 : 400, fontSize: 12
@@ -1385,7 +1385,7 @@ export default function Shipping() {
                           key={c}
                           onClick={() => setRateFilterCarrier(rateFilterCarrier === c.toLowerCase() ? 'all' : c.toLowerCase())}
                           style={{
-                            padding: '5px 12px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer',
+                            padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
                             background: rateFilterCarrier === c.toLowerCase() ? '#424242' : 'white',
                             color: rateFilterCarrier === c.toLowerCase() ? 'white' : '#333',
                             fontWeight: rateFilterCarrier === c.toLowerCase() ? 600 : 400, fontSize: 12
@@ -1400,14 +1400,14 @@ export default function Shipping() {
                   {/* Bill To Filter - only show if customer rates exist */}
                   {hasCustomerRates && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 10 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Bill To:</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>Bill To:</span>
                       {[
                         { value: 'all', label: 'All' },
                         { value: 'AA', label: '🏢 AA Account' },
                         { value: 'Customer', label: `📦 Customer (${order.thirdPartyBilling?.account || ''})` },
                       ].map(b => (
                         <button key={b.value} onClick={() => setRateFilterBilling(b.value)} style={{
-                          padding: '5px 12px', borderRadius: 16, border: '1px solid #ddd', cursor: 'pointer',
+                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
                           background: rateFilterBilling === b.value ? '#1565c0' : 'white',
                           color: rateFilterBilling === b.value ? 'white' : '#333',
                           fontWeight: rateFilterBilling === b.value ? 600 : 400, fontSize: 12
@@ -1419,11 +1419,11 @@ export default function Shipping() {
                   {/* View Toggle */}
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
                     <button onClick={() => setRateViewMode('table')} style={{
-                      padding: '5px 10px', border: '1px solid #ddd', borderRadius: '6px 0 0 6px', cursor: 'pointer',
+                      padding: '5px 10px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: '6px 0 0 6px', cursor: 'pointer',
                       background: rateViewMode === 'table' ? '#424242' : 'white', color: rateViewMode === 'table' ? 'white' : '#333', fontSize: 12
                     }}>☰ Table</button>
                     <button onClick={() => setRateViewMode('cards')} style={{
-                      padding: '5px 10px', border: '1px solid #ddd', borderRadius: '0 6px 6px 0', cursor: 'pointer',
+                      padding: '5px 10px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: '0 6px 6px 0', cursor: 'pointer',
                       background: rateViewMode === 'cards' ? '#424242' : 'white', color: rateViewMode === 'cards' ? 'white' : '#333', fontSize: 12
                     }}>▦ Cards</button>
                   </div>
@@ -1434,7 +1434,7 @@ export default function Shipping() {
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                       <thead>
-                        <tr style={{ background: '#e8eaf6', textAlign: 'left' }}>
+                        <tr style={{ background: 'var(--bg-table-head)', textAlign: 'left' }}>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}>Carrier</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9' }}>Service</th>
                           <th style={{ padding: '10px 12px', borderBottom: '2px solid #c5cae9', textAlign: 'right' }}>Price</th>
@@ -1449,29 +1449,29 @@ export default function Shipping() {
                           const isFastest = rate.rateId === fastest?.rateId && !isCheapest;
                           return (
                             <tr key={rate.rateId} style={{
-                              borderBottom: '1px solid #eee',
+                              borderBottom: '1px solid var(--border)',
                               background: isCheapest ? '#f1f8e9' : isFastest ? '#e8f4fd' : idx % 2 === 0 ? 'white' : '#fafafa',
                             }}>
                               <td style={{ padding: '10px 12px', fontWeight: 600 }}>{rate.provider}</td>
                               <td style={{ padding: '10px 12px' }}>{rate.servicelevel}</td>
-                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontSize: 15, color: '#1976d2' }}>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontSize: 15, color: 'var(--text-link)' }}>
                                 ${rate.amount}
                               </td>
                               <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                 {rate.estimatedDays
                                   ? `${rate.estimatedDays} day${rate.estimatedDays !== 1 ? 's' : ''}`
-                                  : <span style={{ color: '#ccc' }}>—</span>
+                                  : <span style={{ color: 'var(--text-muted)' }}>—</span>
                                 }
                               </td>
                               <td style={{ padding: '10px 12px' }}>
-                                {isCheapest && <span style={{ background: '#4CAF50', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 }}>CHEAPEST</span>}
-                                {isFastest && <span style={{ background: '#2196F3', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 }}>FASTEST</span>}
+                                {isCheapest && <span style={{ background: '#4CAF50', color: 'var(--text-on-dark)', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 }}>CHEAPEST</span>}
+                                {isFastest && <span style={{ background: '#2196F3', color: 'var(--text-on-dark)', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600 }}>FASTEST</span>}
                               </td>
                               <td style={{ padding: '10px 12px' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                                   {rate.billedTo === 'Customer'
-                                    ? <span style={{ padding: '2px 7px', borderRadius: 8, background: '#e3f2fd', color: '#1565c0', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>📦 Customer UPS</span>
-                                    : <span style={{ padding: '2px 7px', borderRadius: 8, background: '#f3e5f5', color: '#6a1b9a', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>🏢 AA Account</span>
+                                    ? <span style={{ padding: '2px 7px', borderRadius: 8, background: 'var(--bg-badge-blue)', color: 'var(--text-badge-blue)', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>📦 Customer UPS</span>
+                                    : <span style={{ padding: '2px 7px', borderRadius: 8, background: 'var(--bg-badge-purple)', color: '#6a1b9a', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>🏢 AA Account</span>
                                   }
                                   {rate.insuranceProvider && rate.insuranceProvider !== 'none' && (
                                     <span style={{ padding: '2px 7px', borderRadius: 8, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
@@ -1486,7 +1486,7 @@ export default function Shipping() {
                                   onClick={() => purchaseRate(order.id, rate.rateId)}
                                   disabled={processing[order.id]}
                                   style={{
-                                    padding: '6px 16px', background: '#4CAF50', color: 'white',
+                                    padding: '6px 16px', background: '#4CAF50', color: 'var(--text-on-dark)',
                                     border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600
                                   }}
                                 >
@@ -1499,7 +1499,7 @@ export default function Shipping() {
                       </tbody>
                     </table>
                     {sortedRates.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: 20, color: '#999' }}>No rates match this filter</div>
+                      <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)' }}>No rates match this filter</div>
                     )}
                   </div>
                 ) : (
@@ -1512,20 +1512,20 @@ export default function Shipping() {
                         <div
                           key={rate.rateId}
                           style={{
-                            background: 'white', borderRadius: 8, padding: 14,
+                            background: 'var(--bg-surface)', borderRadius: 8, padding: 14,
                             border: isCheapest ? '2px solid #4CAF50' : isFastest ? '2px solid #2196F3' : '1px solid #ddd',
                             position: 'relative'
                           }}
                         >
-                          {isCheapest && <div style={{ position: 'absolute', top: -8, right: 10, background: '#4CAF50', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>CHEAPEST</div>}
-                          {isFastest && <div style={{ position: 'absolute', top: -8, right: 10, background: '#2196F3', color: 'white', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>FASTEST</div>}
-                          <div style={{ fontWeight: 700, fontSize: 20, color: '#1976d2' }}>${rate.amount}</div>
+                          {isCheapest && <div style={{ position: 'absolute', top: -8, right: 10, background: '#4CAF50', color: 'var(--text-on-dark)', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>CHEAPEST</div>}
+                          {isFastest && <div style={{ position: 'absolute', top: -8, right: 10, background: '#2196F3', color: 'var(--text-on-dark)', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>FASTEST</div>}
+                          <div style={{ fontWeight: 700, fontSize: 20, color: 'var(--text-link)' }}>${rate.amount}</div>
                           <div style={{ fontWeight: 600, marginTop: 4 }}>{rate.provider}</div>
-                          <div style={{ fontSize: 12, color: '#666' }}>{rate.servicelevel}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{rate.servicelevel}</div>
                           <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                             {rate.billedTo === 'Customer'
-                              ? <span style={{ padding: '2px 7px', borderRadius: 8, background: '#e3f2fd', color: '#1565c0', fontSize: 10, fontWeight: 600 }}>📦 Customer UPS</span>
-                              : <span style={{ padding: '2px 7px', borderRadius: 8, background: '#f3e5f5', color: '#6a1b9a', fontSize: 10, fontWeight: 600 }}>🏢 AA Account</span>
+                              ? <span style={{ padding: '2px 7px', borderRadius: 8, background: 'var(--bg-badge-blue)', color: 'var(--text-badge-blue)', fontSize: 10, fontWeight: 600 }}>📦 Customer UPS</span>
+                              : <span style={{ padding: '2px 7px', borderRadius: 8, background: 'var(--bg-badge-purple)', color: '#6a1b9a', fontSize: 10, fontWeight: 600 }}>🏢 AA Account</span>
                             }
                             {rate.insuranceProvider && rate.insuranceProvider !== 'none' && (
                               <span style={{ padding: '2px 7px', borderRadius: 8, fontSize: 10, fontWeight: 600,
@@ -1535,7 +1535,7 @@ export default function Shipping() {
                             )}
                           </div>
                           {rate.estimatedDays && (
-                            <div style={{ fontSize: 12, color: '#888', marginTop: 4 }}>
+                            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
                               Est. {rate.estimatedDays} day{rate.estimatedDays !== 1 ? 's' : ''}
                             </div>
                           )}
@@ -1543,7 +1543,7 @@ export default function Shipping() {
                             onClick={() => purchaseRate(order.id, rate.rateId)}
                             disabled={processing[order.id]}
                             style={{
-                              marginTop: 10, padding: '6px 14px', background: '#4CAF50', color: 'white',
+                              marginTop: 10, padding: '6px 14px', background: '#4CAF50', color: 'var(--text-on-dark)',
                               border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
                               width: '100%'
                             }}
@@ -1554,7 +1554,7 @@ export default function Shipping() {
                       );
                     })}
                     {sortedRates.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: 20, color: '#999', gridColumn: '1 / -1' }}>No rates match this filter</div>
+                      <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', gridColumn: '1 / -1' }}>No rates match this filter</div>
                     )}
                   </div>
                 )}

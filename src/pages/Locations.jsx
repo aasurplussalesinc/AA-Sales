@@ -954,27 +954,33 @@ W2,2,C,3`;
           >
             {/* Header */}
             <div style={{ 
-              background: '#4a5d23',
-              color: 'var(--text-on-dark)',
-              padding: '12px 15px',
+              background: 'var(--accent)',
+              color: 'var(--text-on-accent)',
+              padding: '14px 18px',
               display: 'flex',
               justifyContent: 'space-between',
-              alignItems: 'center'
+              alignItems: 'center',
+              borderRadius: '12px 12px 0 0'
             }}>
-              <h3 style={{ margin: 0, fontSize: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>
                 📍 {formatLocation(viewingLocation)}
               </h3>
               <button 
                 onClick={() => setViewingLocation(null)}
                 style={{ 
-                  background: 'none', 
+                  background: 'rgba(0,0,0,0.2)', 
                   border: 'none', 
-                  color: 'var(--text-on-dark)', 
-                  fontSize: 20, 
-                  cursor: 'pointer' 
+                  color: 'var(--text-on-accent)', 
+                  fontSize: 18,
+                  width: 32, height: 32,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 700,
+                  lineHeight: 1
                 }}
               >
-                ×
+                ✕
               </button>
             </div>
             
@@ -1030,10 +1036,13 @@ W2,2,C,3`;
                 style={{ 
                   width: '100%',
                   padding: '10px',
-                  border: '1px solid var(--border)',
+                  border: 'none',
                   borderRadius: 6,
-                  background: 'var(--bg-surface)',
-                  cursor: 'pointer'
+                  background: 'var(--btn-primary-bg)',
+                  color: 'var(--btn-primary-color)',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  fontSize: 14
                 }}
               >
                 Close

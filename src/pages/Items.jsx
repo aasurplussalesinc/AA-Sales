@@ -1858,7 +1858,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           </thead>
           <tbody>
             {paginatedItems.map(item => (
-              <tr key={item.id} style={{ background: selectedItems.includes(item.id) ? '#e3f2fd' : 'transparent' }}>
+              <tr key={item.id} style={{ background: selectedItems.includes(item.id) ? 'var(--bg-selected)' : 'transparent' }}>
                 <td>
                   <input
                     type="checkbox"
@@ -1965,10 +1965,14 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       style={{ 
                         width: '60px',
                         background: (item.stock || 0) <= (item.lowStockThreshold || 0) && (item.lowStockThreshold || 0) > 0 
-                          ? '#ffebee' 
+                          ? 'var(--bg-badge-red)' 
                           : (item.stock || 0) <= (item.reorderPoint || 0) && (item.reorderPoint || 0) > 0
-                            ? '#fff3e0'
-                            : 'white'
+                            ? 'var(--bg-badge-orange)'
+                            : 'var(--bg-input)',
+                        color: 'var(--text-primary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 4,
+                        padding: '4px 6px'
                       }}
                     />
                     <button

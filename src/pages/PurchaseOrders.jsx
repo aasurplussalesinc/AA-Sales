@@ -1685,43 +1685,79 @@ ${labelsHtml}
                 </div>
               )}
 
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                {canEdit && <button className="btn" onClick={() => openEditOrder(selectedOrder)} style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}>✏️ Edit</button>}
-                <button className="btn" onClick={() => printPO(selectedOrder, 'estimate')} style={{ background: '#1976d2', color: 'var(--text-on-dark)' }}>📋 Estimate</button>
-                <button className="btn" onClick={() => printPO(selectedOrder, 'invoice')} style={{ background: '#388e3c', color: 'var(--text-on-dark)' }}>💵 Invoice</button>
-                <button className="btn" onClick={() => emailInvoice(selectedOrder)} style={{ background: '#7b1fa2', color: 'var(--text-on-dark)' }}>📧 Email</button>
-                {canEdit && (!selectedOrder.status || selectedOrder.status === 'draft') && <button className="btn btn-primary" onClick={() => confirmAndCreatePickList(selectedOrder)}>✓ Confirm & Pick List</button>}
-                {pickLists.find(pl => pl.purchaseOrderId === selectedOrder.id) && <button className="btn" onClick={() => printPickList(selectedOrder)} style={{ background: 'var(--btn-primary-bg)', color: 'var(--text-on-dark)' }}>📋 Print Pick List</button>}
-                {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.status === 'packing') && <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}>{selectedOrder.status === 'packing' ? '📦 Continue Packing' : '📦 Pack Order'}</button>}
-                {selectedOrder.packingComplete && (
-                  <>
-                    <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}>📦 Edit Packing</button>
-                    <button className="btn" onClick={() => printClientPackingList(selectedOrder)} style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>🖨️ Client Packing List</button>
-                    <button className="btn" onClick={() => printInternalPackingList(selectedOrder)} style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}>📊 Internal Analysis</button>
-                  </>
-                )}
-                {selectedOrder.packingComplete && selectedOrder.triwalls && selectedOrder.triwalls.length > 0 && (
-                  <div style={{ display: 'flex', gap: 5 }}>
-                    <button className="btn" onClick={() => printAllShippingLabels(selectedOrder)} style={{ background: '#795548', color: 'var(--text-on-dark)' }}>
-                      🏷️ Print All Labels ({selectedOrder.triwalls.length})
+              {/* ── ACTION BUTTONS — grouped by purpose ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+                {/* Row 1: Documents */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, alignSelf: 'center', minWidth: 70 }}>Documents</span>
+                  <button className="btn" onClick={() => printPO(selectedOrder, 'estimate')} style={{ background: '#1976d2', color: 'white', fontSize: 12 }}>📋 Estimate</button>
+                  <button className="btn" onClick={() => printPO(selectedOrder, 'invoice')} style={{ background: '#388e3c', color: 'white', fontSize: 12 }}>💵 Invoice</button>
+                  <button className="btn" onClick={() => emailInvoice(selectedOrder)} style={{ background: '#7b1fa2', color: 'white', fontSize: 12 }}>📧 Email</button>
+                  {pickLists.find(pl => pl.purchaseOrderId === selectedOrder.id) && (
+                    <button className="btn" onClick={() => printPickList(selectedOrder)} style={{ background: 'var(--btn-primary-bg)', color: 'var(--btn-primary-color)', fontSize: 12 }}>📋 Pick List</button>
+                  )}
+                  {selectedOrder.packingComplete && (
+                    <>
+                      <button className="btn" onClick={() => printClientPackingList(selectedOrder)} style={{ background: '#17a2b8', color: 'white', fontSize: 12 }}>🖨️ Client Pack List</button>
+                      <button className="btn" onClick={() => printInternalPackingList(selectedOrder)} style={{ background: '#546e7a', color: 'white', fontSize: 12 }}>📊 Internal Analysis</button>
+                    </>
+                  )}
+                  {selectedOrder.packingComplete && selectedOrder.triwalls && selectedOrder.triwalls.length > 0 && (
+                    <button className="btn" onClick={() => printAllShippingLabels(selectedOrder)} style={{ background: '#795548', color: 'white', fontSize: 12 }}>
+                      🏷️ Labels ({selectedOrder.triwalls.length})
                     </button>
-                    {selectedOrder.triwalls.length > 1 && (
-                      <select
-                        onChange={e => { if (e.target.value) { printShippingLabel(selectedOrder, parseInt(e.target.value)); e.target.value = ''; } }}
-                        style={{ padding: '8px 12px', border: '1px solid #795548', borderRadius: 4, background: 'var(--bg-surface)', cursor: 'pointer' }}
-                      >
-                        <option value="">Print Single...</option>
-                        {selectedOrder.triwalls.map((tw, idx) => (
-                          <option key={idx} value={idx}>Label {idx + 1} of {selectedOrder.triwalls.length}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                )}
-                {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.packingComplete) && <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: '#4CAF50', color: 'var(--text-on-dark)' }}>🚚 Mark Shipped</button>}
-                {canEdit && selectedOrder.status === 'shipped' && <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#4CAF50', color: 'var(--text-on-dark)' }}>💰 Mark Paid</button>}
-                {canEdit && <button className="btn" onClick={() => deleteOrder(selectedOrder)} style={{ background: '#f44336', color: 'var(--text-on-dark)' }}>🗑️ Delete</button>}
-                <button className="btn" onClick={closeOrderModal} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--text-on-dark)', marginLeft: 'auto' }}>Close</button>
+                  )}
+                </div>
+
+                {/* Row 2: Order Actions */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 10, borderBottom: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 0.5, alignSelf: 'center', minWidth: 70 }}>Actions</span>
+                  {canEdit && (
+                    <button className="btn" onClick={() => openEditOrder(selectedOrder)} style={{ background: '#ff9800', color: 'white', fontSize: 12 }}>✏️ Edit</button>
+                  )}
+                  {canEdit && (!selectedOrder.status || selectedOrder.status === 'draft') && (
+                    <button className="btn" onClick={() => confirmAndCreatePickList(selectedOrder)} style={{ background: 'var(--btn-primary-bg)', color: 'var(--btn-primary-color)', fontSize: 12 }}>✓ Confirm & Pick</button>
+                  )}
+                  {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.status === 'packing') && (
+                    <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white', fontSize: 12 }}>
+                      {selectedOrder.status === 'packing' ? '📦 Continue Packing' : '📦 Pack Order'}
+                    </button>
+                  )}
+                  {selectedOrder.packingComplete && canEdit && (
+                    <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white', fontSize: 12 }}>📦 Edit Packing</button>
+                  )}
+                  {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.packingComplete) && (
+                    <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: '#2e7d32', color: 'white', fontSize: 12 }}>🚚 Mark Shipped</button>
+                  )}
+                  {canEdit && selectedOrder.status === 'shipped' && (
+                    <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#1565c0', color: 'white', fontSize: 12 }}>💰 Mark Paid</button>
+                  )}
+                </div>
+
+                {/* Row 3: Danger + Close */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {canEdit && (
+                    <button className="btn" onClick={() => deleteOrder(selectedOrder)} style={{ background: '#f44336', color: 'white', fontSize: 12 }}>🗑️ Delete</button>
+                  )}
+                  <button
+                    onClick={closeOrderModal}
+                    style={{
+                      marginLeft: 'auto',
+                      padding: '9px 28px',
+                      background: 'var(--btn-primary-bg)',
+                      color: 'var(--btn-primary-color)',
+                      border: 'none',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      fontSize: 14,
+                      letterSpacing: 0.3
+                    }}
+                  >
+                    ✕ Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>

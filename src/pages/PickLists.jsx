@@ -442,6 +442,7 @@ export default function PickLists() {
                   <td>
                     <strong>${item.itemName}</strong>
                     <div class="sku">${item.partNumber || ''}</div>
+                    ${item.notes ? `<div style="font-size:9px;color:#795548;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}
                   </td>
                   <td class="text-center"><strong>${item.location || '-'}</strong></td>
                   <td class="text-center"><strong>${item.requestedQty}</strong></td>
@@ -502,7 +503,8 @@ export default function PickLists() {
           requestedQty: parseInt(poItem.quantity) || 0,
           itemName: poItem.itemName,
           partNumber: poItem.partNumber,
-          unitPrice: poItem.unitPrice
+          unitPrice: poItem.unitPrice,
+          notes: poItem.notes || existingItem.notes || ''
         };
       } else {
         // New item from PO - find its location
@@ -516,7 +518,8 @@ export default function PickLists() {
           requestedQty: parseInt(poItem.quantity) || 0,
           pickedQty: 0,
           location: itemLocation?.code || '-',
-          unitPrice: poItem.unitPrice
+          unitPrice: poItem.unitPrice,
+          notes: poItem.notes || ''
         };
       }
     });
@@ -1385,6 +1388,11 @@ export default function PickLists() {
                       <div style={{ flex: 1 }}>
                         <strong>{item.itemName}</strong>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.partNumber}</div>
+                        {item.notes && (
+                          <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3, fontStyle: 'italic', background: 'var(--bg-badge-orange)', padding: '2px 7px', borderRadius: 4, display: 'inline-block' }}>
+                            📝 {item.notes}
+                          </div>
+                        )}
                       </div>
                       <input
                         type="number"

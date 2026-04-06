@@ -1128,9 +1128,11 @@ export const OrgDB = {
         itemId: item.itemId,
         itemName: item.itemName,
         partNumber: item.partNumber,
+        lineId: item.lineId,
         requestedQty: item.quantity,
         pickedQty: 0,
-        location: item.location || ''
+        location: item.location || '',
+        notes: item.notes || ''
       }))
     };
     

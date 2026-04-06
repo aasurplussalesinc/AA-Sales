@@ -828,7 +828,7 @@ export default function PurchaseOrders() {
         const wt = triwall.weight ? `${triwall.weight} lbs` : '';
         const dimsDisplay = dims && wt ? `${wt} | ${dims}` : (dims || wt);
         
-        return `<div class="box-section"><div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${items.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table></div>`;
+        return `<div class="box-section"><div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${items.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}${item.notes ? `<div style="font-size:9px;color:#555;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table></div>`;
       }).join('');
       
     } else {
@@ -857,7 +857,7 @@ export default function PurchaseOrders() {
       containerCount = Object.keys(boxes).length;
       
       // Generate HTML for each box
-      containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => `<div class="box-section"><div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${boxItems.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table></div>`).join('');
+      containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => `<div class="box-section"><div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${boxItems.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}${item.notes ? `<div style="font-size:9px;color:#555;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table></div>`).join('');
     }
     
     const containerLabel = isTriwallMode ? 'Triwalls' : 'Boxes';
@@ -971,7 +971,7 @@ export default function PurchaseOrders() {
             const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
             const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
             return `<tr>
-              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}</td>
+              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}${item.notes ? `<br><span style="color:#795548;font-size:8px;font-style:italic">📝 ${item.notes}</span>` : ''}</td>
               <td><span class="src src-${srcClass}">${srcLabel}</span></td>
               <td style="text-align:center;font-weight:bold">${qty}</td>
               <td style="text-align:right">${weight ? weight.toFixed(1) : '—'}</td>
@@ -1035,7 +1035,7 @@ export default function PurchaseOrders() {
             const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
             const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
             return `<tr>
-              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}</td>
+              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}${item.notes ? `<br><span style="color:#795548;font-size:8px;font-style:italic">📝 ${item.notes}</span>` : ''}</td>
               <td><span class="src src-${srcClass}">${srcLabel}</span></td>
               <td style="text-align:center;font-weight:bold">${qty}</td>
               <td style="text-align:right">${weight ? weight.toFixed(1) : '—'}</td>

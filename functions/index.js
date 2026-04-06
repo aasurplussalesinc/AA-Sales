@@ -20,6 +20,19 @@ const db = admin.firestore();
 
 const SHIPPO_BASE_URL = 'https://api.goshippo.com';
 
+// ── Simple in-memory rate limiter (per function instance) ──
+// Resets when the function instance recycles — good enough for burst protection
+const rateLimitMap = {};
+function checkRateLimit(key, maxCalls, windowMs) {
+  const now = Date.now();
+  if (!rateLimitMap[key]) rateLimitMap[key] = [];
+  // Remove entries outside the window
+  rateLimitMap[key] = rateLimitMap[key].filter(t => now - t < windowMs);
+  if (rateLimitMap[key].length >= maxCalls) return false;
+  rateLimitMap[key].push(now);
+  return true;
+}
+
 async function shippoRequest(apiKey, endpoint, method = 'GET', body = null) {
   if (!apiKey) throw new Error('Shippo API key not configured. Go to Shipping Settings and enter your Shippo API key.');
   const options = {
@@ -500,6 +513,10 @@ exports.checkPackedOrdersScheduled = functions.pubsub.schedule('every 1 hours').
 // CALLABLE FUNCTIONS
 exports.generateShippingLabel = functions.https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  // Rate limit: 60 label requests per user per 10 minutes
+  if (!checkRateLimit('label_' + context.auth.uid, 60, 10 * 60 * 1000)) {
+    throw new functions.https.HttpsError('resource-exhausted', 'Too many requests. Please wait a moment.');
+  }
   var orderId = data.orderId, orgId = data.orgId, rateId = data.rateId;
   if (!orderId || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderId and orgId required');
   try {
@@ -635,6 +652,10 @@ exports.validateShippingAddress = functions.https.onCall(async function(data, co
 
 exports.getShippingRates = functions.https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  // Rate limit: 30 rate requests per user per 5 minutes
+  if (!checkRateLimit('rates_' + context.auth.uid, 30, 5 * 60 * 1000)) {
+    throw new functions.https.HttpsError('resource-exhausted', 'Too many rate requests. Please wait a moment.');
+  }
   try {
     var orderDoc = await db.collection('purchaseOrders').doc(data.orderId).get();
     if (!orderDoc.exists) throw new Error('Order not found');

@@ -139,10 +139,19 @@ export function AuthProvider({ children }) {
     
     // Save selection
     localStorage.setItem('selectedOrgId', org.id);
+
+    // Log login event (non-blocking)
+    try { OrgDB.logActivity('USER_LOGIN', { source: 'web' }).catch(() => {}); } catch (e) {}
   };
 
   const login = async (email, password) => {
     const result = await signInWithEmailAndPassword(auth, email, password);
+    // Log successful login
+    try {
+      const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
+      const { db } = await import('./firebase');
+      // We don't have orgId yet at this point — logged later when org is selected
+    } catch (e) { /* non-critical */ }
     await loadUserOrganizations(result.user.uid);
     
     // Check for pending invitations

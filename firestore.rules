@@ -1,0 +1,287 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ═══════════════════════════════════════════════════════════
+    // HELPER FUNCTIONS
+    // ═══════════════════════════════════════════════════════════
+
+    // Is the user authenticated at all?
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // Get this user's membership doc for a given org
+    function membership(orgId) {
+      return get(/databases/$(database)/documents/orgMembers/$(orgId + '_' + request.auth.uid)).data;
+    }
+
+    // Is the user a member of this org?
+    function isMember(orgId) {
+      return isAuthed() &&
+        exists(/databases/$(database)/documents/orgMembers/$(orgId + '_' + request.auth.uid));
+    }
+
+    // Is the user an admin of this org?
+    function isAdmin(orgId) {
+      return isMember(orgId) && membership(orgId).role == 'admin';
+    }
+
+    // Is the user an admin or manager of this org?
+    function isManager(orgId) {
+      return isMember(orgId) && membership(orgId).role in ['admin', 'manager'];
+    }
+
+    // Is the user any staff member (admin, manager, or staff)?
+    function isStaff(orgId) {
+      return isMember(orgId) && membership(orgId).role in ['admin', 'manager', 'staff'];
+    }
+
+    // Does the document belong to the user's org?
+    function belongsToOrg(orgId) {
+      return resource.data.orgId == orgId;
+    }
+
+    // Does the incoming write target the correct org?
+    function writingToOrg(orgId) {
+      return request.resource.data.orgId == orgId;
+    }
+
+    // Is this the owner org?
+    function isOwnerOrg(orgId) {
+      return orgId == 'aa-surplus-sales';
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // ORGANIZATIONS
+    // ═══════════════════════════════════════════════════════════
+
+    match /organizations/{orgId} {
+      // Any member can read their org
+      allow read: if isAuthed() && (isMember(orgId) || isOwnerOrg(orgId));
+
+      // Only admins can update org settings
+      allow update: if isAdmin(orgId);
+
+      // Only Cloud Functions / owner can create orgs (signup flow)
+      // We allow create from the client only during signup (no existing membership yet)
+      allow create: if isAuthed();
+
+      // Nobody deletes orgs from the client
+      allow delete: if false;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // ORG MEMBERS
+    // ═══════════════════════════════════════════════════════════
+
+    match /orgMembers/{memberId} {
+      // Members can read their own record; admins can read all members of their org
+      allow read: if isAuthed() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin(resource.data.orgId)
+      );
+
+      // Admins can create/update membership (invite flow, role changes)
+      allow create: if isAuthed() && (
+        // Self-join via invite code (userId must match auth)
+        request.resource.data.userId == request.auth.uid ||
+        // Admin adding a member
+        isAdmin(request.resource.data.orgId)
+      );
+
+      allow update: if isAdmin(resource.data.orgId);
+
+      // Admins can remove members; users can remove themselves
+      allow delete: if isAuthed() && (
+        resource.data.userId == request.auth.uid ||
+        isAdmin(resource.data.orgId)
+      );
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // INVITE CODES
+    // ═══════════════════════════════════════════════════════════
+
+    match /inviteCodes/{code} {
+      // Anyone authenticated can read (to validate a code on join)
+      allow read: if isAuthed();
+
+      // Only admins of the org can create invite codes
+      allow create: if isAdmin(request.resource.data.orgId);
+
+      // Only the org admin or the join flow (incrementing uses) can update
+      allow update: if isAuthed() && (
+        isAdmin(resource.data.orgId) ||
+        // Allow use count increment during join (only uses and status fields change)
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses', 'status'])
+      );
+
+      // Only admins can revoke/delete
+      allow delete: if isAdmin(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // INVITATIONS
+    // ═══════════════════════════════════════════════════════════
+
+    match /invitations/{invId} {
+      allow read: if isAuthed() && (
+        resource.data.invitedEmail == request.auth.token.email ||
+        isAdmin(resource.data.orgId)
+      );
+      allow create: if isAdmin(request.resource.data.orgId);
+      allow update, delete: if isAdmin(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // INVENTORY ITEMS
+    // ═══════════════════════════════════════════════════════════
+
+    match /items/{itemId} {
+      allow read: if isStaff(resource.data.orgId);
+      allow create: if isManager(request.resource.data.orgId);
+      allow update: if isManager(resource.data.orgId);
+      allow delete: if isAdmin(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // LOCATIONS
+    // ═══════════════════════════════════════════════════════════
+
+    match /locations/{locId} {
+      allow read: if isStaff(resource.data.orgId);
+      allow create: if isManager(request.resource.data.orgId);
+      allow update: if isManager(resource.data.orgId);
+      allow delete: if isAdmin(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // PURCHASE ORDERS
+    // ═══════════════════════════════════════════════════════════
+
+    match /purchaseOrders/{poId} {
+      allow read: if isStaff(resource.data.orgId);
+      // Staff can create orders, managers/admins can update/delete
+      allow create: if isStaff(request.resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId);
+      allow delete: if isManager(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // PICK LISTS
+    // ═══════════════════════════════════════════════════════════
+
+    match /pickLists/{listId} {
+      allow read: if isStaff(resource.data.orgId);
+      allow create: if isStaff(request.resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId);
+      allow delete: if isManager(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // CUSTOMERS
+    // ═══════════════════════════════════════════════════════════
+
+    match /customers/{custId} {
+      allow read: if isStaff(resource.data.orgId);
+      allow create: if isStaff(request.resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId);
+      allow delete: if isManager(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // CONTRACTS
+    // ═══════════════════════════════════════════════════════════
+
+    match /contracts/{contractId} {
+      allow read: if isStaff(resource.data.orgId);
+      allow create: if isManager(request.resource.data.orgId);
+      allow update: if isManager(resource.data.orgId);
+      allow delete: if isAdmin(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // RECEIVINGS
+    // ═══════════════════════════════════════════════════════════
+
+    match /receivings/{recId} {
+      allow read: if isStaff(resource.data.orgId);
+      allow create: if isStaff(request.resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId);
+      allow delete: if isManager(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // MOVEMENTS
+    // ═══════════════════════════════════════════════════════════
+
+    match /movements/{movId} {
+      allow read: if isStaff(resource.data.orgId);
+      // Movements are created by the system — staff can create
+      allow create: if isStaff(request.resource.data.orgId);
+      // Movements are immutable — no updates or deletes
+      allow update, delete: if false;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // ACTIVITY LOG
+    // ═══════════════════════════════════════════════════════════
+
+    match /activityLog/{logId} {
+      // Only managers and above can read activity log
+      allow read: if isManager(resource.data.orgId);
+      // System writes only — staff can create log entries
+      allow create: if isStaff(request.resource.data.orgId);
+      // Logs are immutable
+      allow update, delete: if false;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // COUNTS (inventory count sessions)
+    // ═══════════════════════════════════════════════════════════
+
+    match /counts/{countId} {
+      allow read: if isStaff(resource.data.orgId);
+      allow create: if isStaff(request.resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId);
+      allow delete: if isManager(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // QUICK SALES
+    // ═══════════════════════════════════════════════════════════
+
+    match /quickSales/{saleId} {
+      allow read: if isStaff(resource.data.orgId);
+      allow create: if isStaff(request.resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId);
+      allow delete: if isManager(resource.data.orgId);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════
+    // CATCH-ALL — deny everything not explicitly allowed
+    // ═══════════════════════════════════════════════════════════
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

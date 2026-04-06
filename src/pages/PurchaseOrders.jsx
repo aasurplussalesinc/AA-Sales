@@ -1166,7 +1166,7 @@ export default function PurchaseOrders() {
       <div class="header"><div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : '<div style="font-size:18px;font-weight:bold;color:' + accentColor + '">' + (organization?.name || 'Company') + '</div>'}</div><div class="company-details"><strong>${organization?.name || 'AA Surplus Sales'}</strong>2153 Pond Road, Ronkonkoma NY 11779<br>${organization?.phone || '716-496-2451'}</div></div>
       <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${order.poNumber}</div>
       <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerContact ? '<p>Attn: ' + order.customerContact + '</p>' : ''}${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3><p>' + order.shipToAddress.replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${displayDate}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p></div></div>
-      <table><thead><tr><th style="width:60px">SKU</th><th>Description</th>${isEstimate ? '<th style="text-align:center;width:50px">Qty</th>' : '<th style="text-align:center;width:50px">Ord</th><th style="text-align:center;width:50px">Ship</th>'}<th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${items.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + '</td>' + (isEstimate ? '<td style="text-align:center">' + (item.quantity || 0) + '</td>' : '<td style="text-align:center">' + (item.quantity || 0) + '</td><td style="text-align:center;font-weight:bold">' + (item.qtyShipped || 0) + '</td>') + '<td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
+      <table><thead><tr><th style="width:60px">SKU</th><th>Description</th>${isEstimate ? '<th style="text-align:center;width:50px">Qty</th>' : '<th style="text-align:center;width:50px">Ord</th><th style="text-align:center;width:50px">Ship</th>'}<th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${items.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + (item.notes ? '<div style="font-size:9px;color:#666;font-style:italic">' + item.notes + '</div>' : '') + '</td>' + (isEstimate ? '<td style="text-align:center">' + (item.quantity || 0) + '</td>' : '<td style="text-align:center">' + (item.quantity || 0) + '</td><td style="text-align:center;font-weight:bold">' + (item.qtyShipped || 0) + '</td>') + '<td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
       <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
       <div style="margin-top:10px;font-size:9px;color:#666;font-style:italic;text-align:right">Payments by credit card are subject to a 3.5% processing fee</div>
       ${order.notes ? '<div class="notes"><h3>Notes</h3><p>' + order.notes + '</p></div>' : ''}
@@ -1517,6 +1517,7 @@ ${labelsHtml}
                         <th style={{ padding: 8, width: 70 }}>Qty Ship</th>
                         <th style={{ padding: 8, width: 80 }}>Price</th>
                         <th style={{ padding: 8, width: 80, background: 'var(--bg-badge-green)' }}>Total</th>
+                        <th style={{ padding: 8, width: 90, color: 'var(--text-muted)', fontStyle: 'italic' }}>Notes</th>
                         <th style={{ padding: 8, width: 40 }}></th>
                       </tr>
                     </thead>
@@ -1562,6 +1563,23 @@ ${labelsHtml}
                               style={{ width: '100%', padding: 4, textAlign: 'right' }} step="0.01" min="0" placeholder="0.00" />
                           </td>
                           <td style={{ padding: 8, textAlign: 'right', fontWeight: 600, background: 'var(--bg-badge-green)' }}>${(item.lineTotal || 0).toFixed(2)}</td>
+                          <td style={{ padding: 8 }}>
+                            <textarea
+                              value={item.notes || ''}
+                              onChange={e => updatePOItem(index, 'notes', e.target.value)}
+                              placeholder="Notes..."
+                              rows={1}
+                              style={{
+                                width: '100%', padding: '4px 6px', fontSize: 11,
+                                border: '1px solid var(--border)', borderRadius: 4,
+                                background: 'var(--bg-input)', color: 'var(--text-primary)',
+                                resize: 'vertical', minHeight: 28, fontFamily: 'inherit',
+                                lineHeight: 1.4
+                              }}
+                              onFocus={e => { e.target.rows = 3; }}
+                              onBlur={e => { if (!e.target.value) e.target.rows = 1; }}
+                            />
+                          </td>
                           <td style={{ padding: 8 }}>
                             <button onClick={() => removeItemFromPO(index)}
                               style={{ background: '#f44336', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer' }}>✕</button>
@@ -1655,7 +1673,12 @@ ${labelsHtml}
                 <tbody>
                   {selectedOrder.items?.map((item, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td style={{ padding: 10 }}>{item.itemName}<div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.partNumber}</div>{item.boxNumber && <div style={{ fontSize: 11, color: 'var(--text-badge-purple)' }}>📦 Box {item.boxNumber}</div>}</td>
+                      <td style={{ padding: 10 }}>
+                        {item.itemName}
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.partNumber}</div>
+                        {item.boxNumber && <div style={{ fontSize: 11, color: 'var(--text-badge-purple)' }}>📦 Box {item.boxNumber}</div>}
+                        {item.notes && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3, fontStyle: 'italic', background: 'var(--bg-badge-orange)', padding: '2px 6px', borderRadius: 4, display: 'inline-block' }}>📝 {item.notes}</div>}
+                      </td>
                       <td style={{ padding: 10, textAlign: 'center' }}><span style={{ padding: '2px 6px', borderRadius: 3, fontSize: 10, fontWeight: 600, background: item.source === 'direct_contract' ? '#fce4ec' : item.source === 'inventory_contract' ? '#fff3e0' : '#e3f2fd', color: item.source === 'direct_contract' ? '#c2185b' : item.source === 'inventory_contract' ? '#f57c00' : '#1976d2' }}>{getSourceLabel(item.source)}</span></td>
                       <td style={{ padding: 10, textAlign: 'right' }}>{item.qtyShipped || item.quantity}</td>
                       <td style={{ padding: 10, textAlign: 'right' }}>{formatCurrency(item.unitPrice)}</td>

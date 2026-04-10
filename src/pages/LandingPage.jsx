@@ -96,7 +96,7 @@ export default function LandingPage() {
         transition: 'all 0.3s ease'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 24 }}>📦</span>
+          <img src="/logo.png" alt="SkidSling" style={{ width: 36, height: 36, mixBlendMode: 'screen' }} />
           <span style={{
             fontFamily: "'Barlow Condensed', sans-serif",
             fontSize: 22, fontWeight: 800, letterSpacing: 1,
@@ -145,6 +145,16 @@ export default function LandingPage() {
 
         {/* Content */}
         <div style={{ position: 'relative', textAlign: 'center', padding: '0 24px', maxWidth: 900 }}>
+          {/* Logo + wordmark lockup */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 24 }}>
+            <img src="/logo.png" alt="SkidSling" style={{ width: 64, height: 64, mixBlendMode: 'screen' }} />
+            <span style={{
+              fontFamily: "'Barlow Condensed', sans-serif",
+              fontSize: 48, fontWeight: 800, letterSpacing: 2,
+              color: 'white', textTransform: 'uppercase', lineHeight: 1
+            }}>SkidSling</span>
+          </div>
+
           <div style={{
             display: 'inline-flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)',
@@ -421,7 +431,7 @@ export default function LandingPage() {
         display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 18 }}>📦</span>
+          <img src="/logo.png" alt="SkidSling" style={{ width: 28, height: 28, mixBlendMode: 'screen' }} />
           <span style={{
             fontFamily: "'Barlow Condensed', sans-serif",
             fontSize: 16, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase',

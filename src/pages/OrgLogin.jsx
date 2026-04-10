@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../OrgAuthContext';
 import { OrgDB } from '../orgDb';
 
@@ -155,12 +156,12 @@ export default function Login() {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
-          <div style={styles.logo}>
-          <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 47 }} />
-          <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 800, fontSize: 26, letterSpacing: '-0.5px' }}>
-            <span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>sling</span>
-          </span>
-        </div>
+          <Link to="/" style={{ ...styles.logo, textDecoration: 'none' }}>
+            <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 47, mixBlendMode: 'screen' }} />
+            <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 800, fontSize: 26, letterSpacing: '-0.5px' }}>
+              <span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>Sling</span>
+            </span>
+          </Link>
           <h2 style={styles.title}>Select Organization</h2>
           
           <div style={styles.orgList}>
@@ -188,12 +189,12 @@ export default function Login() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <div style={styles.logo}>
-          <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 47 }} />
+        <Link to="/" style={{ ...styles.logo, textDecoration: 'none' }}>
+          <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 47, mixBlendMode: 'screen' }} />
           <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 800, fontSize: 26, letterSpacing: '-0.5px' }}>
-            <span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>sling</span>
+            <span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>Sling</span>
           </span>
-        </div>
+        </Link>
         
         {mode === 'login' && (
           <>

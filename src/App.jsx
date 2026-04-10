@@ -103,7 +103,7 @@ function NavBar() {
             }}
           />
           <h1 style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 800, letterSpacing: '-0.3px', color: 'white' }}>
-            {organization?.name || <><span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>sling</span></>}
+            {organization?.name || <><span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>Sling</span></>}
           </h1>
         </Link>
         {user && (

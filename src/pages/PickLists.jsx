@@ -1825,13 +1825,13 @@ export default function PickLists() {
                       className="btn btn-primary btn-sm"
                       onClick={() => setSelectedList(list)}
                     >
-                      {list.status === 'completed' ? 'View' : 'Process'}
+                      View
                     </button>
-                    {list.status === 'completed' && list.purchaseOrderId && (
+                    {list.purchaseOrderId && (
                       <button 
                         className="btn btn-sm"
                         onClick={() => openPackOrder(list)}
-                        style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}
+                        style={{ background: '#9c27b0', color: 'white', fontWeight: 600 }}
                       >
                         {getLinkedOrder(list)?.packingComplete ? '📦 Edit Pack' : '📦 Pack'}
                       </button>
@@ -1839,7 +1839,7 @@ export default function PickLists() {
                     <button 
                       className="btn btn-sm"
                       onClick={() => printPickList(list)}
-                      style={{ background: '#607d8b', color: 'var(--text-on-dark)' }}
+                      style={{ background: '#607d8b', color: 'white' }}
                     >
                       🖨️ Print
                     </button>

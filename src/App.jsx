@@ -92,7 +92,7 @@ function NavBar() {
   return (
     <>
       <div className="app-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none' }}>
           <img
             src="/logo.png"
             alt="SkidSling"
@@ -102,10 +102,10 @@ function NavBar() {
               objectFit: 'contain'
             }}
           />
-          <h1 style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 800, letterSpacing: '-0.3px' }}>
+          <h1 style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 800, letterSpacing: '-0.3px', color: 'white' }}>
             {organization?.name || <><span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>sling</span></>}
           </h1>
-        </div>
+        </Link>
         {user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 15, flexWrap: 'wrap' }}>
             {organizations.length > 1 && (

@@ -1,6 +1,6 @@
 {
-  "name": "aa-inventory-shipping-functions",
-  "description": "Firebase Cloud Functions for AA Inventory Shippo Integration",
+  "name": "skidsling-cloud-functions",
+  "description": "SkidSling Cloud Functions \u2014 Shipping & Warehouse Automation",
   "version": "2.0.0",
   "engines": {
     "node": "20"

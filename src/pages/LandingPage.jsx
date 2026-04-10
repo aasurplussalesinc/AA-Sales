@@ -101,7 +101,7 @@ export default function LandingPage() {
             fontFamily: "'Barlow Condensed', sans-serif",
             fontSize: 22, fontWeight: 800, letterSpacing: 1,
             color: 'white', textTransform: 'uppercase'
-          }}>AA Inventory</span>
+          }}>SkidSling</span>
         </div>
         <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
           <a href="#features" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14, fontWeight: 500, letterSpacing: 0.3 }}>Features</a>
@@ -402,7 +402,7 @@ export default function LandingPage() {
             textTransform: 'uppercase', marginBottom: 20, lineHeight: 1
           }}>Ready to Stop<br />Losing Track?</h2>
           <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 17, marginBottom: 44, maxWidth: 480, margin: '0 auto 44px', lineHeight: 1.7 }}>
-            Built by a military surplus operator, for businesses that move real product.
+            Built by operators, for operators. Move more. Track everything.
             Get set up in under an hour.
           </p>
           <Link to="/login" style={{
@@ -426,16 +426,16 @@ export default function LandingPage() {
             fontFamily: "'Barlow Condensed', sans-serif",
             fontSize: 16, fontWeight: 800, letterSpacing: 1, textTransform: 'uppercase',
             color: 'rgba(255,255,255,0.4)'
-          }}>AA Inventory</span>
+          }}>SkidSling</span>
         </div>
         <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
           {['Features', 'Pricing', 'Support', 'Privacy', 'Terms'].map(l => (
-            <a key={l} href={l === 'Features' ? '#features' : l === 'Pricing' ? '#pricing' : l === 'Support' ? 'mailto:support@aamilitarysurplus.com' : '#'}
+            <a key={l} href={l === 'Features' ? '#features' : l === 'Pricing' ? '#pricing' : l === 'Support' ? 'mailto:support@skidsling.com' : '#'}
               style={{ color: 'rgba(255,255,255,0.3)', textDecoration: 'none', fontSize: 13 }}>{l}</a>
           ))}
         </div>
         <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', margin: 0 }}>
-          © {new Date().getFullYear()} AA Surplus Sales Inc.
+          © {new Date().getFullYear()} SkidSling · AA Development Group LLC
         </p>
       </footer>
     </div>

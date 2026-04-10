@@ -155,7 +155,7 @@ export default function Login() {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
-          <h1 style={styles.logo}>📦 Warehouse Manager</h1>
+          <h1 style={styles.logo}>⚡ SkidSling</h1>
           <h2 style={styles.title}>Select Organization</h2>
           
           <div style={styles.orgList}>
@@ -183,7 +183,7 @@ export default function Login() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={styles.logo}>📦 Warehouse Manager</h1>
+        <h1 style={styles.logo}>⚡ SkidSling</h1>
         
         {mode === 'login' && (
           <>

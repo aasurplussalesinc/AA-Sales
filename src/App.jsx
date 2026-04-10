@@ -94,7 +94,7 @@ function NavBar() {
       <div className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span>📦</span>
-          <h1>{organization?.name || 'Warehouse Manager'}</h1>
+          <h1>{organization?.name || 'SkidSling'}</h1>
         </div>
         {user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 15, flexWrap: 'wrap' }}>

@@ -55,7 +55,7 @@ export default function SubscriptionRequired() {
           </h1>
           <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: 17, marginBottom: 8 }}>
             {isTrial
-              ? 'Choose a plan to continue using AA Inventory.'
+              ? 'Choose a plan to continue using SkidSling.'
               : 'Your subscription is inactive. Reactivate to regain access.'}
           </p>
           {organization && (

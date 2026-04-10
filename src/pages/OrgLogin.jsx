@@ -431,67 +431,81 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    background: 'linear-gradient(135deg, #2d5f3f 0%, #1a3a25 100%)',
-    padding: 20
+    background: '#0a0a0a',
+    backgroundImage: 'radial-gradient(ellipse at 50% 0%, rgba(52,211,153,0.08) 0%, transparent 60%)',
+    padding: 20,
+    fontFamily: "'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif"
   },
   card: {
-    background: 'white',
-    borderRadius: 12,
-    padding: 40,
+    background: '#111111',
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 16,
+    padding: 44,
     width: '100%',
-    maxWidth: 400,
-    boxShadow: '0 10px 40px rgba(0,0,0,0.2)'
+    maxWidth: 420,
+    boxShadow: '0 24px 80px rgba(0,0,0,0.6)'
   },
   logo: {
     textAlign: 'center',
-    fontSize: 28,
-    marginBottom: 10,
-    color: '#2d5f3f'
+    fontSize: 26,
+    fontWeight: 800,
+    marginBottom: 8,
+    color: '#34d399',
+    letterSpacing: '-0.5px'
   },
   title: {
     textAlign: 'center',
-    marginBottom: 10,
-    color: '#333',
-    fontSize: 22
+    marginBottom: 8,
+    color: '#f0f0f0',
+    fontSize: 20,
+    fontWeight: 600
   },
   subtitle: {
     textAlign: 'center',
-    color: '#666',
-    marginBottom: 20,
-    fontSize: 14
+    color: '#606060',
+    marginBottom: 24,
+    fontSize: 13
   },
   inputGroup: {
-    marginBottom: 20
+    marginBottom: 18
   },
   label: {
     display: 'block',
-    marginBottom: 5,
+    marginBottom: 6,
     fontWeight: 600,
-    fontSize: 14,
-    color: '#333'
+    fontSize: 12,
+    color: '#a0a0a0',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px'
   },
   input: {
     width: '100%',
-    padding: '12px 15px',
-    border: '1px solid #ddd',
-    borderRadius: 6,
-    fontSize: 16,
-    boxSizing: 'border-box'
+    padding: '12px 14px',
+    border: '1px solid rgba(255,255,255,0.1)',
+    borderRadius: 8,
+    fontSize: 15,
+    boxSizing: 'border-box',
+    background: '#1a1a1a',
+    color: '#f0f0f0',
+    outline: 'none',
+    transition: 'border-color 0.2s'
   },
   button: {
     width: '100%',
-    padding: '14px',
-    background: '#2d5f3f',
-    color: 'white',
+    padding: '13px',
+    background: '#34d399',
+    color: '#0a0a0a',
     border: 'none',
-    borderRadius: 6,
-    fontSize: 16,
-    fontWeight: 600,
+    borderRadius: 8,
+    fontSize: 15,
+    fontWeight: 700,
     cursor: 'pointer',
-    marginTop: 10
+    marginTop: 8,
+    letterSpacing: '0.2px',
+    transition: 'background 0.2s'
   },
   links: {
-    marginTop: 20,
+    marginTop: 22,
     textAlign: 'center',
     display: 'flex',
     flexDirection: 'column',
@@ -500,33 +514,36 @@ const styles = {
   link: {
     background: 'none',
     border: 'none',
-    color: '#2d5f3f',
+    color: '#606060',
     cursor: 'pointer',
-    fontSize: 14,
-    textDecoration: 'underline'
+    fontSize: 13,
+    textDecoration: 'underline',
+    textUnderlineOffset: '3px'
   },
   error: {
-    background: '#fee',
-    color: '#c00',
-    padding: 12,
-    borderRadius: 6,
-    marginBottom: 20,
-    fontSize: 14
+    background: 'rgba(248,113,113,0.1)',
+    color: '#f87171',
+    border: '1px solid rgba(248,113,113,0.2)',
+    padding: '10px 14px',
+    borderRadius: 8,
+    marginBottom: 18,
+    fontSize: 13
   },
   success: {
-    background: '#efe',
-    color: '#060',
-    padding: 12,
-    borderRadius: 6,
-    marginBottom: 20,
-    fontSize: 14
+    background: 'rgba(52,211,153,0.1)',
+    color: '#34d399',
+    border: '1px solid rgba(52,211,153,0.2)',
+    padding: '10px 14px',
+    borderRadius: 8,
+    marginBottom: 18,
+    fontSize: 13
   },
   terms: {
     marginTop: 20,
     fontSize: 11,
-    color: '#999',
+    color: '#404040',
     textAlign: 'center',
-    lineHeight: 1.4
+    lineHeight: 1.5
   },
   orgList: {
     display: 'flex',
@@ -535,22 +552,22 @@ const styles = {
     marginTop: 20
   },
   orgButton: {
-    padding: 15,
-    border: '1px solid #ddd',
-    borderRadius: 8,
-    background: 'white',
+    padding: 16,
+    border: '1px solid rgba(255,255,255,0.08)',
+    borderRadius: 10,
+    background: '#1a1a1a',
     cursor: 'pointer',
     textAlign: 'left',
     transition: 'all 0.2s'
   },
   orgName: {
     fontWeight: 600,
-    fontSize: 16,
-    color: '#333'
+    fontSize: 15,
+    color: '#f0f0f0'
   },
   orgPlan: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 5
+    color: '#606060',
+    marginTop: 4
   }
 };

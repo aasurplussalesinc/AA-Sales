@@ -155,7 +155,12 @@ export default function Login() {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
-          <h1 style={styles.logo}>⚡ SkidSling</h1>
+          <div style={styles.logo}>
+          <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 47 }} />
+          <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 800, fontSize: 26, letterSpacing: '-0.5px' }}>
+            <span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>sling</span>
+          </span>
+        </div>
           <h2 style={styles.title}>Select Organization</h2>
           
           <div style={styles.orgList}>
@@ -183,7 +188,12 @@ export default function Login() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={styles.logo}>⚡ SkidSling</h1>
+        <div style={styles.logo}>
+          <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 47 }} />
+          <span style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 800, fontSize: 26, letterSpacing: '-0.5px' }}>
+            <span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>sling</span>
+          </span>
+        </div>
         
         {mode === 'login' && (
           <>
@@ -447,11 +457,11 @@ const styles = {
   },
   logo: {
     textAlign: 'center',
-    fontSize: 26,
-    fontWeight: 800,
-    marginBottom: 8,
-    color: '#34d399',
-    letterSpacing: '-0.5px'
+    marginBottom: 16,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12
   },
   title: {
     textAlign: 'center',

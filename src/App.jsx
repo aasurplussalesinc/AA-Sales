@@ -94,7 +94,12 @@ function NavBar() {
       <div className="app-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span>📦</span>
-          <h1>{organization?.name || 'SkidSling'}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src="/logo.png" alt="SkidSling" style={{ width: 32, height: 32 }} />
+            <h1 style={{ fontFamily: "'DM Sans', system-ui, sans-serif", fontWeight: 800, letterSpacing: '-0.3px' }}>
+              {organization?.name || <><span style={{ color: '#f0f0f0' }}>Skid</span><span style={{ color: '#34d399' }}>sling</span></>}
+            </h1>
+          </div>
         </div>
         {user && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 15, flexWrap: 'wrap' }}>

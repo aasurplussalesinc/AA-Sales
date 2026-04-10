@@ -1,19 +1,30 @@
 {
-  "name": "skidsling-functions",
-  "description": "Firebase Cloud Functions for SkidSling Warehouse Management",
-  "version": "2.0.0",
-  "engines": {
-    "node": "20"
-  },
-  "main": "index.js",
+  "name": "skidsling",
+  "private": true,
+  "version": "1.0.0",
+  "description": "SkidSling \u2014 Warehouse Management That Ships",
+  "type": "module",
   "scripts": {
-    "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext js,jsx"
   },
   "dependencies": {
-    "firebase-admin": "^11.11.0",
-    "firebase-functions": "^4.5.0",
-    "node-fetch": "^2.7.0",
-    "pdf-lib": "^1.17.1"
+    "firebase": "^10.7.0",
+    "html5-qrcode": "^2.3.8",
+    "qrcode": "^1.5.3",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.21.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.1.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.55.0",
+    "eslint-plugin-react": "^7.33.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.5",
+    "vite": "^5.0.8"
   }
 }

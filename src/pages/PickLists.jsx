@@ -1880,16 +1880,16 @@ export default function PickLists() {
         return (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16, padding: '12px 0' }}>
             <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1} style={{
-              padding: '7px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: safePage === 1 ? 'not-allowed' : 'pointer',
-              background: safePage === 1 ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
+              padding: '7px 16px', borderRadius: 6, border: '1px solid var(--border)', color: 'var(--text-primary)', cursor: safePage === 1 ? 'not-allowed' : 'pointer',
+              background: safePage === 1 ? 'var(--bg-disabled)' : 'var(--bg-surface)', fontWeight: 600, fontSize: 18
             }}>‹</button>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
               Page <strong>{safePage}</strong> of <strong>{totalPages}</strong>
               <span style={{ marginLeft: 8, color: 'var(--text-muted)' }}>({filtered.length} pick lists)</span>
             </span>
             <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages} style={{
-              padding: '7px 16px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
-              background: safePage === totalPages ? '#f5f5f5' : 'white', fontWeight: 600, fontSize: 18
+              padding: '7px 16px', borderRadius: 6, border: '1px solid var(--border)', color: 'var(--text-primary)', cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
+              background: safePage === totalPages ? 'var(--bg-disabled)' : 'var(--bg-surface)', fontWeight: 600, fontSize: 18
             }}>›</button>
           </div>
         );

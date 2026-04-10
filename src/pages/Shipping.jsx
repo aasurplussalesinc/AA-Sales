@@ -742,7 +742,7 @@ export default function Shipping() {
             key={f.value}
             onClick={() => setFilterStatus(f.value)}
             style={{
-              padding: '8px 16px', borderRadius: 20, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
+              padding: '8px 16px', borderRadius: 20, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
               background: filterStatus === f.value ? '#1976d2' : 'white',
               color: filterStatus === f.value ? 'white' : '#333',
               fontWeight: filterStatus === f.value ? 600 : 400, fontSize: 13
@@ -1353,7 +1353,7 @@ export default function Shipping() {
                         key={s.value}
                         onClick={() => setRateSortBy(s.value)}
                         style={{
-                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
+                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
                           background: rateSortBy === s.value ? '#1976d2' : 'white',
                           color: rateSortBy === s.value ? 'white' : '#333',
                           fontWeight: rateSortBy === s.value ? 600 : 400, fontSize: 12
@@ -1370,7 +1370,7 @@ export default function Shipping() {
                     <button
                       onClick={() => setRateFilterCarrier('all')}
                       style={{
-                        padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
+                        padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
                         background: rateFilterCarrier === 'all' ? '#424242' : 'white',
                         color: rateFilterCarrier === 'all' ? 'white' : '#333',
                         fontWeight: rateFilterCarrier === 'all' ? 600 : 400, fontSize: 12
@@ -1385,7 +1385,7 @@ export default function Shipping() {
                           key={c}
                           onClick={() => setRateFilterCarrier(rateFilterCarrier === c.toLowerCase() ? 'all' : c.toLowerCase())}
                           style={{
-                            padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
+                            padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
                             background: rateFilterCarrier === c.toLowerCase() ? '#424242' : 'white',
                             color: rateFilterCarrier === c.toLowerCase() ? 'white' : '#333',
                             fontWeight: rateFilterCarrier === c.toLowerCase() ? 600 : 400, fontSize: 12
@@ -1407,7 +1407,7 @@ export default function Shipping() {
                         { value: 'Customer', label: `📦 Customer (${order.thirdPartyBilling?.account || ''})` },
                       ].map(b => (
                         <button key={b.value} onClick={() => setRateFilterBilling(b.value)} style={{
-                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer',
+                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
                           background: rateFilterBilling === b.value ? '#1565c0' : 'white',
                           color: rateFilterBilling === b.value ? 'white' : '#333',
                           fontWeight: rateFilterBilling === b.value ? 600 : 400, fontSize: 12
@@ -1419,11 +1419,11 @@ export default function Shipping() {
                   {/* View Toggle */}
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
                     <button onClick={() => setRateViewMode('table')} style={{
-                      padding: '5px 10px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: '6px 0 0 6px', cursor: 'pointer',
+                      padding: '5px 10px', border: '1px solid var(--border)',  color: 'var(--text-primary)', borderRadius: '6px 0 0 6px', cursor: 'pointer',
                       background: rateViewMode === 'table' ? '#424242' : 'white', color: rateViewMode === 'table' ? 'white' : '#333', fontSize: 12
                     }}>☰ Table</button>
                     <button onClick={() => setRateViewMode('cards')} style={{
-                      padding: '5px 10px', border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', borderRadius: '0 6px 6px 0', cursor: 'pointer',
+                      padding: '5px 10px', border: '1px solid var(--border)',  color: 'var(--text-primary)', borderRadius: '0 6px 6px 0', cursor: 'pointer',
                       background: rateViewMode === 'cards' ? '#424242' : 'white', color: rateViewMode === 'cards' ? 'white' : '#333', fontSize: 12
                     }}>▦ Cards</button>
                   </div>

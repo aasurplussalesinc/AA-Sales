@@ -126,6 +126,7 @@ export default function LandingPage() {
           position: 'absolute', inset: 0,
           backgroundImage: 'url(/warehouse-bg.jpg)',
           backgroundSize: 'cover', backgroundPosition: 'center',
+          backgroundAttachment: 'fixed',
           filter: 'brightness(0.35)',
         }} />
 

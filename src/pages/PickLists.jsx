@@ -237,32 +237,53 @@ export default function PickLists() {
       alert('Please select who completed the pick list');
       return;
     }
-    
-    // Process each picked item
+
+    // Process each picked item — wrap each operation so one failure doesn't block modal close
+    const errors = [];
     for (const item of list.items) {
       if (item.pickedQty > 0) {
         const dbItem = items.find(i => i.id === item.itemId);
         if (dbItem) {
-          // Log the pick movement
-          await DB.logMovement({
-            itemId: item.itemId,
-            itemName: item.itemName,
-            quantity: item.pickedQty,
-            type: 'PICK',
-            fromLocation: item.location || 'Unknown',
-            timestamp: Date.now()
-          });
-          
-          // Update stock
-          await DB.updateItemStock(item.itemId, Math.max(0, (dbItem.stock || 0) - item.pickedQty));
+          try {
+            await DB.logMovement({
+              itemId: item.itemId,
+              itemName: item.itemName,
+              quantity: item.pickedQty,
+              type: 'PICK',
+              fromLocation: item.location || 'Unknown',
+              timestamp: Date.now()
+            });
+          } catch (e) {
+            console.warn('logMovement failed for', item.itemName, e.message);
+            errors.push(`Movement log: ${item.itemName}`);
+          }
+
+          try {
+            await DB.updateItemStock(item.itemId, Math.max(0, (dbItem.stock || 0) - item.pickedQty));
+          } catch (e) {
+            console.warn('updateItemStock failed for', item.itemName, e.message);
+            errors.push(`Stock update: ${item.itemName}`);
+          }
         }
       }
     }
-    
-    await DB.updatePickList(list.id, { status: 'completed', completedBy, completedAt: Date.now() });
+
+    try {
+      await DB.updatePickList(list.id, { status: 'completed', completedBy, completedAt: Date.now() });
+    } catch (e) {
+      console.error('updatePickList failed:', e.message);
+      alert('Failed to mark pick list complete: ' + e.message);
+      return;
+    }
+
+    // Always close the modal — even if movement/stock logging had issues
     setSelectedList(null);
     setPickCompletedBy('');
     loadData();
+
+    if (errors.length > 0) {
+      console.warn('Pick list completed with some non-critical errors:', errors);
+    }
   };
 
   // QR Scanner functions
@@ -2006,13 +2027,16 @@ export default function PickLists() {
                   
                   {/* Triwall Weight & Dimensions Section - similar to box details */}
                   <div style={{ marginTop: 25, padding: 20, background: 'var(--bg-badge-purple)', borderRadius: 8, border: '1px solid #ce93d8' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 }}>
+
+                    {/* ── TOP: Add Triwall button ── */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                       <h4 style={{ margin: 0, color: 'var(--text-badge-purple)' }}>🏗️ Triwall Details</h4>
                       <button
                         onClick={addTriwall}
                         style={{ 
-                          padding: '8px 16px', background: '#9c27b0', color: 'var(--text-on-dark)',
-                          border: 'none', borderRadius: 4, cursor: 'pointer', fontWeight: 600, fontSize: 13
+                          padding: '10px 20px', background: '#9c27b0', color: 'white',
+                          border: 'none', borderRadius: 8, cursor: 'pointer', fontWeight: 700, fontSize: 14,
+                          boxShadow: '0 2px 6px rgba(156,39,176,0.35)'
                         }}
                       >
                         + Add Triwall
@@ -2022,41 +2046,66 @@ export default function PickLists() {
                     {triwalls.map((triwall, twIdx) => {
                       const estimatedWeight = calculateTriwallWeight(triwall.id);
                       return (
-                        <div key={triwall.id} style={{ display: 'flex', alignItems: 'center', gap: 15, marginBottom: 12, flexWrap: 'wrap', paddingBottom: 12, borderBottom: twIdx < triwalls.length - 1 ? '1px solid #ce93d8' : 'none' }}>
-                          <strong style={{ minWidth: 80 }}>Triwall {twIdx + 1}:</strong>
+                        <div key={triwall.id} style={{ marginBottom: 14, paddingBottom: 14, borderBottom: twIdx < triwalls.length - 1 ? '1px solid #ce93d8' : 'none' }}>
+                          {/* Triwall header row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+                            <strong style={{ minWidth: 90, fontSize: 14 }}>Triwall {twIdx + 1}</strong>
+
+                            {/* Color preset buttons — clicking autofills dimensions */}
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', marginRight: 2 }}>Tap to autofill:</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateTriwallDetail(triwall.id, 'length', '48');
+                                updateTriwallDetail(triwall.id, 'width', '44');
+                                updateTriwallDetail(triwall.id, 'height', '48');
+                                updateTriwallDetail(triwall.id, 'type', 'brown');
+                                const itemWeight = calculateTriwallWeight(triwall.id);
+                                updateTriwallDetail(triwall.id, 'weight', (itemWeight + 120).toFixed(1));
+                              }}
+                              style={{
+                                padding: '6px 12px', background: '#8d6e63', color: 'white',
+                                border: triwall.type === 'brown' ? '2px solid #4e342e' : 'none',
+                                borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                                boxShadow: triwall.type === 'brown' ? '0 0 0 2px #4e342e' : 'none'
+                              }}
+                            >
+                              🟤 Brown (48×44×48)
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateTriwallDetail(triwall.id, 'length', '46');
+                                updateTriwallDetail(triwall.id, 'width', '39');
+                                updateTriwallDetail(triwall.id, 'height', '45');
+                                updateTriwallDetail(triwall.id, 'type', 'white');
+                                const itemWeight = calculateTriwallWeight(triwall.id);
+                                updateTriwallDetail(triwall.id, 'weight', (itemWeight + 75).toFixed(1));
+                              }}
+                              style={{
+                                padding: '6px 12px', background: '#f5f5f5', color: '#333',
+                                border: triwall.type === 'white' ? '2px solid #9e9e9e' : '1px solid #bbb',
+                                borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                                boxShadow: triwall.type === 'white' ? '0 0 0 2px #9e9e9e' : 'none'
+                              }}
+                            >
+                              ⬜ White (46×39×45)
+                            </button>
+
+                            {/* Remove button */}
+                            {triwalls.length > 1 && (
+                              <button
+                                onClick={() => removeTriwall(triwall.id)}
+                                style={{ marginLeft: 'auto', padding: '5px 10px', background: '#f44336', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}
+                              >
+                                ✕ Remove
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Dimensions + weight row */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingLeft: 4 }}>
                           
-                          {/* Quick fill buttons */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              updateTriwallDetail(triwall.id, 'length', '48');
-                              updateTriwallDetail(triwall.id, 'width', '44');
-                              updateTriwallDetail(triwall.id, 'height', '48');
-                              updateTriwallDetail(triwall.id, 'type', 'brown');
-                              const itemWeight = calculateTriwallWeight(triwall.id);
-                              updateTriwallDetail(triwall.id, 'weight', (itemWeight + 120).toFixed(1));
-                            }}
-                            style={{ padding: '4px 8px', background: '#8d6e63', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-                          >
-                            🟤 Brown
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              updateTriwallDetail(triwall.id, 'length', '46');
-                              updateTriwallDetail(triwall.id, 'width', '39');
-                              updateTriwallDetail(triwall.id, 'height', '45');
-                              updateTriwallDetail(triwall.id, 'type', 'white');
-                              const itemWeight = calculateTriwallWeight(triwall.id);
-                              updateTriwallDetail(triwall.id, 'weight', (itemWeight + 75).toFixed(1));
-                            }}
-                            style={{ padding: '4px 8px', background: '#e0e0e0', color: 'var(--text-primary)', border: '1px solid #999', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-                          >
-                            ⬜ White
-                          </button>
-                          
-                          {/* Weight */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                             <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Weight:</span>
                             <input
                               type="number"
@@ -2068,57 +2117,26 @@ export default function PickLists() {
                               style={{ width: 70, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
                             />
                             <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>lbs</span>
-                          </div>
-                          
-                          {/* Dimensions */}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>L×W×H:</span>
-                            <input
-                              type="number"
-                              min="0"
-                              placeholder="L"
-                              value={triwall.length || ''}
+
+                            <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 6 }}>L×W×H:</span>
+                            <input type="number" min="0" placeholder="L" value={triwall.length || ''}
                               onChange={e => updateTriwallDetail(triwall.id, 'length', e.target.value)}
-                              style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
-                            />
+                              style={{ width: 52, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
                             <span style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>×</span>
-                            <input
-                              type="number"
-                              min="0"
-                              placeholder="W"
-                              value={triwall.width || ''}
+                            <input type="number" min="0" placeholder="W" value={triwall.width || ''}
                               onChange={e => updateTriwallDetail(triwall.id, 'width', e.target.value)}
-                              style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
-                            />
+                              style={{ width: 52, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
                             <span style={{ color: 'var(--text-muted)', fontWeight: 'bold' }}>×</span>
-                            <input
-                              type="number"
-                              min="0"
-                              placeholder="H"
-                              value={triwall.height || ''}
+                            <input type="number" min="0" placeholder="H" value={triwall.height || ''}
                               onChange={e => updateTriwallDetail(triwall.id, 'height', e.target.value)}
-                              style={{ width: 50, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }}
-                            />
+                              style={{ width: 52, padding: 6, textAlign: 'center', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
                             <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>in</span>
-                          </div>
-                          
-                          {/* Print Label */}
-                          <button
-                            onClick={() => printTriwallLabel(triwall.id, twIdx)}
-                            style={{ padding: '4px 8px', background: '#607d8b', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
-                          >
-                            🏷️ Label
-                          </button>
-                          
-                          {/* Remove */}
-                          {triwalls.length > 1 && (
-                            <button
-                              onClick={() => removeTriwall(triwall.id)}
-                              style={{ padding: '4px 8px', background: '#f44336', color: 'var(--text-on-dark)', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}
-                            >
-                              ✕
+
+                            <button onClick={() => printTriwallLabel(triwall.id, twIdx)}
+                              style={{ padding: '5px 10px', background: '#607d8b', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 12, marginLeft: 4 }}>
+                              🏷️ Label
                             </button>
-                          )}
+                          </div>
                         </div>
                       );
                     })}

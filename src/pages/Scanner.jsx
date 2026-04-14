@@ -150,7 +150,7 @@ export default function Scanner() {
                 width: '100%',
                 maxWidth: '500px',
                 margin: '0 auto',
-                border: '2px solid #2d5f3f',
+                border: '2px solid #0d7a52',
                 borderRadius: '8px',
                 overflow: 'hidden'
               }}
@@ -294,7 +294,7 @@ export default function Scanner() {
                 
                 <div style={{ 
                   padding: 20, 
-                  background: 'linear-gradient(135deg, #2d5f3f, #1a3a26)', 
+                  background: 'linear-gradient(135deg, #0d7a52, #0a6444)', 
                   borderRadius: 8, 
                   marginBottom: 20,
                   color: 'var(--text-on-dark)',

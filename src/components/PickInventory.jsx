@@ -120,7 +120,7 @@ export default function PickInventory({ item, location, onClose, onSuccess }) {
         </select>
 
         {selectedLocation && (
-          <p style={{color: '#2d5f3f', fontWeight: 'bold', marginBottom: 20}}>
+          <p style={{color: '#0d7a52', fontWeight: 'bold', marginBottom: 20}}>
             Available at this location: {currentQty}
           </p>
         )}

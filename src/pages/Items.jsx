@@ -1224,7 +1224,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         <button 
           className={`btn ${showFilters ? 'btn-primary' : ''}`}
           onClick={() => setShowFilters(!showFilters)}
-          style={{ background: showFilters ? '#2d5f3f' : '#6c757d', color: 'var(--text-on-dark)' }}
+          style={{ background: showFilters ? '#0d7a52' : '#6c757d', color: 'var(--text-on-dark)' }}
         >
           🔍 Filters {hasActiveFilters && `(${Object.values(filters).filter(v => v).length})`}
         </button>
@@ -1394,7 +1394,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       onClick={() => setBatchCategory(cat)}
                       style={{
                         padding: '4px 10px',
-                        border: batchCategory === cat ? '2px solid #2d5f3f' : '1px solid #ddd',
+                        border: batchCategory === cat ? '2px solid #0d7a52' : '1px solid #ddd',
                         borderRadius: 4,
                         background: batchCategory === cat ? '#e8f5e9' : '#f5f5f5',
                         cursor: 'pointer',
@@ -1555,7 +1555,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     onClick={() => setLabelSize(size)}
                     style={{
                       padding: '8px 16px',
-                      border: labelSize === size ? '2px solid #2d5f3f' : '1px solid #ddd',
+                      border: labelSize === size ? '2px solid #0d7a52' : '1px solid #ddd',
                       borderRadius: 6,
                       background: labelSize === size ? '#e8f5e9' : 'white',
                       cursor: 'pointer',
@@ -2982,10 +2982,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   padding: '12px 20px',
                   border: 'none',
                   background: historyTab === 'orders' ? '#fff' : '#f5f5f5',
-                  borderBottom: historyTab === 'orders' ? '3px solid #2d5f3f' : '3px solid transparent',
+                  borderBottom: historyTab === 'orders' ? '3px solid #0d7a52' : '3px solid transparent',
                   cursor: 'pointer',
                   fontWeight: historyTab === 'orders' ? 600 : 400,
-                  color: historyTab === 'orders' ? '#2d5f3f' : '#666'
+                  color: historyTab === 'orders' ? '#0d7a52' : '#666'
                 }}
               >
                 🧾 Order History ({itemOrderHistory.length})
@@ -2997,10 +2997,10 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   padding: '12px 20px',
                   border: 'none',
                   background: historyTab === 'activity' ? '#fff' : '#f5f5f5',
-                  borderBottom: historyTab === 'activity' ? '3px solid #2d5f3f' : '3px solid transparent',
+                  borderBottom: historyTab === 'activity' ? '3px solid #0d7a52' : '3px solid transparent',
                   cursor: 'pointer',
                   fontWeight: historyTab === 'activity' ? 600 : 400,
-                  color: historyTab === 'activity' ? '#2d5f3f' : '#666'
+                  color: historyTab === 'activity' ? '#0d7a52' : '#666'
                 }}
               >
                 📜 Activity Log ({itemHistory.length})
@@ -3210,7 +3210,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                                 disabled={orderHistoryPage === 1}
                                 style={{
                                   padding: '6px 12px',
-                                  background: orderHistoryPage === 1 ? '#eee' : '#2d5f3f',
+                                  background: orderHistoryPage === 1 ? '#eee' : '#0d7a52',
                                   color: orderHistoryPage === 1 ? '#999' : 'white',
                                   border: 'none',
                                   borderRadius: 4,
@@ -3228,7 +3228,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                                 disabled={orderHistoryPage === totalPages}
                                 style={{
                                   padding: '6px 12px',
-                                  background: orderHistoryPage === totalPages ? '#eee' : '#2d5f3f',
+                                  background: orderHistoryPage === totalPages ? '#eee' : '#0d7a52',
                                   color: orderHistoryPage === totalPages ? '#999' : 'white',
                                   border: 'none',
                                   borderRadius: 4,

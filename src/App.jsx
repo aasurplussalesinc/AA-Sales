@@ -58,7 +58,7 @@ export function TierGate({ feature, requiredPlan, children }) {
         Upgrade to unlock it.
       </p>
       <a href="/subscription-required" style={{
-        padding: '12px 32px', background: '#2d5f3f', color: 'white',
+        padding: '12px 32px', background: '#0d7a52', color: 'white',
         borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 16
       }}>View Plans & Upgrade</a>
     </div>
@@ -81,7 +81,7 @@ function NavBar() {
   const { theme } = useTheme();
   const planColors = {
     trial: '#ffc107', starter: '#78909c', pro: '#1976d2',
-    business: '#7b1fa2', enterprise: theme === 'dark' ? '#34d399' : '#2d5f3f', owner: '#c62828'
+    business: '#7b1fa2', enterprise: theme === 'dark' ? '#34d399' : '#0d7a52', owner: '#c62828'
   };
   const planLabels = {
     trial: `Trial · ${subscriptionStatus?.trialDaysRemaining ?? 0}d left`,

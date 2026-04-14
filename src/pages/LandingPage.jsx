@@ -446,7 +446,7 @@ export default function LandingPage() {
           ))}
         </div>
         <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.2)', margin: 0 }}>
-          © {new Date().getFullYear()} SkidSling · AA Development Group LLC
+          © {new Date().getFullYear()} SkidSling · AA Innovation Group LLC
         </p>
       </footer>
     </div>

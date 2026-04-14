@@ -548,7 +548,7 @@ W2,2,C,3`;
               }
               .qr-item .quantity {
                 font-weight: bold;
-                color: #2d5f3f;
+                color: #0d7a52;
                 margin-top: 5px;
               }
               @media print {

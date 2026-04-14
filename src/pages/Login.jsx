@@ -84,7 +84,7 @@ export default function Login() {
         <div style={{ textAlign: 'center', marginBottom: 30 }}>
           <span style={{ fontSize: 48 }}>📦</span>
           <h1 style={{ 
-            color: '#2d5f3f', 
+            color: '#0d7a52', 
             fontSize: 24, 
             marginTop: 10,
             marginBottom: 5
@@ -184,7 +184,7 @@ export default function Login() {
               style={{
                 width: '100%',
                 padding: 14,
-                background: loading ? '#999' : '#2d5f3f',
+                background: loading ? '#999' : '#0d7a52',
                 color: 'white',
                 border: 'none',
                 borderRadius: 6,
@@ -251,7 +251,7 @@ export default function Login() {
               style={{
                 width: '100%',
                 padding: 14,
-                background: loading ? '#999' : '#2d5f3f',
+                background: loading ? '#999' : '#0d7a52',
                 color: 'white',
                 border: 'none',
                 borderRadius: 6,

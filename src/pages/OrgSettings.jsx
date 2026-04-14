@@ -302,7 +302,7 @@ export default function OrgSettings() {
                     <span style={{
                       padding: '3px 8px',
                       borderRadius: 4,
-                      background: member.role === 'admin' ? '#2d5f3f' : '#6c757d',
+                      background: member.role === 'admin' ? '#0d7a52' : '#6c757d',
                       color: 'var(--text-on-dark)',
                       fontSize: 12
                     }}>

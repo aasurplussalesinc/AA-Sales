@@ -21,7 +21,7 @@ const TIERS = [
     features: ['Everything in Pro', 'Live shipping rates', 'Own UPS account', 'Batch label printing', 'International & customs', 'Triwall packing', 'Vendor contracts'],
   },
   {
-    name: 'Enterprise', price: 350, color: '#2d5f3f', bg: '#e8f5e9',
+    name: 'Enterprise', price: 350, color: '#0d7a52', bg: '#e8f5e9',
     tagline: 'The full operation',
     limits: 'Unlimited users · Unlimited SKUs · Unlimited orders',
     features: ['Everything in Business', 'Bill to customer UPS account', 'Dual insurance comparison', 'Unlimited everything', 'Priority support & SLA'],
@@ -41,7 +41,7 @@ export default function SubscriptionRequired() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #2d5f3f 0%, #1a3a26 100%)',
+      background: 'linear-gradient(135deg, #0d7a52 0%, #0a6444 100%)',
       padding: '40px 20px',
       fontFamily: 'system-ui,-apple-system,sans-serif'
     }}>

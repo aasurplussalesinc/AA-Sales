@@ -1914,7 +1914,7 @@ ${labelsHtml}
           <button 
             className="btn" 
             onClick={() => setShowFilters(!showFilters)}
-            style={{ background: showFilters ? '#2d5f3f' : '#f5f5f5', color: showFilters ? 'white' : '#333' }}
+            style={{ background: showFilters ? '#0d7a52' : '#f5f5f5', color: showFilters ? 'white' : '#333' }}
           >
             🔍 Filter {(filterSearch || filterPayment || filterDateFrom || filterDateTo) && '•'}
           </button>

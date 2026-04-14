@@ -252,7 +252,7 @@ export default function Reports() {
             style={{
               padding: '10px 20px',
               border: 'none',
-              background: activeTab === tab.id ? '#2d5f3f' : '#e0e0e0',
+              background: activeTab === tab.id ? '#0d7a52' : '#e0e0e0',
               color: activeTab === tab.id ? 'white' : '#333',
               borderRadius: '6px 6px 0 0',
               cursor: 'pointer',

@@ -168,7 +168,7 @@ export default function Dashboard() {
                     <div style={{
                       height: '100%',
                       width: `${(item.totalPicked / maxPicked) * 100}%`,
-                      background: idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : idx === 2 ? '#CD7F32' : '#2d5f3f',
+                      background: idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : idx === 2 ? '#CD7F32' : '#0d7a52',
                       borderRadius: 4,
                       transition: 'width 0.5s ease'
                     }} />

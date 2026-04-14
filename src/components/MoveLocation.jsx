@@ -128,7 +128,7 @@ export default function MoveLocation({ item, location, onClose, onSuccess }) {
         </select>
 
         {fromLocation && (
-          <p style={{color: '#2d5f3f', fontWeight: 'bold', marginBottom: 20}}>
+          <p style={{color: '#0d7a52', fontWeight: 'bold', marginBottom: 20}}>
             Available: {currentQty}
           </p>
         )}

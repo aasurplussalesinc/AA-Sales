@@ -441,7 +441,7 @@ export default function LandingPage() {
         </div>
         <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
           {['Features', 'Pricing', 'Support', 'Privacy', 'Terms'].map(l => (
-            <a key={l} href={l === 'Features' ? '#features' : l === 'Pricing' ? '#pricing' : l === 'Support' ? 'mailto:support@skidsling.com' : '#'}
+            <a key={l} href={l === 'Features' ? '#features' : l === 'Pricing' ? '#pricing' : l === 'Support' ? 'mailto:support@skidsling.com' : l === 'Terms' ? '/terms' : l === 'Privacy' ? '/privacy' : '#'}
               style={{ color: 'rgba(255,255,255,0.3)', textDecoration: 'none', fontSize: 13 }}>{l}</a>
           ))}
         </div>

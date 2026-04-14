@@ -17,6 +17,8 @@ import PurchaseOrders from './pages/PurchaseOrders';
 import Customers from './pages/Customers';
 import Contracts from './pages/Contracts';
 import Shipping from './pages/Shipping';
+import TermsOfService from './pages/TermsOfService';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import { useTier } from './useTier';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import './App.css';
@@ -318,6 +320,8 @@ function AppRoutes() {
       } />
       
       {/* Catch all */}
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );

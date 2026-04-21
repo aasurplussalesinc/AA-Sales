@@ -3,6 +3,29 @@ import QRCode from 'qrcode';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
 
+function DropdownItem({ icon, label, color, onClick, danger }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: '100%', padding: '9px 14px',
+        background: 'transparent',
+        border: 'none', borderBottom: '1px solid var(--border)',
+        display: 'flex', alignItems: 'center', gap: 9,
+        cursor: 'pointer', textAlign: 'left',
+        color: danger ? '#f44336' : 'var(--text-primary)',
+        fontSize: 13, fontWeight: 500,
+        transition: 'background 0.15s'
+      }}
+      onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
+      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+    >
+      <span style={{ fontSize: 14 }}>{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
 export default function Items() {
   const { userRole } = useAuth();
   const isAdmin = userRole === 'admin';
@@ -68,6 +91,21 @@ export default function Items() {
   const [editingItem, setEditingItem] = useState(null);
   const [editUseMultiLocation, setEditUseMultiLocation] = useState(false);
   const [editLocationBreakdown, setEditLocationBreakdown] = useState([{ location: '', quantity: 0 }]);
+
+  // Action dropdown state — tracks which item's menu is open
+  const [openActionMenu, setOpenActionMenu] = useState(null);
+  const actionMenuRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (actionMenuRef.current && !actionMenuRef.current.contains(e.target)) {
+        setOpenActionMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Filter states
   const [filters, setFilters] = useState({
@@ -2045,58 +2083,71 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   {formatDate(item.createdAt)}
                 </td>
                 <td>
-                  <div className="action-buttons">
-                    {canEdit && (
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => openEditItem(item)}
-                        title="Edit Item"
-                        style={{ background: '#ff9800', color: 'var(--text-on-dark)' }}
-                      >
-                        ✏️
-                      </button>
-                    )}
-                    {canEdit && (
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => duplicateItem(item)}
-                        title="Duplicate Item"
-                        style={{ background: '#607d8b', color: 'var(--text-on-dark)' }}
-                      >
-                        📋
-                      </button>
-                    )}
+                  <div style={{ position: 'relative' }} ref={openActionMenu === item.id ? actionMenuRef : null}>
+                    {/* Actions trigger button */}
                     <button
                       className="btn btn-sm"
-                      onClick={() => setViewingItemLocations(item)}
-                      title="View Locations"
-                      style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}
+                      onClick={() => setOpenActionMenu(openActionMenu === item.id ? null : item.id)}
+                      style={{
+                        background: 'var(--btn-secondary-bg)',
+                        color: 'var(--btn-secondary-color)',
+                        border: '1px solid var(--border)',
+                        fontWeight: 600, fontSize: 12, padding: '5px 12px',
+                        display: 'flex', alignItems: 'center', gap: 4
+                      }}
                     >
-                      📍
+                      Actions <span style={{ fontSize: 10, opacity: 0.7 }}>{openActionMenu === item.id ? '▲' : '▼'}</span>
                     </button>
-                    <button
-                      className="btn btn-sm"
-                      onClick={() => loadItemHistory(item)}
-                      title="View History"
-                      style={{ background: '#9c27b0', color: 'var(--text-on-dark)' }}
-                    >
-                      📜
-                    </button>
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => printQR(item)}
-                      title="Print QR"
-                    >
-                      🖨️
-                    </button>
-                    {canEdit && (
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() => deleteItem(item.id)}
-                        title="Delete"
-                      >
-                        🗑️
-                      </button>
+
+                    {/* Dropdown menu */}
+                    {openActionMenu === item.id && (
+                      <div style={{
+                        position: 'absolute', right: 0, top: '100%', marginTop: 4,
+                        background: 'var(--bg-surface)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 8,
+                        boxShadow: 'var(--shadow-md)',
+                        zIndex: 999, minWidth: 160,
+                        overflow: 'hidden'
+                      }}>
+                        {canEdit && (
+                          <DropdownItem
+                            icon="✏️" label="Edit"
+                            color="#ff9800"
+                            onClick={() => { openEditItem(item); setOpenActionMenu(null); }}
+                          />
+                        )}
+                        {canEdit && (
+                          <DropdownItem
+                            icon="📋" label="Duplicate"
+                            color="#607d8b"
+                            onClick={() => { duplicateItem(item); setOpenActionMenu(null); }}
+                          />
+                        )}
+                        <DropdownItem
+                          icon="📍" label="Locations"
+                          color="#17a2b8"
+                          onClick={() => { setViewingItemLocations(item); setOpenActionMenu(null); }}
+                        />
+                        <DropdownItem
+                          icon="📜" label="History"
+                          color="#9c27b0"
+                          onClick={() => { loadItemHistory(item); setOpenActionMenu(null); }}
+                        />
+                        <DropdownItem
+                          icon="🖨️" label="Print QR"
+                          color="var(--accent)"
+                          onClick={() => { printQR(item); setOpenActionMenu(null); }}
+                        />
+                        {canEdit && (
+                          <DropdownItem
+                            icon="🗑️" label="Delete"
+                            color="#f44336"
+                            onClick={() => { deleteItem(item.id); setOpenActionMenu(null); }}
+                            danger
+                          />
+                        )}
+                      </div>
                     )}
                   </div>
                 </td>

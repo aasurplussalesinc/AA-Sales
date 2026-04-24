@@ -1252,3 +1252,256 @@ exports.generateShipStationLabel = functions.https.onCall(async (data, context) 
     throw new functions.https.HttpsError('internal', error.message);
   }
 });
+
+
+// ═══════════════════════════════════════════════════════════
+// EASYPOST INTEGRATION
+// EasyPost REST API v2 — api.easypost.com
+// Auth: Basic auth, API key as username, empty password
+// Flow: Create Shipment (gets rates) → Buy label (gets label URL)
+// ═══════════════════════════════════════════════════════════
+
+const EP_BASE = 'https://api.easypost.com/v2';
+
+async function easypostRequest(apiKey, endpoint, method = 'GET', body = null) {
+  if (!apiKey) throw new Error('EasyPost API key not configured. Go to Shipping Settings and enter your EasyPost API key.');
+  const credentials = Buffer.from(`${apiKey}:`).toString('base64');
+  const options = {
+    method,
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/json',
+    },
+  };
+  if (body) options.body = JSON.stringify(body);
+  const res = await fetch(`${EP_BASE}${endpoint}`, options);
+  const data = await res.json();
+  if (!res.ok) {
+    const errMsg = data?.error?.message || data?.error || `EasyPost API error ${res.status}`;
+    throw new Error(errMsg);
+  }
+  return data;
+}
+
+// ── Get EasyPost Rates ──
+// Creates a shipment on EasyPost to get rates, stores shipment ID for label purchase
+exports.getEasyPostRates = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+
+  if (!checkRateLimit('ep_rates_' + context.auth.uid, 30, 5 * 60 * 1000)) {
+    throw new functions.https.HttpsError('resource-exhausted', 'Too many rate requests. Please wait a moment.');
+  }
+
+  const { orgId, orderId, toAddress, parcels } = data;
+
+  try {
+    const orgDoc = await db.collection('organizations').doc(orgId).get();
+    const apiKey = orgDoc.data()?.settings?.easypostApiKey;
+    if (!apiKey) throw new Error('EasyPost API key not configured. Go to Shipping Settings and enter your EasyPost API key.');
+
+    const fromAddr = orgDoc.data()?.settings?.shippingFromAddress;
+    if (!fromAddr?.street1) throw new Error('Shipping from address not configured. Go to Shipping Settings.');
+
+    const parcel = parcels && parcels[0] ? parcels[0] : { weight: 1 };
+
+    // Create shipment on EasyPost — returns shipment with rates
+    const shipmentPayload = {
+      shipment: {
+        to_address: {
+          name: toAddress.name || toAddress.company || 'Recipient',
+          company: toAddress.company || '',
+          street1: toAddress.street1,
+          street2: toAddress.street2 || '',
+          city: toAddress.city,
+          state: toAddress.state,
+          zip: toAddress.zip,
+          country: toAddress.country || 'US',
+          phone: toAddress.phone || '',
+          email: toAddress.email || '',
+          residential: toAddress.residential || false,
+        },
+        from_address: {
+          name: fromAddr.name || fromAddr.company || 'Sender',
+          company: fromAddr.company || '',
+          street1: fromAddr.street1,
+          street2: fromAddr.street2 || '',
+          city: fromAddr.city,
+          state: fromAddr.state,
+          zip: fromAddr.zip,
+          country: 'US',
+          phone: fromAddr.phone || '',
+          email: fromAddr.email || '',
+          residential: false,
+        },
+        parcel: {
+          weight: parseFloat(parcel.weight) * 16 || 16, // EasyPost uses oz
+          ...(parcel.length && {
+            length: parseFloat(parcel.length),
+            width: parseFloat(parcel.width),
+            height: parseFloat(parcel.height),
+          }),
+        },
+        options: {
+          label_format: 'PDF',
+          label_size: '4x6',
+        },
+      },
+    };
+
+    const shipment = await easypostRequest(apiKey, '/shipments', 'POST', shipmentPayload);
+
+    if (!shipment.rates || shipment.rates.length === 0) {
+      throw new Error('No rates returned from EasyPost. Check your address and package details.');
+    }
+
+    // Store the EasyPost shipment ID temporarily so we can buy the label later
+    if (orderId) {
+      await db.collection('purchaseOrders').doc(orderId).update({
+        easypostShipmentId: shipment.id,
+        updatedAt: Date.now(),
+      });
+    }
+
+    // Format rates to match SkidSling's rate format
+    const rates = shipment.rates.map(rate => ({
+      provider: 'easypost',
+      rateId: rate.id,
+      shipmentId: shipment.id,
+      carrier: rate.carrier,
+      service: rate.service,
+      serviceCode: rate.service,
+      amount: parseFloat(rate.rate),
+      listRate: parseFloat(rate.list_rate || rate.rate),
+      retailRate: parseFloat(rate.retail_rate || rate.rate),
+      currency: rate.currency || 'USD',
+      estimatedDays: rate.delivery_days || rate.est_delivery_days,
+      deliveryDate: rate.delivery_date,
+      billingType: rate.billing_type,
+    })).sort((a, b) => a.amount - b.amount);
+
+    return {
+      rates,
+      shipmentId: shipment.id,
+      provider: 'easypost',
+      messages: shipment.messages || [],
+    };
+
+  } catch (error) {
+    console.error('getEasyPostRates error:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// ── Generate EasyPost Label ──
+// Buys the label using the shipment ID and rate ID from getEasyPostRates
+exports.generateEasyPostLabel = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+
+  if (!checkRateLimit('ep_label_' + context.auth.uid, 60, 10 * 60 * 1000)) {
+    throw new functions.https.HttpsError('resource-exhausted', 'Too many label requests. Please wait a moment.');
+  }
+
+  const { orgId, orderId, shipmentId, rateId, insuranceAmount } = data;
+
+  try {
+    const orgDoc = await db.collection('organizations').doc(orgId).get();
+    const apiKey = orgDoc.data()?.settings?.easypostApiKey;
+    if (!apiKey) throw new Error('EasyPost API key not configured');
+
+    // Buy the label
+    const buyPayload = {
+      rate: { id: rateId },
+      ...(insuranceAmount && { insurance: String(insuranceAmount) }),
+    };
+
+    const purchased = await easypostRequest(apiKey, `/shipments/${shipmentId}/buy`, 'POST', buyPayload);
+
+    const labelUrl = purchased.postage_label?.label_url;
+    const labelPdfUrl = purchased.postage_label?.label_pdf_url || labelUrl;
+    const trackingCode = purchased.tracking_code;
+
+    if (!labelUrl && !labelPdfUrl) {
+      throw new Error('Label generated but URL not returned. Check your EasyPost dashboard.');
+    }
+
+    // Update the order in Firestore
+    if (orderId) {
+      await db.collection('purchaseOrders').doc(orderId).update({
+        shippingLabel: {
+          trackingNumber: trackingCode,
+          labelUrl: labelPdfUrl || labelUrl,
+          labelPngUrl: labelUrl,
+          carrier: purchased.selected_rate?.carrier || '',
+          service: purchased.selected_rate?.service || '',
+          cost: parseFloat(purchased.selected_rate?.rate || 0),
+          shipmentId: purchased.id,
+          rateId: rateId,
+          trackerId: purchased.tracker?.id || '',
+          provider: 'easypost',
+          createdAt: Date.now(),
+        },
+        status: 'shipped',
+        easypostShipmentId: purchased.id,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return {
+      success: true,
+      trackingNumber: trackingCode,
+      labelUrl: labelPdfUrl || labelUrl,
+      labelPngUrl: labelUrl,
+      shipmentId: purchased.id,
+      trackerId: purchased.tracker?.id,
+      carrier: purchased.selected_rate?.carrier,
+      service: purchased.selected_rate?.service,
+      cost: parseFloat(purchased.selected_rate?.rate || 0),
+      provider: 'easypost',
+    };
+
+  } catch (error) {
+    console.error('generateEasyPostLabel error:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// ── Validate Address via EasyPost ──
+exports.validateEasyPostAddress = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+
+  const { orgId, address } = data;
+
+  try {
+    const orgDoc = await db.collection('organizations').doc(orgId).get();
+    const apiKey = orgDoc.data()?.settings?.easypostApiKey;
+    if (!apiKey) throw new Error('EasyPost API key not configured');
+
+    const result = await easypostRequest(apiKey, '/addresses', 'POST', {
+      address: {
+        street1: address.street1,
+        street2: address.street2 || '',
+        city: address.city,
+        state: address.state,
+        zip: address.zip,
+        country: address.country || 'US',
+      },
+      verify: ['delivery'],
+    });
+
+    return {
+      success: result.verifications?.delivery?.success || false,
+      errors: result.verifications?.delivery?.errors || [],
+      address: {
+        street1: result.street1,
+        street2: result.street2,
+        city: result.city,
+        state: result.state,
+        zip: result.zip,
+        residential: result.residential,
+      },
+    };
+  } catch (error) {
+    console.error('validateEasyPostAddress error:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});

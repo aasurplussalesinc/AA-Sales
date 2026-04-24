@@ -61,10 +61,11 @@ export function TierGate({ feature, requiredPlan, children }) {
         This feature is available on the <strong>{requiredPlan}</strong> plan and above.
         Upgrade to unlock it.
       </p>
-      <a href="/subscription-required" style={{
+      <Link to="/subscription-required" style={{
         padding: '12px 32px', background: '#0d7a52', color: 'white',
-        borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 16
-      }}>View Plans & Upgrade</a>
+        borderRadius: 8, textDecoration: 'none', fontWeight: 700, fontSize: 16,
+        display: 'inline-block'
+      }}>View Plans & Upgrade</Link>
     </div>
   );
 }

@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
 import { useTier } from '../useTier';
 
@@ -48,11 +50,12 @@ export default function ActivityLog() {
             The Activity Log is available on the <strong>Pro</strong> plan and above.
             Upgrade to get full visibility into everything happening in your warehouse.
           </p>
-          <a href="/subscription-required" style={{
+          <Link to="/subscription-required" style={{
             padding: '12px 32px', background: 'var(--btn-primary-bg)',
             color: 'var(--btn-primary-color)', borderRadius: 8,
-            textDecoration: 'none', fontWeight: 700, fontSize: 16
-          }}>View Plans & Upgrade</a>
+            textDecoration: 'none', fontWeight: 700, fontSize: 16,
+            display: 'inline-block'
+          }}>View Plans & Upgrade</Link>
         </div>
       </div>
     );

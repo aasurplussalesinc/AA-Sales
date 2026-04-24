@@ -24,9 +24,11 @@ export default function Shipping() {
   const [autoPurchase, setAutoPurchase] = useState(false);
   const [shippoApiKey, setShippoApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
-  const [shippingProvider, setShippingProvider] = useState('shippo'); // 'shippo' or 'shipstation'
+  const [shippingProvider, setShippingProvider] = useState('shippo'); // 'shippo', 'shipstation', or 'easypost'
   const [shipstationApiKey, setShipstationApiKey] = useState('');
   const [showShipstationKey, setShowShipstationKey] = useState(false);
+  const [easypostApiKey, setEasypostApiKey] = useState('');
+  const [showEasypostKey, setShowEasypostKey] = useState(false);
   const [fromAddress, setFromAddress] = useState({
     name: '', company: '', street1: '', street2: '', city: '', state: '', zip: '', country: 'US', phone: '', email: ''
   });
@@ -92,6 +94,7 @@ export default function Shipping() {
     setShippoApiKey(s.shippoApiKey || '');
     setShippingProvider(s.shippingProvider || 'shippo');
     setShipstationApiKey(s.shipstationApiKey || '');
+    setEasypostApiKey(s.easypostApiKey || '');
     if (s.shippingFromAddress) {
       setFromAddress({
         name: s.shippingFromAddress.name || '',
@@ -112,9 +115,14 @@ export default function Shipping() {
     setSavingSettings(true);
     setError('');
     try {
-      const activeKey = shippingProvider === 'shipstation' ? shipstationApiKey : shippoApiKey;
+      const activeKey = shippingProvider === 'shipstation' ? shipstationApiKey
+        : shippingProvider === 'easypost' ? easypostApiKey
+        : shippoApiKey;
       if (!activeKey) {
-        setError(`${shippingProvider === 'shipstation' ? 'ShipStation' : 'Shippo'} API key is required.`);
+        const providerName = shippingProvider === 'shipstation' ? 'ShipStation'
+        : shippingProvider === 'easypost' ? 'EasyPost'
+        : 'Shippo';
+      setError(`${providerName} API key is required.`);
         setSavingSettings(false);
         return;
       }
@@ -128,6 +136,7 @@ export default function Shipping() {
         'settings.shippoApiKey': shippoApiKey,
         'settings.shippingProvider': shippingProvider,
         'settings.shipstationApiKey': shipstationApiKey,
+        'settings.easypostApiKey': easypostApiKey,
       });
 
       // Also update via Cloud Function for the scheduler
@@ -157,7 +166,11 @@ export default function Shipping() {
     setError('');
     try {
       const providerToUse = organization?.settings?.shippingProvider || 'shippo';
-      const generateFn = httpsCallable(functions, providerToUse === 'shipstation' ? 'generateShipStationLabel' : 'generateShippingLabel');
+      const generateFn = httpsCallable(functions,
+        providerToUse === 'shipstation' ? 'generateShipStationLabel'
+        : providerToUse === 'easypost' ? 'generateEasyPostLabel'
+        : 'generateShippingLabel'
+      );
       const result = await generateFn({ orderId, orgId: organization.id });
       setMessage(`✅ Shipping label generated for order!`);
       await loadData();
@@ -580,7 +593,55 @@ export default function Shipping() {
         <div style={{ background: 'var(--bg-surface-2)', border: '1px solid #dee2e6', borderRadius: 12, padding: 24, marginBottom: 20 }}>
           <h3 style={{ marginTop: 0 }}>⚙️ Shipping Settings</h3>
 
-          {/* Shippo API Key */}
+          {/* EasyPost API Key — shown when EasyPost is selected */}
+          {shippingProvider === 'easypost' && (
+            <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '2px solid #f59e0b' }}>
+              <h4 style={{ margin: '0 0 10px', color: '#f59e0b' }}>🔑 EasyPost API Key</h4>
+              <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', fontSize: 13 }}>
+                Get your API key from your EasyPost dashboard.
+                <a href="https://app.easypost.com/account/api-keys" target="_blank" rel="noopener noreferrer"
+                  style={{ color: '#f59e0b', marginLeft: 6 }}>Open EasyPost API Keys →</a>
+              </p>
+              <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', fontSize: 12 }}>
+                Use your <strong>Test API Key</strong> (starts with <code>EZTK</code>) for testing, 
+                and <strong>Production API Key</strong> for live labels.
+              </p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type={showEasypostKey ? 'text' : 'password'}
+                  value={easypostApiKey}
+                  onChange={e => setEasypostApiKey(e.target.value)}
+                  placeholder="EZTK... or EZ..."
+                  style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)',
+                    background: 'var(--bg-input)', color: 'var(--text-primary)',
+                    fontSize: 14, fontFamily: 'monospace'
+                  }}
+                />
+                <button
+                  onClick={() => setShowEasypostKey(!showEasypostKey)}
+                  style={{
+                    padding: '10px 14px', background: 'var(--bg-surface-2)', border: '1px solid var(--border)',
+                    borderRadius: 6, cursor: 'pointer', fontSize: 13
+                  }}
+                >
+                  {showEasypostKey ? '🙈 Hide' : '👁️ Show'}
+                </button>
+              </div>
+              {easypostApiKey && (
+                <div style={{ marginTop: 8, fontSize: 12, color: easypostApiKey.startsWith('EZTK') ? '#f59e0b' : '#4CAF50' }}>
+                  {easypostApiKey.startsWith('EZTK') ? '⚠️ Using TEST key — labels won't be real' : '✅ Using Production key'}
+                </div>
+              )}
+              <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--bg-surface-2)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+                <strong>100+ carriers</strong> including USPS, UPS, FedEx, DHL and more. 
+                Connect your own carrier accounts in the EasyPost dashboard for negotiated rates.
+              </div>
+            </div>
+          )}
+
+          {/* Shippo API Key — shown when Shippo is selected */}
+          {shippingProvider === 'shippo' && (
           <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '2px solid #1976d2' }}>
             <h4 style={{ margin: '0 0 10px', color: 'var(--text-link)' }}>🔑 Shippo API Key</h4>
             <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', fontSize: 13 }}>
@@ -616,6 +677,7 @@ export default function Shipping() {
               </div>
             )}
           </div>
+          )}
 
           {/* Shipping Provider Selector */}
           <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
@@ -624,6 +686,7 @@ export default function Shipping() {
               {[
                 { value: 'shippo', label: 'Shippo', desc: 'Multi-carrier (UPS, USPS, FedEx, DHL)', logo: '📦' },
                 { value: 'shipstation', label: 'ShipStation', desc: 'Your ShipStation account & carriers', logo: '🚢' },
+                { value: 'easypost', label: 'EasyPost', desc: '100+ carriers, platform API', logo: '⚡' },
               ].map(p => (
                 <div
                   key={p.value}
@@ -686,8 +749,7 @@ export default function Shipping() {
             </div>
           )}
 
-          {/* Shippo API Key — shown when Shippo is selected */}
-          {shippingProvider === 'shippo' && (
+          {/* Enable/Disable — always visible */}
           <div style={{ marginBottom: 20 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={shippingEnabled} onChange={e => setShippingEnabled(e.target.checked)}

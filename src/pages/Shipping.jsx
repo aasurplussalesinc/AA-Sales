@@ -630,7 +630,7 @@ export default function Shipping() {
               </div>
               {easypostApiKey && (
                 <div style={{ marginTop: 8, fontSize: 12, color: easypostApiKey.startsWith('EZTK') ? '#f59e0b' : '#4CAF50' }}>
-                  {easypostApiKey.startsWith('EZTK') ? '⚠️ Using TEST key — labels won't be real' : '✅ Using Production key'}
+                  {easypostApiKey.startsWith('EZTK') ? '⚠️ Using TEST key — not real labels' : '✅ Using Production key'}
                 </div>
               )}
               <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--bg-surface-2)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)' }}>
@@ -673,7 +673,7 @@ export default function Shipping() {
             </div>
             {shippoApiKey && (
               <div style={{ marginTop: 8, fontSize: 12, color: shippoApiKey.startsWith('shippo_test_') ? '#ff9800' : '#4CAF50' }}>
-                {shippoApiKey.startsWith('shippo_test_') ? '⚠️ Using TEST key — labels won\'t be real' : '✅ Using LIVE key'}
+                {shippoApiKey.startsWith('shippo_test_') ? '⚠️ Using TEST key — not real labels' : '✅ Using LIVE key'}
               </div>
             )}
           </div>

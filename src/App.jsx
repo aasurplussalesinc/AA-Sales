@@ -262,8 +262,7 @@ function AppRoutes() {
       <Route 
         path="/subscription-required" 
         element={
-          !user ? <Navigate to="/login" replace /> : 
-          (subscriptionStatus?.isActive ? <Navigate to="/dashboard" replace /> : <SubscriptionRequired />)
+          !user ? <Navigate to="/login" replace /> : <SubscriptionRequired />
         } 
       />
       

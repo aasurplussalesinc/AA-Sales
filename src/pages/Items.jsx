@@ -1873,7 +1873,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       </div>
 
       {/* Data table */}
-      <div className="data-table">
+      <div className="data-table" style={{ minHeight: 400, position: 'relative' }}>
         <table>
           <thead>
             <tr>
@@ -1896,7 +1896,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           </thead>
           <tbody>
             {paginatedItems.map(item => (
-              <tr key={item.id} style={{ background: selectedItems.includes(item.id) ? 'var(--bg-selected)' : 'transparent' }}>
+              <tr key={item.id} style={{ background: selectedItems.includes(item.id) ? 'var(--bg-selected)' : 'transparent', height: 52 }}>
                 <td>
                   <input
                     type="checkbox"
@@ -2102,7 +2102,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     {/* Dropdown menu */}
                     {openActionMenu === item.id && (
                       <div style={{
-                        position: 'absolute', right: 0, top: '100%', marginTop: 4,
+                        position: 'absolute', right: 0, bottom: '100%', marginBottom: 4,
                         background: 'var(--bg-surface)',
                         border: '1px solid var(--border)',
                         borderRadius: 8,
@@ -2153,6 +2153,12 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </td>
               </tr>
             ))}
+          {/* Phantom rows to fill space when < 5 items */}
+          {paginatedItems.length > 0 && paginatedItems.length < 5 && Array.from({ length: 5 - paginatedItems.length }).map((_, i) => (
+            <tr key={`phantom-${i}`} style={{ height: 52 }}>
+              <td colSpan="9" style={{ borderBottom: '1px solid var(--border)', opacity: 0 }} />
+            </tr>
+          ))}
           </tbody>
         </table>
 

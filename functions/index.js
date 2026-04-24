@@ -818,15 +818,14 @@ exports.updateCarrierInvoice = functions.https.onCall(async function(data, conte
 // STRIPE INTEGRATION
 // ═══════════════════════════════════════════════════════════
 
-const stripeConfig = functions.config().stripe || {};
-const stripe = require('stripe')(stripeConfig.secret_key);
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// Price IDs from Firebase config
+// Price IDs from environment variables
 const PRICE_IDS = {
-  starter:    stripeConfig.price_starter,
-  pro:        stripeConfig.price_pro,
-  business:   stripeConfig.price_business,
-  enterprise: stripeConfig.price_enterprise,
+  starter:    process.env.STRIPE_PRICE_STARTER,
+  pro:        process.env.STRIPE_PRICE_PRO,
+  business:   process.env.STRIPE_PRICE_BUSINESS,
+  enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
 };
 
 // Plan name mapping (price_id -> plan name)
@@ -932,7 +931,7 @@ exports.createBillingPortalSession = functions.https.onCall(async (data, context
 // Receives events from Stripe and updates Firestore
 exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
   const sig = req.headers['stripe-signature'];
-  const webhookSecret = (functions.config().stripe || {}).webhook_secret;
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   let event;
   try {

@@ -1052,3 +1052,203 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
     res.status(500).send('Webhook handler error');
   }
 });
+
+
+// ═══════════════════════════════════════════════════════════
+// SHIPSTATION INTEGRATION
+// ShipStation V2 API — api.shipstation.com
+// Auth: single API key in header "API-Key: {key}"
+// ═══════════════════════════════════════════════════════════
+
+const SS_BASE = 'https://api.shipstation.com';
+
+async function shipstationRequest(apiKey, endpoint, method = 'GET', body = null) {
+  if (!apiKey) throw new Error('ShipStation API key not configured. Go to Shipping Settings and enter your ShipStation API key.');
+  const options = {
+    method,
+    headers: {
+      'API-Key': apiKey,
+      'Content-Type': 'application/json',
+    },
+  };
+  if (body) options.body = JSON.stringify(body);
+  const res = await fetch(`${SS_BASE}${endpoint}`, options);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`ShipStation API error ${res.status}: ${err}`);
+  }
+  return res.json();
+}
+
+// ── Get ShipStation Rates ──
+exports.getShipStationRates = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+
+  if (!checkRateLimit('ss_rates_' + context.auth.uid, 30, 5 * 60 * 1000)) {
+    throw new functions.https.HttpsError('resource-exhausted', 'Too many rate requests. Please wait a moment.');
+  }
+
+  const { orgId, orderId, toAddress, parcels } = data;
+
+  try {
+    // Get org's ShipStation API key
+    const orgDoc = await db.collection('organizations').doc(orgId).get();
+    const apiKey = orgDoc.data()?.settings?.shipstationApiKey;
+    if (!apiKey) throw new Error('ShipStation API key not configured');
+
+    const fromAddr = orgDoc.data()?.settings?.shippingFromAddress;
+    if (!fromAddr?.street1) throw new Error('Shipping from address not configured');
+
+    // Get all connected carriers
+    const carriersRes = await shipstationRequest(apiKey, '/v2/carriers');
+    const carriers = carriersRes.carriers || [];
+
+    if (carriers.length === 0) {
+      throw new Error('No carriers connected to your ShipStation account. Add carriers in ShipStation Settings.');
+    }
+
+    // Get rates for each carrier
+    const allRates = [];
+    for (const carrier of carriers.slice(0, 5)) { // limit to 5 carriers
+      try {
+        const shipment = {
+          carrier_id: carrier.carrier_id,
+          from_country_code: 'US',
+          from_postal_code: fromAddr.zip,
+          from_city_locality: fromAddr.city,
+          from_state_province: fromAddr.state,
+          to_country_code: toAddress.country || 'US',
+          to_postal_code: toAddress.zip,
+          to_city_locality: toAddress.city,
+          to_state_province: toAddress.state,
+          weight: { value: parcels[0]?.weight || 1, unit: 'pound' },
+          dimensions: parcels[0]?.length ? {
+            unit: 'inch',
+            length: parcels[0].length,
+            width: parcels[0].width,
+            height: parcels[0].height,
+          } : undefined,
+        };
+
+        const rateRes = await shipstationRequest(apiKey, '/v2/rates/estimate', 'POST', shipment);
+        const rates = rateRes.rate_response?.rates || [];
+
+        rates.forEach(rate => {
+          allRates.push({
+            provider: 'shipstation',
+            rateId: rate.rate_id,
+            carrier: rate.carrier_friendly_name || carrier.friendly_name,
+            carrierId: rate.carrier_id,
+            service: rate.service_type,
+            serviceCode: rate.service_code,
+            amount: rate.shipping_amount?.amount || 0,
+            currency: 'USD',
+            estimatedDays: rate.delivery_days,
+            deliveryDate: rate.estimated_delivery_date,
+          });
+        });
+      } catch (carrierErr) {
+        console.warn(`ShipStation rate error for carrier ${carrier.carrier_id}:`, carrierErr.message);
+      }
+    }
+
+    allRates.sort((a, b) => a.amount - b.amount);
+    return { rates: allRates, provider: 'shipstation' };
+
+  } catch (error) {
+    console.error('getShipStationRates error:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// ── Generate ShipStation Label ──
+exports.generateShipStationLabel = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+
+  if (!checkRateLimit('ss_label_' + context.auth.uid, 60, 10 * 60 * 1000)) {
+    throw new functions.https.HttpsError('resource-exhausted', 'Too many label requests. Please wait a moment.');
+  }
+
+  const { orgId, orderId, rateId, toAddress, parcels, orderRef } = data;
+
+  try {
+    const orgDoc = await db.collection('organizations').doc(orgId).get();
+    const apiKey = orgDoc.data()?.settings?.shipstationApiKey;
+    if (!apiKey) throw new Error('ShipStation API key not configured');
+
+    const fromAddr = orgDoc.data()?.settings?.shippingFromAddress;
+
+    // Purchase label using rate ID
+    const labelReq = {
+      rate_id: rateId,
+      validate_address: 'no_validation',
+      label_layout: '4x6',
+      label_format: 'pdf',
+      label_download_type: 'url',
+      ship_to: {
+        name: toAddress.name,
+        company_name: toAddress.company || '',
+        address_line1: toAddress.street1,
+        address_line2: toAddress.street2 || '',
+        city_locality: toAddress.city,
+        state_province: toAddress.state,
+        postal_code: toAddress.zip,
+        country_code: toAddress.country || 'US',
+        phone: toAddress.phone || '',
+      },
+      ship_from: {
+        name: fromAddr.name,
+        company_name: fromAddr.company || '',
+        address_line1: fromAddr.street1,
+        city_locality: fromAddr.city,
+        state_province: fromAddr.state,
+        postal_code: fromAddr.zip,
+        country_code: 'US',
+        phone: fromAddr.phone || '',
+      },
+      packages: parcels.map(p => ({
+        weight: { value: p.weight || 1, unit: 'pound' },
+        dimensions: p.length ? {
+          unit: 'inch',
+          length: p.length,
+          width: p.width,
+          height: p.height,
+        } : undefined,
+      })),
+    };
+
+    const label = await shipstationRequest(apiKey, '/v2/labels', 'POST', labelReq);
+
+    // Update order in Firestore
+    if (orderId) {
+      await db.collection('purchaseOrders').doc(orderId).update({
+        shippingLabel: {
+          trackingNumber: label.tracking_number,
+          labelUrl: label.label_download?.pdf || label.label_download?.href,
+          carrier: label.carrier_code,
+          service: label.service_code,
+          cost: label.shipment_cost?.amount || 0,
+          labelId: label.label_id,
+          provider: 'shipstation',
+          createdAt: Date.now(),
+        },
+        status: 'shipped',
+        updatedAt: Date.now(),
+      });
+    }
+
+    return {
+      success: true,
+      trackingNumber: label.tracking_number,
+      labelUrl: label.label_download?.pdf || label.label_download?.href,
+      labelId: label.label_id,
+      carrier: label.carrier_code,
+      cost: label.shipment_cost?.amount || 0,
+      provider: 'shipstation',
+    };
+
+  } catch (error) {
+    console.error('generateShipStationLabel error:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});

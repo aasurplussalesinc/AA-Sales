@@ -24,6 +24,9 @@ export default function Shipping() {
   const [autoPurchase, setAutoPurchase] = useState(false);
   const [shippoApiKey, setShippoApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [shippingProvider, setShippingProvider] = useState('shippo'); // 'shippo' or 'shipstation'
+  const [shipstationApiKey, setShipstationApiKey] = useState('');
+  const [showShipstationKey, setShowShipstationKey] = useState(false);
   const [fromAddress, setFromAddress] = useState({
     name: '', company: '', street1: '', street2: '', city: '', state: '', zip: '', country: 'US', phone: '', email: ''
   });
@@ -87,6 +90,8 @@ export default function Shipping() {
     setPreferredCarrier(s.preferredCarrier || 'ups');
     setAutoPurchase(s.autoPurchaseLabels || false);
     setShippoApiKey(s.shippoApiKey || '');
+    setShippingProvider(s.shippingProvider || 'shippo');
+    setShipstationApiKey(s.shipstationApiKey || '');
     if (s.shippingFromAddress) {
       setFromAddress({
         name: s.shippingFromAddress.name || '',
@@ -107,8 +112,9 @@ export default function Shipping() {
     setSavingSettings(true);
     setError('');
     try {
-      if (!shippoApiKey) {
-        setError('Shippo API key is required. Get one at goshippo.com');
+      const activeKey = shippingProvider === 'shipstation' ? shipstationApiKey : shippoApiKey;
+      if (!activeKey) {
+        setError(`${shippingProvider === 'shipstation' ? 'ShipStation' : 'Shippo'} API key is required.`);
         setSavingSettings(false);
         return;
       }
@@ -120,6 +126,8 @@ export default function Shipping() {
         'settings.autoPurchaseLabels': autoPurchase,
         'settings.shippingFromAddress': fromAddress,
         'settings.shippoApiKey': shippoApiKey,
+        'settings.shippingProvider': shippingProvider,
+        'settings.shipstationApiKey': shipstationApiKey,
       });
 
       // Also update via Cloud Function for the scheduler
@@ -148,7 +156,8 @@ export default function Shipping() {
     setProcessing(prev => ({ ...prev, [orderId]: true }));
     setError('');
     try {
-      const generateFn = httpsCallable(functions, 'generateShippingLabel');
+      const providerToUse = organization?.settings?.shippingProvider || 'shippo';
+      const generateFn = httpsCallable(functions, providerToUse === 'shipstation' ? 'generateShipStationLabel' : 'generateShippingLabel');
       const result = await generateFn({ orderId, orgId: organization.id });
       setMessage(`✅ Shipping label generated for order!`);
       await loadData();
@@ -608,7 +617,77 @@ export default function Shipping() {
             )}
           </div>
 
-          {/* Enable/Disable */}
+          {/* Shipping Provider Selector */}
+          <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
+            <h4 style={{ margin: '0 0 12px' }}>🚀 Shipping Provider</h4>
+            <div style={{ display: 'flex', gap: 12 }}>
+              {[
+                { value: 'shippo', label: 'Shippo', desc: 'Multi-carrier (UPS, USPS, FedEx, DHL)', logo: '📦' },
+                { value: 'shipstation', label: 'ShipStation', desc: 'Your ShipStation account & carriers', logo: '🚢' },
+              ].map(p => (
+                <div
+                  key={p.value}
+                  onClick={() => setShippingProvider(p.value)}
+                  style={{
+                    flex: 1, padding: '14px 16px', borderRadius: 8, cursor: 'pointer',
+                    border: shippingProvider === p.value ? '2px solid var(--accent)' : '2px solid var(--border)',
+                    background: shippingProvider === p.value ? 'var(--accent-light)' : 'var(--bg-surface-2)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{ fontSize: 20, marginBottom: 4 }}>{p.logo}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{p.label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{p.desc}</div>
+                  {shippingProvider === p.value && (
+                    <div style={{ marginTop: 6, fontSize: 11, fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase' }}>✓ Active</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ShipStation API Key — shown when ShipStation is selected */}
+          {shippingProvider === 'shipstation' && (
+            <div style={{ marginBottom: 20, padding: 16, background: 'var(--bg-surface)', borderRadius: 8, border: '2px solid #2196F3' }}>
+              <h4 style={{ margin: '0 0 10px', color: '#2196F3' }}>🔑 ShipStation API Key</h4>
+              <p style={{ margin: '0 0 10px', color: 'var(--text-muted)', fontSize: 13 }}>
+                Get your API key from ShipStation: <strong>Account Settings → API Settings → Generate API Key</strong>
+                <a href="https://ship.shipstation.com/settings/api" target="_blank" rel="noopener noreferrer"
+                  style={{ color: '#2196F3', marginLeft: 6 }}>Open ShipStation API Settings →</a>
+              </p>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <input
+                  type={showShipstationKey ? 'text' : 'password'}
+                  value={shipstationApiKey}
+                  onChange={e => setShipstationApiKey(e.target.value)}
+                  placeholder="Your ShipStation API Key"
+                  style={{
+                    flex: 1, padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)',
+                    background: 'var(--bg-input)', color: 'var(--text-primary)',
+                    fontSize: 14, fontFamily: 'monospace'
+                  }}
+                />
+                <button
+                  onClick={() => setShowShipstationKey(!showShipstationKey)}
+                  style={{
+                    padding: '10px 14px', background: 'var(--bg-surface-2)', border: '1px solid var(--border)',
+                    borderRadius: 6, cursor: 'pointer', fontSize: 13
+                  }}
+                >
+                  {showShipstationKey ? '🙈 Hide' : '👁️ Show'}
+                </button>
+              </div>
+              {shipstationApiKey && (
+                <div style={{ marginTop: 8, fontSize: 12, color: '#4CAF50' }}>✅ API key entered</div>
+              )}
+              <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--bg-surface-2)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+                <strong>Note:</strong> ShipStation V2 API uses a single API key. Your connected carriers (UPS, FedEx, USPS, etc.) in ShipStation will automatically be available for rate shopping in SkidSling.
+              </div>
+            </div>
+          )}
+
+          {/* Shippo API Key — shown when Shippo is selected */}
+          {shippingProvider === 'shippo' && (
           <div style={{ marginBottom: 20 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={shippingEnabled} onChange={e => setShippingEnabled(e.target.checked)}
@@ -742,9 +821,9 @@ export default function Shipping() {
             key={f.value}
             onClick={() => setFilterStatus(f.value)}
             style={{
-              padding: '8px 16px', borderRadius: 20, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
-              background: filterStatus === f.value ? '#1976d2' : 'white',
-              color: filterStatus === f.value ? 'white' : '#333',
+              padding: '8px 16px', borderRadius: 20, border: '1px solid var(--border)', cursor: 'pointer',
+              background: filterStatus === f.value ? '#1976d2' : 'var(--bg-surface)',
+              color: filterStatus === f.value ? 'white' : 'var(--text-primary)',
               fontWeight: filterStatus === f.value ? 600 : 400, fontSize: 13
             }}
           >
@@ -759,9 +838,9 @@ export default function Shipping() {
           <button
             onClick={() => setHideTriwalls(prev => !prev)}
             style={{
-              padding: '6px 14px', borderRadius: 16, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 12,
-              background: hideTriwalls ? '#fff8e1' : '#fff3e0',
-              color: hideTriwalls ? '#f57f17' : '#e65100',
+              padding: '6px 14px', borderRadius: 16, border: '1px solid var(--border)', cursor: 'pointer', fontSize: 12,
+              background: hideTriwalls ? 'var(--bg-badge-orange)' : 'var(--bg-badge-orange)',
+              color: hideTriwalls ? 'var(--text-badge-orange)' : 'var(--text-badge-orange)',
               fontWeight: 600,
             }}
           >

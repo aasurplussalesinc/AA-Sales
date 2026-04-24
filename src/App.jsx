@@ -130,13 +130,21 @@ function NavBar() {
               </select>
             )}
             {subscriptionStatus?.plan && (
-              <span style={{
-                background: planColors[subscriptionStatus.plan] || '#666',
-                color: 'white', padding: '4px 10px', borderRadius: 12,
-                fontSize: 11, fontWeight: 700, letterSpacing: 0.5
-              }}>
+              <Link
+                to="/subscription-required"
+                title="View plans & manage subscription"
+                style={{
+                  background: planColors[subscriptionStatus.plan] || '#666',
+                  color: 'white', padding: '4px 10px', borderRadius: 12,
+                  fontSize: 11, fontWeight: 700, letterSpacing: 0.5,
+                  textDecoration: 'none', cursor: 'pointer',
+                  transition: 'opacity 0.2s'
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
                 {planLabels[subscriptionStatus.plan] || subscriptionStatus.plan}
-              </span>
+              </Link>
             )}
             <span style={{ fontSize: 14, opacity: 0.9 }}>👤 {user.email}</span>
             <ThemeToggle />

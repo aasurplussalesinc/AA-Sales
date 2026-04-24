@@ -27,7 +27,7 @@ function DropdownItem({ icon, label, color, onClick, danger }) {
 }
 
 export default function Items() {
-  const { userRole } = useAuth();
+  const { userRole, organization } = useAuth();
   const isAdmin = userRole === 'admin';
   const isManager = userRole === 'manager';
   const canEdit = isAdmin || isManager; // Admin and Manager can edit
@@ -139,14 +139,15 @@ export default function Items() {
     setLoading(false);
   };
 
-  // Generate the next SKU starting from 4000
+  // Generate the next SKU using org's configured start number
   const generateNextSku = () => {
+    const skuStart = parseInt(organization?.skuSeriesStart) || 1000;
     const numericSkus = items
       .map(item => parseInt(item.partNumber))
-      .filter(num => !isNaN(num) && num >= 4000);
+      .filter(num => !isNaN(num) && num >= skuStart);
     
     if (numericSkus.length === 0) {
-      return '4000';
+      return String(skuStart);
     }
     
     const maxSku = Math.max(...numericSkus);

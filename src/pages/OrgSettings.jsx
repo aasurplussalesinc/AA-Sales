@@ -52,6 +52,16 @@ export default function OrgSettings() {
   const [orgEmail, setOrgEmail] = useState('');
   const [orgPhone, setOrgPhone] = useState('');
   const [orgAddress, setOrgAddress] = useState('');
+  const [skuSeriesStart, setSkuSeriesStart] = useState(1000);
+  const [locationSchema, setLocationSchema] = useState({
+    levels: [
+      { name: 'Warehouse', key: 'warehouse', options: ['W1', 'W2', 'W3', 'W4'] },
+      { name: 'Rack',      key: 'rack',      options: ['1', '2', '3', '4', '5'] },
+      { name: 'Bay',       key: 'letter',    options: ['A', 'B', 'C', 'D', 'E'] },
+      { name: 'Shelf',     key: 'shelf',     options: ['1', '2', '3', '4', '5'] },
+    ]
+  });
+  const [showLocationSchema, setShowLocationSchema] = useState(false);
   
   // Employee management state
   const [employees, setEmployees] = useState([]);
@@ -78,6 +88,8 @@ export default function OrgSettings() {
       setOrgEmail(organization.email || '');
       setOrgPhone(organization.phone || '');
       setOrgAddress(organization.address || '');
+      setSkuSeriesStart(organization.skuSeriesStart || 1000);
+      if (organization.locationSchema) setLocationSchema(organization.locationSchema);
       
       // Load employees (default to Alan, Nancy, Gustavo if none set)
       const empList = organization.employees || ['Alan', 'Nancy', 'Gustavo'];
@@ -125,7 +137,8 @@ export default function OrgSettings() {
         name: orgName,
         email: orgEmail,
         phone: orgPhone,
-        address: orgAddress
+        address: orgAddress,
+        skuSeriesStart: parseInt(skuSeriesStart) || 1000
       });
       await refreshOrganization();
       setEditing(false);
@@ -286,6 +299,121 @@ export default function OrgSettings() {
                 style={{ width: '100%', maxWidth: 400, minHeight: 80 }}
               />
             </div>
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>SKU Series Start</label>
+              <input
+                type="number"
+                min="1"
+                value={skuSeriesStart}
+                onChange={(e) => setSkuSeriesStart(e.target.value)}
+                className="form-input"
+                style={{ width: '100%', maxWidth: 200 }}
+                placeholder="e.g. 1000"
+              />
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 5 }}>
+                New items will auto-number from this value upward. Existing SKUs are not affected.
+              </p>
+            </div>
+            {/* Location Schema */}
+            <div style={{ marginBottom: 15 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <label style={{ display: 'block', fontWeight: 600 }}>Location Schema</label>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => setShowLocationSchema(s => !s)}
+                  style={{ fontSize: 12 }}
+                >
+                  {showLocationSchema ? '▲ Hide' : '▼ Customize'}
+                </button>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                Define your warehouse location levels (e.g. Building → Aisle → Bay → Shelf).
+                Changes take effect immediately for new locations.
+              </p>
+              {showLocationSchema && (
+                <div style={{ background: 'var(--bg-surface-2)', borderRadius: 8, padding: 16, border: '1px solid var(--border)' }}>
+                  {locationSchema.levels.map((level, idx) => (
+                    <div key={idx} style={{ marginBottom: 16, padding: 12, background: 'var(--bg-surface)', borderRadius: 6, border: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-muted)', minWidth: 60 }}>
+                          Level {idx + 1}
+                        </span>
+                        <input
+                          type="text"
+                          value={level.name}
+                          onChange={e => {
+                            const newLevels = [...locationSchema.levels];
+                            newLevels[idx] = { ...newLevels[idx], name: e.target.value };
+                            setLocationSchema({ ...locationSchema, levels: newLevels });
+                          }}
+                          placeholder="Level name (e.g. Warehouse)"
+                          style={{
+                            flex: 1, padding: '6px 10px',
+                            border: '1px solid var(--border)', borderRadius: 6,
+                            background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 13
+                          }}
+                        />
+                        {locationSchema.levels.length > 2 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newLevels = locationSchema.levels.filter((_, i) => i !== idx);
+                              setLocationSchema({ ...locationSchema, levels: newLevels });
+                            }}
+                            style={{ background: '#f44336', color: 'white', border: 'none', borderRadius: 4, padding: '4px 8px', cursor: 'pointer', fontSize: 11 }}
+                          >✕</button>
+                        )}
+                      </div>
+                      <div>
+                        <label style={{ fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 4 }}>
+                          Options (comma-separated)
+                        </label>
+                        <input
+                          type="text"
+                          value={level.options.join(', ')}
+                          onChange={e => {
+                            const newLevels = [...locationSchema.levels];
+                            newLevels[idx] = {
+                              ...newLevels[idx],
+                              options: e.target.value.split(',').map(s => s.trim()).filter(Boolean)
+                            };
+                            setLocationSchema({ ...locationSchema, levels: newLevels });
+                          }}
+                          placeholder="e.g. A, B, C, D or 1, 2, 3, 4"
+                          style={{
+                            width: '100%', padding: '6px 10px',
+                            border: '1px solid var(--border)', borderRadius: 6,
+                            background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 13
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {locationSchema.levels.length < 5 && (
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => setLocationSchema({
+                        ...locationSchema,
+                        levels: [...locationSchema.levels, { name: 'New Level', key: `level${locationSchema.levels.length}`, options: ['1', '2', '3'] }]
+                      })}
+                      style={{ fontSize: 12, marginTop: 4 }}
+                    >
+                      + Add Level
+                    </button>
+                  )}
+                  {/* Preview */}
+                  <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--bg-surface-3)', borderRadius: 6, fontSize: 13 }}>
+                    <strong>Preview: </strong>
+                    <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                      {locationSchema.levels.map(l => l.options[0] || '?').join('-')}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn btn-primary" onClick={handleSaveOrg}>Save</button>
               <button className="btn" onClick={() => setEditing(false)}>Cancel</button>
@@ -294,6 +422,7 @@ export default function OrgSettings() {
         ) : (
           <div>
             <p><strong>Name:</strong> {organization.name}</p>
+            <p><strong>SKU Series Start:</strong> {organization.skuSeriesStart || 1000}</p>
             <p><strong>Email:</strong> {organization.email || '-'}</p>
             <p><strong>Phone:</strong> {organization.phone || '-'}</p>
             <p><strong>Address:</strong> {organization.address || '-'}</p>

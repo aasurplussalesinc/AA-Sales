@@ -71,6 +71,7 @@ export const OrgDB = {
       customerId: null, // Stripe customer ID
       
       // Settings
+      skuSeriesStart: 1000,
       settings: {
         lowStockThreshold: 10,
         currency: 'USD',

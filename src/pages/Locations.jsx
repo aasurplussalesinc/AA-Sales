@@ -4,7 +4,7 @@ import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
 
 export default function Locations() {
-  const { userRole } = useAuth();
+  const { userRole, organization } = useAuth();
   const isAdmin = userRole === 'admin';
   const isManager = userRole === 'manager';
   const canEdit = isAdmin || isManager;
@@ -21,11 +21,21 @@ export default function Locations() {
   const [filters, setFilters] = useState({ warehouse: '', rack: '', letter: '', search: '' });
   const fileInputRef = useRef(null);
 
-  // Dropdown options
-  const warehouses = ['W1', 'W2', 'W3', 'W4'];
-  const racks = ['1', '2', '3'];
-  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-  const shelves = ['1', '2', '3'];
+  // Location schema from org settings (falls back to default)
+  const locSchema = organization?.locationSchema || {
+    levels: [
+      { name: 'Warehouse', key: 'warehouse', options: ['W1', 'W2', 'W3', 'W4'] },
+      { name: 'Rack',      key: 'rack',      options: ['1', '2', '3', '4', '5'] },
+      { name: 'Bay',       key: 'letter',    options: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('') },
+      { name: 'Shelf',     key: 'shelf',     options: ['1', '2', '3', '4', '5'] },
+    ]
+  };
+
+  // Keep backward-compat aliases
+  const warehouses = locSchema.levels[0]?.options || ['W1'];
+  const racks      = locSchema.levels[1]?.options || ['1'];
+  const letters    = locSchema.levels[2]?.options || 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const shelves    = locSchema.levels[3]?.options || ['1'];
 
   useEffect(() => {
     loadData();
@@ -629,46 +639,35 @@ W2,2,C,3`;
       {canEdit && (
         <div style={{background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginBottom: 20}}>
           <h3 style={{marginBottom: 15}}>Add New Location</h3>
-          <div className="form-row">
-            <select
-              className="form-input"
-              value={newLocation.warehouse}
-              onChange={e => setNewLocation({...newLocation, warehouse: e.target.value})}
-            >
-              {warehouses.map(w => (
-                <option key={w} value={w}>{w}</option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              value={newLocation.rack}
-              onChange={e => setNewLocation({...newLocation, rack: e.target.value})}
-            >
-              {racks.map(r => (
-                <option key={r} value={r}>Rack {r}</option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              value={newLocation.letter}
-              onChange={e => setNewLocation({...newLocation, letter: e.target.value})}
-            >
-              {letters.map(l => (
-                <option key={l} value={l}>{l}</option>
-              ))}
-            </select>
-            <select
-              className="form-input"
-              value={newLocation.shelf}
-              onChange={e => setNewLocation({...newLocation, shelf: e.target.value})}
-            >
-              {shelves.map(s => (
-                <option key={s} value={s}>Shelf {s}</option>
-              ))}
-            </select>
-            <button className="btn btn-primary" onClick={addLocation} disabled={saving}>
-              {saving ? 'Adding...' : '+ Add Location'}
-            </button>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            {locSchema.levels.map((level, idx) => {
+              const keys = ['warehouse', 'rack', 'letter', 'shelf'];
+              const key = level.key || keys[idx];
+              return (
+                <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <label style={{
+                    fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+                    textTransform: 'uppercase', letterSpacing: 0.5
+                  }}>{level.name}</label>
+                  <select
+                    className="form-input"
+                    value={newLocation[key] || level.options[0]}
+                    onChange={e => setNewLocation({ ...newLocation, [key]: e.target.value })}
+                    style={{ minWidth: 80 }}
+                  >
+                    {level.options.map(opt => (
+                      <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <label style={{ fontSize: 11, opacity: 0 }}>add</label>
+              <button className="btn btn-primary" onClick={addLocation} disabled={saving}>
+                {saving ? 'Adding...' : '+ Add Location'}
+              </button>
+            </div>
           </div>
           <div style={{marginTop: 10, padding: 10, background: 'var(--bg-surface-3)', borderRadius: 4, textAlign: 'center'}}>
             <strong>Preview: </strong>

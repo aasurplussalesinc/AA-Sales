@@ -71,7 +71,7 @@ export function TierGate({ feature, requiredPlan, children }) {
 
 function NavBar() {
   const location = useLocation();
-  const { user, logout, organization, subscriptionStatus, organizations, switchOrganization } = useAuth();
+  const { user, logout, organization, subscriptionStatus, organizations, switchOrganization, isOwnerOrg } = useAuth();
   const tier = useTier();
   
   const isActive = (path) => location.pathname === path;

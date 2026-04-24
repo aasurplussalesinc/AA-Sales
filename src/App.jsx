@@ -19,6 +19,7 @@ import Contracts from './pages/Contracts';
 import Shipping from './pages/Shipping';
 import TermsOfService from './pages/TermsOfService';
 import BillingSuccess from './pages/BillingSuccess';
+import AdminDashboard from './pages/AdminDashboard';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import { useTier } from './useTier';
 import { ThemeProvider, useTheme } from './ThemeContext';
@@ -157,6 +158,10 @@ function NavBar() {
         {tier.canUsePickLists && <Link to="/pick-lists" className={`nav-tab ${isActive('/pick-lists') ? 'active' : ''}`}>📋 Pick Lists</Link>}
         {tier.canUseReports && <Link to="/reports" className={`nav-tab ${isActive('/reports') ? 'active' : ''}`}>📈 Reports</Link>}
         {tier.canUseShipping && <Link to="/shipping" className={`nav-tab ${isActive('/shipping') ? 'active' : ''}`}>🚚 Shipping</Link>}
+        {isOwnerOrg() && (
+          <Link to="/admin" className={`nav-tab ${isActive('/admin') ? 'active' : ''}`}
+            style={{ color: '#c62828', fontWeight: 700 }}>⭐ Admin</Link>
+        )}
         {tier.canUseContracts && <Link to="/contracts" className={`nav-tab ${isActive('/contracts') ? 'active' : ''}`}>📄 Contracts</Link>}
         <Link to="/movements" className={`nav-tab ${isActive('/movements') ? 'active' : ''}`}>🔄 Movements</Link>
         <Link to="/activity" className={`nav-tab ${isActive('/activity') ? 'active' : ''}`}>📜 Activity</Link>
@@ -322,6 +327,7 @@ function AppRoutes() {
       
       {/* Catch all */}
       <Route path="/billing-success" element={<BillingSuccess />} />
+      <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

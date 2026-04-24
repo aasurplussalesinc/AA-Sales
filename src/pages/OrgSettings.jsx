@@ -92,7 +92,7 @@ export default function OrgSettings() {
       if (organization.locationSchema) setLocationSchema(organization.locationSchema);
       
       // Load employees (default to Alan, Nancy, Gustavo if none set)
-      const empList = organization.employees || ['Alan', 'Nancy', 'Gustavo'];
+      const empList = organization.employees || [];
       setEmployees(empList);
     } catch (err) {
       console.error('Error loading org data:', err);
@@ -725,6 +725,25 @@ export default function OrgSettings() {
       )}
 
       {/* Danger Zone */}
+            {/* Contact Admin */}
+      <div style={{ marginTop: 20, padding: 20, background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, marginBottom: 20 }}>
+        <h3 style={{ margin: '0 0 8px', fontSize: 16 }}>💬 Need Help?</h3>
+        <p style={{ margin: '0 0 12px', color: 'var(--text-muted)', fontSize: 13 }}>
+          Contact SkidSling support for billing, technical issues, or account questions.
+        </p>
+        <a
+          href="mailto:info@skidsling.com"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: 'var(--btn-primary-bg)', color: 'var(--btn-primary-color)',
+            padding: '10px 20px', borderRadius: 8, textDecoration: 'none',
+            fontWeight: 600, fontSize: 14
+          }}
+        >
+          📧 Contact Admin
+        </a>
+      </div>
+
       {isAdmin && (
         <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginTop: 20, border: '1px solid #dc3545' }}>
           <h3 style={{ marginBottom: 15, color: '#dc3545' }}>⚠️ Danger Zone</h3>

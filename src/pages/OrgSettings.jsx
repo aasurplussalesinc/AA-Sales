@@ -2,6 +2,39 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../OrgAuthContext';
 import { OrgDB } from '../orgDb';
 
+function ManageBillingButton({ orgId }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleClick = async () => {
+    setLoading(true);
+    try {
+      const { getFunctions, httpsCallable } = await import('firebase/functions');
+      const fns = getFunctions();
+      const createPortal = httpsCallable(fns, 'createBillingPortalSession');
+      const result = await createPortal({ orgId });
+      window.location.href = result.data.url;
+    } catch (err) {
+      alert('Could not open billing portal: ' + err.message);
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      disabled={loading}
+      style={{
+        background: 'var(--btn-primary-bg)', color: 'var(--btn-primary-color)',
+        border: 'none', borderRadius: 8, padding: '10px 20px',
+        cursor: loading ? 'not-allowed' : 'pointer',
+        fontWeight: 600, fontSize: 13
+      }}
+    >
+      {loading ? '⏳ Loading...' : '💳 Manage Billing'}
+    </button>
+  );
+}
+
 export default function OrgSettings() {
   const { organization, userRole, subscriptionStatus, refreshOrganization, isOwnerOrg } = useAuth();
   const [members, setMembers] = useState([]);

@@ -18,6 +18,7 @@ import Customers from './pages/Customers';
 import Contracts from './pages/Contracts';
 import Shipping from './pages/Shipping';
 import TermsOfService from './pages/TermsOfService';
+import BillingSuccess from './pages/BillingSuccess';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import { useTier } from './useTier';
 import { ThemeProvider, useTheme } from './ThemeContext';
@@ -320,6 +321,7 @@ function AppRoutes() {
       } />
       
       {/* Catch all */}
+      <Route path="/billing-success" element={<BillingSuccess />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

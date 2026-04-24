@@ -812,3 +812,244 @@ exports.updateCarrierInvoice = functions.https.onCall(async function(data, conte
     throw new functions.https.HttpsError('internal', error.message);
   }
 });
+
+
+// ═══════════════════════════════════════════════════════════
+// STRIPE INTEGRATION
+// ═══════════════════════════════════════════════════════════
+
+const stripeConfig = functions.config().stripe || {};
+const stripe = require('stripe')(stripeConfig.secret_key);
+
+// Price IDs from Firebase config
+const PRICE_IDS = {
+  starter:    stripeConfig.price_starter,
+  pro:        stripeConfig.price_pro,
+  business:   stripeConfig.price_business,
+  enterprise: stripeConfig.price_enterprise,
+};
+
+// Plan name mapping (price_id -> plan name)
+const PRICE_TO_PLAN = {};
+// Built dynamically from PRICE_IDS at runtime
+
+// ── Create Stripe Checkout Session ──
+exports.createCheckoutSession = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  }
+
+  const { plan, orgId, orgName } = data;
+
+  if (!plan || !orgId) {
+    throw new functions.https.HttpsError('invalid-argument', 'plan and orgId required');
+  }
+
+  const priceId = PRICE_IDS[plan.toLowerCase()];
+  if (!priceId) {
+    throw new functions.https.HttpsError('invalid-argument', `Unknown plan: ${plan}`);
+  }
+
+  try {
+    // Check if org already has a Stripe customer ID
+    const orgRef = db.collection('organizations').doc(orgId);
+    const orgDoc = await orgRef.get();
+    const orgData = orgDoc.data();
+    let customerId = orgData?.stripeCustomerId;
+
+    // Create Stripe customer if doesn't exist
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: context.auth.token.email,
+        name: orgName || orgId,
+        metadata: {
+          orgId,
+          firebaseUid: context.auth.uid,
+        },
+      });
+      customerId = customer.id;
+      await orgRef.update({ stripeCustomerId: customerId });
+    }
+
+    // Create checkout session
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      mode: 'subscription',
+      success_url: `https://skidsling.com/billing-success?session_id={CHECKOUT_SESSION_ID}&org=${orgId}`,
+      cancel_url: `https://skidsling.com/subscription-required`,
+      metadata: {
+        orgId,
+        plan: plan.toLowerCase(),
+        firebaseUid: context.auth.uid,
+      },
+      subscription_data: {
+        metadata: {
+          orgId,
+          plan: plan.toLowerCase(),
+        },
+      },
+      allow_promotion_codes: true,
+    });
+
+    return { sessionId: session.id, url: session.url };
+  } catch (error) {
+    console.error('createCheckoutSession error:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// ── Create Billing Portal Session (manage/cancel subscription) ──
+exports.createBillingPortalSession = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  }
+
+  const { orgId } = data;
+
+  try {
+    const orgDoc = await db.collection('organizations').doc(orgId).get();
+    const customerId = orgDoc.data()?.stripeCustomerId;
+
+    if (!customerId) {
+      throw new functions.https.HttpsError('not-found', 'No billing account found');
+    }
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: customerId,
+      return_url: 'https://skidsling.com/settings',
+    });
+
+    return { url: session.url };
+  } catch (error) {
+    console.error('createBillingPortalSession error:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+// ── Stripe Webhook Handler ──
+// Receives events from Stripe and updates Firestore
+exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = (functions.config().stripe || {}).webhook_secret;
+
+  let event;
+  try {
+    event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
+  } catch (err) {
+    console.error('Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  console.log('Stripe event received:', event.type);
+
+  try {
+    switch (event.type) {
+
+      // ── Payment succeeded — activate subscription ──
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const orgId = session.metadata?.orgId;
+        const plan = session.metadata?.plan;
+
+        if (orgId && plan) {
+          await db.collection('organizations').doc(orgId).update({
+            plan: plan,
+            status: 'active',
+            stripeSubscriptionId: session.subscription,
+            stripeCustomerId: session.customer,
+            subscriptionStartedAt: admin.firestore.FieldValue.serverTimestamp(),
+            trialEndsAt: null,
+          });
+          console.log(`Activated ${plan} for org ${orgId}`);
+        }
+        break;
+      }
+
+      // ── Subscription updated (upgrade/downgrade) ──
+      case 'customer.subscription.updated': {
+        const sub = event.data.object;
+        const orgSnap = await db.collection('organizations')
+          .where('stripeCustomerId', '==', sub.customer)
+          .limit(1).get();
+
+        if (!orgSnap.empty) {
+          const orgRef = orgSnap.docs[0].ref;
+          // Find plan from price ID
+          const priceId = sub.items.data[0]?.price?.id;
+          const plan = Object.entries(PRICE_IDS).find(([, id]) => id === priceId)?.[0];
+
+          const updateData = {
+            stripeSubscriptionId: sub.id,
+            status: sub.status === 'active' ? 'active' : sub.status,
+          };
+          if (plan) updateData.plan = plan;
+
+          await orgRef.update(updateData);
+          console.log(`Updated subscription for customer ${sub.customer}`);
+        }
+        break;
+      }
+
+      // ── Subscription cancelled or payment failed ──
+      case 'customer.subscription.deleted': {
+        const sub = event.data.object;
+        const orgSnap = await db.collection('organizations')
+          .where('stripeCustomerId', '==', sub.customer)
+          .limit(1).get();
+
+        if (!orgSnap.empty) {
+          await orgSnap.docs[0].ref.update({
+            plan: 'expired',
+            status: 'cancelled',
+            stripeSubscriptionId: null,
+          });
+          console.log(`Cancelled subscription for customer ${sub.customer}`);
+        }
+        break;
+      }
+
+      // ── Payment failed ──
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object;
+        const orgSnap = await db.collection('organizations')
+          .where('stripeCustomerId', '==', invoice.customer)
+          .limit(1).get();
+
+        if (!orgSnap.empty) {
+          await orgSnap.docs[0].ref.update({
+            status: 'past_due',
+          });
+          console.log(`Payment failed for customer ${invoice.customer}`);
+        }
+        break;
+      }
+
+      // ── Payment recovered ──
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object;
+        if (invoice.billing_reason === 'subscription_cycle') {
+          const orgSnap = await db.collection('organizations')
+            .where('stripeCustomerId', '==', invoice.customer)
+            .limit(1).get();
+
+          if (!orgSnap.empty) {
+            await orgSnap.docs[0].ref.update({
+              status: 'active',
+            });
+          }
+        }
+        break;
+      }
+
+      default:
+        console.log(`Unhandled event: ${event.type}`);
+    }
+
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Webhook handler error:', error);
+    res.status(500).send('Webhook handler error');
+  }
+});

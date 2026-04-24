@@ -32,15 +32,21 @@ export default function AdminDashboard() {
         .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
       setOrgs(orgList);
 
-      // Load error logs from activityLog
-      const logSnap = await getDocs(
-        query(collection(db, 'activityLog'),
-          where('action', 'in', ['ERROR', 'CRASH', 'PAYMENT_FAILED', 'USER_LOGIN']),
-          orderBy('timestamp', 'desc'),
-          limit(200)
-        )
-      );
-      setLogs(logSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // Load recent activity logs — simple query, no composite index needed
+      try {
+        const logSnap = await getDocs(
+          query(collection(db, 'activityLog'),
+            orderBy('timestamp', 'desc'),
+            limit(300)
+          )
+        );
+        // Filter client-side to avoid needing composite index
+        const allLogs = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setLogs(allLogs);
+      } catch (logErr) {
+        console.warn('Activity log load failed (index may be missing):', logErr.message);
+        setLogs([]);
+      }
     } catch (e) {
       console.error('Admin load error:', e);
     }
@@ -123,13 +129,13 @@ export default function AdminDashboard() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid var(--border)', paddingBottom: 0 }}>
         {['orgs', 'logs'].map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+          <button key={tab} onClick={() => { setActiveTab(tab); setSearchOrg(''); setFilterPlan(''); }} style={{
             padding: '10px 20px', background: 'none', border: 'none',
             borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
             color: activeTab === tab ? 'var(--accent)' : 'var(--text-muted)',
             fontWeight: activeTab === tab ? 700 : 500, cursor: 'pointer',
             fontSize: 14, marginBottom: -2, letterSpacing: 0.3, textTransform: 'capitalize'
-          }}>{tab === 'orgs' ? `Organizations (${orgs.length})` : `Error Logs (${logs.length})`}</button>
+          }}>{tab === 'orgs' ? `Organizations (${orgs.length})` : `Activity Logs (${logs.length})`}</button>
         ))}
       </div>
 
@@ -219,34 +225,69 @@ export default function AdminDashboard() {
 
       {/* LOGS TAB */}
       {activeTab === 'logs' && (
-        <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
-          {logs.length === 0 ? (
-            <div className="empty-state"><p>No error logs found</p></div>
-          ) : (
-            <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
-              {logs.map(log => (
-                <div key={log.id} style={{
-                  padding: '12px 16px', borderBottom: '1px solid var(--border)',
-                  display: 'flex', gap: 14, alignItems: 'flex-start'
-                }}>
-                  <div style={{
-                    padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
-                    background: log.action === 'ERROR' || log.action === 'CRASH' ? 'rgba(244,67,54,0.15)' : 'rgba(33,150,243,0.15)',
-                    color: log.action === 'ERROR' || log.action === 'CRASH' ? '#f44336' : '#2196F3',
-                    flexShrink: 0, marginTop: 2
-                  }}>{log.action}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>
-                      {log.details ? JSON.stringify(log.details) : '—'}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
-                      {log.orgId} · {log.userEmail} · {new Date(log.timestamp).toLocaleString()}
-                    </div>
-                  </div>
-                </div>
+        <div>
+          {/* Log filters */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+            <input
+              type="text"
+              placeholder="🔍 Search logs..."
+              value={searchOrg}
+              onChange={e => setSearchOrg(e.target.value)}
+              style={{
+                flex: 1, minWidth: 220, padding: '9px 14px',
+                border: '1px solid var(--border)', borderRadius: 8,
+                background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 14
+              }}
+            />
+            <select value={filterPlan} onChange={e => setFilterPlan(e.target.value)} style={{
+              padding: '9px 14px', border: '1px solid var(--border)', borderRadius: 8,
+              background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 14
+            }}>
+              <option value="">All Actions</option>
+              {[...new Set(logs.map(l => l.action).filter(Boolean))].sort().map(a => (
+                <option key={a} value={a}>{a}</option>
               ))}
-            </div>
-          )}
+            </select>
+          </div>
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+            {logs.length === 0 ? (
+              <div className="empty-state"><p>No logs found</p></div>
+            ) : (
+              <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                {logs
+                  .filter(log => {
+                    if (searchOrg && !JSON.stringify(log).toLowerCase().includes(searchOrg.toLowerCase())) return false;
+                    if (filterPlan && log.action !== filterPlan) return false;
+                    return true;
+                  })
+                  .map(log => {
+                    const isError = ['ERROR', 'CRASH', 'PAYMENT_FAILED'].includes(log.action);
+                    return (
+                      <div key={log.id} style={{
+                        padding: '12px 16px', borderBottom: '1px solid var(--border)',
+                        display: 'flex', gap: 14, alignItems: 'flex-start',
+                        background: isError ? 'rgba(244,67,54,0.04)' : 'transparent'
+                      }}>
+                        <div style={{
+                          padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 700,
+                          background: isError ? 'rgba(244,67,54,0.15)' : 'rgba(33,150,243,0.1)',
+                          color: isError ? '#f44336' : 'var(--text-link)',
+                          flexShrink: 0, marginTop: 2, whiteSpace: 'nowrap'
+                        }}>{log.action}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: 'var(--text-primary)', wordBreak: 'break-word' }}>
+                            {log.details ? (typeof log.details === 'object' ? JSON.stringify(log.details) : log.details) : '—'}
+                          </div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                            {log.orgId} · {log.userEmail || 'unknown'} · {new Date(log.timestamp).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

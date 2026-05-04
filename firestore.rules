@@ -52,6 +52,12 @@ service cloud.firestore {
       return orgId == 'aa-surplus-sales';
     }
 
+    // Is the authenticated user a member of the owner org (a SkidSling admin)?
+    function isOwnerUser() {
+      return isAuthed() &&
+        exists(/databases/$(database)/documents/orgMembers/$('aa-surplus-sales_' + request.auth.uid));
+    }
+
 
     // ═══════════════════════════════════════════════════════════
     // ORGANIZATIONS
@@ -59,7 +65,7 @@ service cloud.firestore {
 
     match /organizations/{orgId} {
       // Any member can read their org
-      allow read: if isAuthed() && (isMember(orgId) || isOwnerOrg(orgId));
+      allow read: if isAuthed() && (isMember(orgId) || isOwnerOrg(orgId) || isOwnerUser());
 
       // Only admins can update org settings
       allow update: if isAdmin(orgId);
@@ -78,10 +84,11 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
 
     match /orgMembers/{memberId} {
-      // Members can read their own record; admins can read all members of their org
+      // Members can read their own record; admins can read all members of their org; owner user reads all
       allow read: if isAuthed() && (
         resource.data.userId == request.auth.uid ||
-        isAdmin(resource.data.orgId)
+        isAdmin(resource.data.orgId) ||
+        isOwnerUser()
       );
 
       // Admins can create/update membership (invite flow, role changes)
@@ -242,8 +249,8 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
 
     match /activityLog/{logId} {
-      // Only managers and above can read activity log
-      allow read: if isManager(resource.data.orgId);
+      // Only managers and above can read activity log; owner user reads all
+      allow read: if isManager(resource.data.orgId) || isOwnerUser();
       // System writes only — staff can create log entries
       allow create: if isStaff(request.resource.data.orgId);
       // Logs are immutable

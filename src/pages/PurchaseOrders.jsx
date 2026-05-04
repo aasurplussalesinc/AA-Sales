@@ -52,7 +52,7 @@ export default function PurchaseOrders() {
   const [newPO, setNewPO] = useState({
     customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
     shipToAddress: '', useShipTo: false,
-    dueDate: '', invoiceDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0
+    dueDate: '', invoiceDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, credit: 0, discount: 0, estTotal: 0, total: 0
   });
 
   const termsOptions = ['Due on Receipt', 'Net 15', 'Net 30', 'Net 45', 'Net 60', 'Net 90'];
@@ -151,7 +151,8 @@ export default function PurchaseOrders() {
       const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
       const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
       const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0;
-      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping };
+      const credit = parseFloat(prevPO.credit) || 0; const discount = parseFloat(prevPO.discount) || 0;
+      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping - credit - discount, total: shipSubtotal + tax + shipping - credit - discount };
     });
   };
 
@@ -161,7 +162,8 @@ export default function PurchaseOrders() {
       const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
       const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
       const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0;
-      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping };
+      const credit = parseFloat(prevPO.credit) || 0; const discount = parseFloat(prevPO.discount) || 0;
+      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping - credit - discount, total: shipSubtotal + tax + shipping - credit - discount };
     });
   };
 
@@ -220,7 +222,8 @@ export default function PurchaseOrders() {
       const estSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.estTotal) || 0), 0);
       const shipSubtotal = updatedItems.reduce((sum, i) => sum + (parseFloat(i.lineTotal) || 0), 0);
       const tax = parseFloat(prevPO.tax) || 0; const shipping = parseFloat(prevPO.shipping) || 0;
-      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping };
+      const credit = parseFloat(prevPO.credit) || 0; const discount = parseFloat(prevPO.discount) || 0;
+      return { ...prevPO, items: updatedItems, estSubtotal, subtotal: shipSubtotal, estTotal: estSubtotal + tax + shipping - credit - discount, total: shipSubtotal + tax + shipping - credit - discount };
     });
   };
 
@@ -230,7 +233,9 @@ export default function PurchaseOrders() {
       const estSubtotal = prevPO.estSubtotal || 0; const shipSubtotal = prevPO.subtotal || 0;
       const tax = field === 'tax' ? val : (parseFloat(prevPO.tax) || 0);
       const shipping = field === 'shipping' ? val : (parseFloat(prevPO.shipping) || 0);
-      return { ...prevPO, [field]: val, estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping };
+      const credit = field === 'credit' ? val : (parseFloat(prevPO.credit) || 0);
+      const discount = field === 'discount' ? val : (parseFloat(prevPO.discount) || 0);
+      return { ...prevPO, [field]: val, estTotal: estSubtotal + tax + shipping - credit - discount, total: shipSubtotal + tax + shipping - credit - discount };
     });
   };
 
@@ -334,6 +339,7 @@ export default function PurchaseOrders() {
     const estSubtotal = normalizedItems.reduce((sum, i) => sum + (i.estTotal || 0), 0);
     const shipSubtotal = normalizedItems.reduce((sum, i) => sum + (i.lineTotal || 0), 0);
     const tax = parseFloat(order.tax) || 0; const shipping = parseFloat(order.shipping) || 0;
+    const credit = parseFloat(order.credit) || 0; const discount = parseFloat(order.discount) || 0;
     // Format invoiceDate for input field
     let invoiceDateStr = '';
     if (order.invoiceDate) {
@@ -345,15 +351,15 @@ export default function PurchaseOrders() {
       customerPhone: order.customerPhone || '', customerAddress: order.customerAddress || '', 
       shipToAddress: order.shipToAddress || '', useShipTo: !!order.shipToAddress,
       dueDate: order.dueDate || '', invoiceDate: invoiceDateStr, poNumber: order.poNumber || '',
-      notes: order.notes || '', terms: order.terms || 'Net 30', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping,
-      estTotal: estSubtotal + tax + shipping, total: shipSubtotal + tax + shipping });
+      notes: order.notes || '', terms: order.terms || 'Net 30', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping, credit, discount,
+      estTotal: estSubtotal + tax + shipping - credit - discount, total: shipSubtotal + tax + shipping - credit - discount });
     setEditingOrderId(order.id); setEditMode(true); setShowCreate(true); closeOrderModal();
   };
 
   const resetForm = () => {
     setNewPO({ customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
       shipToAddress: '', useShipTo: false,
-      dueDate: '', invoiceDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, estTotal: 0, total: 0 });
+      dueDate: '', invoiceDate: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, credit: 0, discount: 0, estTotal: 0, total: 0 });
   };
 
   const confirmAndCreatePickList = async (order) => {
@@ -503,6 +509,8 @@ export default function PurchaseOrders() {
     }, 0);
     const tax = parseFloat(packingOrder.tax) || 0;
     const shipping = parseFloat(packingOrder.shipping) || 0;
+    const credit = parseFloat(packingOrder.credit) || 0;
+    const discount = parseFloat(packingOrder.discount) || 0;
     
     // Calculate per-box contents value from items × unitPrice
     const boxValues = {};
@@ -528,7 +536,7 @@ export default function PurchaseOrders() {
       packingComplete: true,
       status: 'packed',
       subtotal: newSubtotal,
-      total: newSubtotal + tax + shipping
+      total: newSubtotal + tax + shipping - credit - discount
     });
     
     await DB.updatePurchaseOrder(packingOrder.id, updateData);
@@ -1127,7 +1135,9 @@ export default function PurchaseOrders() {
     const subtotal = items.reduce((sum, i) => sum + i.displayTotal, 0);
     const tax = parseFloat(order.tax) || 0;
     const shipping = parseFloat(order.shipping) || 0;
-    const total = subtotal + tax + shipping;
+    const credit = parseFloat(order.credit) || 0;
+    const discount = parseFloat(order.discount) || 0;
+    const total = subtotal + tax + shipping - credit - discount;
     const formatFullDate = (ts) => { 
       if (!ts) return '';
       const d = ts.toDate ? ts.toDate() : new Date(ts); 
@@ -1167,7 +1177,7 @@ export default function PurchaseOrders() {
       <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${order.poNumber}</div>
       <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerContact ? '<p>Attn: ' + order.customerContact + '</p>' : ''}${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3><p>' + order.shipToAddress.replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${displayDate}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p></div></div>
       <table><thead><tr><th style="width:60px">SKU</th><th>Description</th>${isEstimate ? '<th style="text-align:center;width:50px">Qty</th>' : '<th style="text-align:center;width:50px">Ord</th><th style="text-align:center;width:50px">Ship</th>'}<th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${items.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + (item.notes ? '<div style="font-size:9px;color:#666;font-style:italic">' + item.notes + '</div>' : '') + '</td>' + (isEstimate ? '<td style="text-align:center">' + (item.quantity || 0) + '</td>' : '<td style="text-align:center">' + (item.quantity || 0) + '</td><td style="text-align:center;font-weight:bold">' + (item.qtyShipped || 0) + '</td>') + '<td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
-      <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
+      <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : ''}${credit > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Credit</span><span>-$' + credit.toFixed(2) + '</span></div>' : ''}${discount > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Discount</span><span>-$' + discount.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
       <div style="margin-top:10px;font-size:9px;color:#666;font-style:italic;text-align:right">Payments by credit card are subject to a 3.5% processing fee</div>
       ${order.notes ? '<div class="notes"><h3>Notes</h3><p>' + order.notes + '</p></div>' : ''}
       <div class="footer">Thank you for your business!<br>Questions? Contact us at ${organization?.email || 'aasurplussalesinc@gmail.com'}</div></body></html>`;
@@ -1598,6 +1608,10 @@ ${labelsHtml}
                         <input type="number" value={newPO.tax === '' || newPO.tax === undefined || newPO.tax === null ? '' : newPO.tax} onChange={e => updateTaxShipping('tax', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" placeholder="0.00" /></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center' }}><span>Shipping:</span>
                         <input type="number" value={newPO.shipping === '' || newPO.shipping === undefined || newPO.shipping === null ? '' : newPO.shipping} onChange={e => updateTaxShipping('shipping', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right' }} step="0.01" min="0" placeholder="0.00" /></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center', color: '#2e7d32' }}><span>Credit:</span>
+                        <input type="number" value={newPO.credit === '' || newPO.credit === undefined || newPO.credit === null ? '' : newPO.credit} onChange={e => updateTaxShipping('credit', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right', color: '#2e7d32' }} step="0.01" min="0" placeholder="0.00" /></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', alignItems: 'center', color: '#2e7d32' }}><span>Discount:</span>
+                        <input type="number" value={newPO.discount === '' || newPO.discount === undefined || newPO.discount === null ? '' : newPO.discount} onChange={e => updateTaxShipping('discount', e.target.value)} style={{ width: 70, padding: 5, textAlign: 'right', color: '#2e7d32' }} step="0.01" min="0" placeholder="0.00" /></div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #388e3c', fontWeight: 'bold', fontSize: 18, color: 'var(--text-badge-green)' }}><span>Total:</span><span>${(newPO.total || 0).toFixed(2)}</span></div>
                       <div style={{ fontSize: 9, color: 'var(--text-muted)', marginTop: 5, fontStyle: 'italic', textAlign: 'center' }}>Payments by credit card are subject to a 3.5% processing fee</div>
                     </div>
@@ -1693,6 +1707,8 @@ ${labelsHtml}
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Subtotal:</span><span>{formatCurrency(selectedOrder.subtotal)}</span></div>
                   {selectedOrder.tax > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Tax:</span><span>{formatCurrency(selectedOrder.tax)}</span></div>}
                   {selectedOrder.shipping > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Shipping:</span><span>{formatCurrency(selectedOrder.shipping)}</span></div>}
+                  {selectedOrder.credit > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#2e7d32' }}><span>Credit:</span><span>-{formatCurrency(selectedOrder.credit)}</span></div>}
+                  {selectedOrder.discount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#2e7d32' }}><span>Discount:</span><span>-{formatCurrency(selectedOrder.discount)}</span></div>}
                   <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #333', fontWeight: 'bold', fontSize: 18 }}><span>Total:</span><span>{formatCurrency(selectedOrder.total)}</span></div>
                 </div>
               </div>

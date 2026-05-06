@@ -79,6 +79,7 @@ export default function Items() {
     category: '',
     stock: 0,
     price: 0,
+    cost: 0,
     weight: '',
     location: '',
     lowStockThreshold: 0,
@@ -503,6 +504,7 @@ export default function Items() {
       category: newItem.category,
       stock: totalStock,
       price: parseFloat(newItem.price) || 0,
+      cost: parseFloat(newItem.cost) || 0,
       weight: parseFloat(newItem.weight) || 0,
       location: useMultiLocation ? '' : newItem.location,
       lowStockThreshold: newItem.lowStockThreshold,
@@ -568,6 +570,7 @@ export default function Items() {
         category: '',
         stock: 0,
         price: 0,
+        cost: 0,
         weight: '',
         location: '',
         lowStockThreshold: 0,
@@ -642,6 +645,7 @@ export default function Items() {
           category: editingItem.category,
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
+          cost: parseFloat(editingItem.cost) || 0,
           weight: parseFloat(editingItem.weight) || 0,
           location: editingItem.location || '',
           lowStockThreshold: editingItem.lowStockThreshold ?? 0,
@@ -654,6 +658,7 @@ export default function Items() {
           category: editingItem.category,
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
+          cost: parseFloat(editingItem.cost) || 0,
           weight: parseFloat(editingItem.weight) || 0,
           location: editUseMultiLocation ? '' : (editingItem.location || ''),
           lowStockThreshold: editingItem.lowStockThreshold ?? 0,
@@ -776,7 +781,8 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           'name': ['name', 'item name', 'item_name', 'itemname', 'description', 'product name', 'product_name'],
           'category': ['category', 'cat', 'type', 'group'],
           'stock': ['stock', 'quantity', 'qty', 'count', 'amount', 'on hand', 'on_hand'],
-          'price': ['price', 'unit price', 'unitprice', 'unit_price', 'cost', 'sell price', 'sellprice'],
+          'price': ['price', 'unit price', 'unitprice', 'unit_price', 'sell price', 'sellprice', 'msrp'],
+          'cost': ['cost', 'unit cost', 'unitcost', 'unit_cost', 'item cost', 'itemcost', 'wholesale', 'buy price'],
           'location': ['location', 'loc', 'bin', 'warehouse', 'position']
         };
 
@@ -2258,14 +2264,26 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </datalist>
               </div>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15 }}>
                 <div className="form-group">
-                  <label>Price</label>
+                  <label>Price <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(sell)</span></label>
                   <input
                     type="number"
                     className="form-input"
                     value={newItem.price === '' || newItem.price === undefined || newItem.price === null ? '' : newItem.price}
                     onChange={e => setNewItem({ ...newItem, price: e.target.value })}
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Cost <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(internal)</span></label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={newItem.cost === '' || newItem.cost === undefined || newItem.cost === null ? '' : newItem.cost}
+                    onChange={e => setNewItem({ ...newItem, cost: e.target.value })}
                     min="0"
                     step="0.01"
                     placeholder="0.00"
@@ -2517,14 +2535,25 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </datalist>
               </div>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15 }}>
                 <div className="form-group">
-                  <label>Price</label>
+                  <label>Price <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(sell)</span></label>
                   <input
                     type="number"
                     className="form-input"
                     value={editingItem.price || 0}
                     onChange={e => setEditingItem({ ...editingItem, price: e.target.value })}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Cost <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(internal)</span></label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={editingItem.cost || 0}
+                    onChange={e => setEditingItem({ ...editingItem, cost: e.target.value })}
                     min="0"
                     step="0.01"
                   />

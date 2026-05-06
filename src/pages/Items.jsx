@@ -94,7 +94,22 @@ export default function Items() {
 
   // Action dropdown state — tracks which item's menu is open
   const [openActionMenu, setOpenActionMenu] = useState(null);
+  const [actionMenuOpenUp, setActionMenuOpenUp] = useState(false);
   const actionMenuRef = useRef(null);
+
+  // Decide if the dropdown should open upward or downward based on available space
+  const handleOpenActionMenu = (itemId, event) => {
+    if (openActionMenu === itemId) {
+      setOpenActionMenu(null);
+      return;
+    }
+    // Check space below the button
+    const rect = event.currentTarget.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const menuHeight = 280; // approximate height of full menu
+    setActionMenuOpenUp(spaceBelow < menuHeight);
+    setOpenActionMenu(itemId);
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -2088,7 +2103,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                     {/* Actions trigger button */}
                     <button
                       className="btn btn-sm"
-                      onClick={() => setOpenActionMenu(openActionMenu === item.id ? null : item.id)}
+                      onClick={(e) => handleOpenActionMenu(item.id, e)}
                       style={{
                         background: 'var(--btn-secondary-bg)',
                         color: 'var(--btn-secondary-color)',
@@ -2097,19 +2112,23 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                         display: 'flex', alignItems: 'center', gap: 4
                       }}
                     >
-                      Actions <span style={{ fontSize: 10, opacity: 0.7 }}>{openActionMenu === item.id ? '▲' : '▼'}</span>
+                      Actions <span style={{ fontSize: 10, opacity: 0.7 }}>{openActionMenu === item.id ? (actionMenuOpenUp ? '▼' : '▲') : '▼'}</span>
                     </button>
 
                     {/* Dropdown menu */}
                     {openActionMenu === item.id && (
                       <div style={{
-                        position: 'absolute', right: 0, bottom: '100%', marginBottom: 4,
+                        position: 'absolute', right: 0,
+                        ...(actionMenuOpenUp
+                          ? { bottom: '100%', marginBottom: 4 }
+                          : { top: '100%', marginTop: 4 }
+                        ),
                         background: 'var(--bg-surface)',
                         border: '1px solid var(--border)',
                         borderRadius: 8,
                         boxShadow: 'var(--shadow-md)',
                         zIndex: 999, minWidth: 160,
-                        overflow: 'hidden'
+                        maxHeight: '70vh', overflowY: 'auto'
                       }}>
                         {canEdit && (
                           <DropdownItem

@@ -2207,7 +2207,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
       {/* Add Item Modal */}
       {showAddItem && (
         <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowAddItem(false); setSaveSuccessMsg(''); } }}>
-          <div className="modal" style={{ maxWidth: 500 }}>
+          <div className="modal" style={{ maxWidth: 600 }}>
             <div className="modal-header">
               <h2>Add New Item</h2>
               <button className="modal-close" onClick={() => { setShowAddItem(false); setSaveSuccessMsg(''); }}>×</button>
@@ -2264,12 +2264,13 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </datalist>
               </div>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div className="form-group">
                   <label>Price <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(sell)</span></label>
                   <input
                     type="number"
                     className="form-input"
+                    style={{ width: '100%', boxSizing: 'border-box' }}
                     value={newItem.price === '' || newItem.price === undefined || newItem.price === null ? '' : newItem.price}
                     onChange={e => setNewItem({ ...newItem, price: e.target.value })}
                     min="0"
@@ -2282,6 +2283,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
+                    style={{ width: '100%', boxSizing: 'border-box' }}
                     value={newItem.cost === '' || newItem.cost === undefined || newItem.cost === null ? '' : newItem.cost}
                     onChange={e => setNewItem({ ...newItem, cost: e.target.value })}
                     min="0"
@@ -2290,10 +2292,11 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   />
                 </div>
                 <div className="form-group">
-                  <label>Weight (lbs)</label>
+                  <label>Weight <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(lbs)</span></label>
                   <input
                     type="number"
                     className="form-input"
+                    style={{ width: '100%', boxSizing: 'border-box' }}
                     value={newItem.weight || ''}
                     onChange={e => setNewItem({ ...newItem, weight: e.target.value })}
                     min="0"
@@ -2491,7 +2494,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         >
           <div 
             className="modal"
-            style={{ maxWidth: 550 }}
+            style={{ maxWidth: 600 }}
           >
             <div className="modal-header">
               <h2 style={{ margin: 0, fontSize: 20 }}>✏️ Edit Item</h2>
@@ -2535,12 +2538,13 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                 </datalist>
               </div>
               
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 15 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
                 <div className="form-group">
                   <label>Price <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(sell)</span></label>
                   <input
                     type="number"
                     className="form-input"
+                    style={{ width: '100%', boxSizing: 'border-box' }}
                     value={editingItem.price || 0}
                     onChange={e => setEditingItem({ ...editingItem, price: e.target.value })}
                     min="0"
@@ -2552,6 +2556,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   <input
                     type="number"
                     className="form-input"
+                    style={{ width: '100%', boxSizing: 'border-box' }}
                     value={editingItem.cost || 0}
                     onChange={e => setEditingItem({ ...editingItem, cost: e.target.value })}
                     min="0"
@@ -2559,10 +2564,11 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   />
                 </div>
                 <div className="form-group">
-                  <label>Weight (lbs)</label>
+                  <label>Weight <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 400 }}>(lbs)</span></label>
                   <input
                     type="number"
                     className="form-input"
+                    style={{ width: '100%', boxSizing: 'border-box' }}
                     value={editingItem.weight || ''}
                     onChange={e => setEditingItem({ ...editingItem, weight: e.target.value })}
                     min="0"

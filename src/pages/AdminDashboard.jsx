@@ -78,15 +78,51 @@ export default function AdminDashboard() {
     return true;
   });
 
+  // Compute trial conversion stats
+  const totalSignedUp = orgs.length;
+  const stillOnTrial = orgs.filter(o => o.plan === 'trial' && o.status !== 'trial_expired').length;
+  const trialExpired = orgs.filter(o => o.status === 'trial_expired').length;
+  const converted = orgs.filter(o => ['starter', 'pro', 'business', 'enterprise'].includes(o.plan) && o.status === 'active').length;
+  const finishedTrial = converted + trialExpired;
+  const conversionRate = finishedTrial > 0 ? Math.round((converted / finishedTrial) * 100) : 0;
+
   const stats = {
-    total: orgs.length,
+    total: totalSignedUp,
     active: orgs.filter(o => o.status === 'active').length,
-    trial: orgs.filter(o => o.plan === 'trial').length,
-    expired: orgs.filter(o => o.plan === 'expired' || o.status === 'cancelled').length,
+    trial: stillOnTrial,
+    expired: trialExpired,
+    converted,
+    conversionRate,
     mrr: orgs
       .filter(o => o.status === 'active')
       .reduce((sum, o) => sum + ({ starter: 50, pro: 150, business: 250, enterprise: 350 }[o.plan] || 0), 0)
   };
+
+  // Plan breakdown for paid customers
+  const paidByPlan = {
+    starter: orgs.filter(o => o.plan === 'starter' && o.status === 'active').length,
+    pro: orgs.filter(o => o.plan === 'pro' && o.status === 'active').length,
+    business: orgs.filter(o => o.plan === 'business' && o.status === 'active').length,
+    enterprise: orgs.filter(o => o.plan === 'enterprise' && o.status === 'active').length,
+  };
+
+  // Signups by month (last 6 months)
+  const signupsByMonth = (() => {
+    const months = {};
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      months[key] = 0;
+    }
+    orgs.forEach(o => {
+      if (!o.createdAt) return;
+      const d = new Date(o.createdAt);
+      const key = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+      if (key in months) months[key]++;
+    });
+    return months;
+  })();
 
   if (loading) return (
     <div className="page-content" style={{ textAlign: 'center', paddingTop: 80 }}>
@@ -128,14 +164,18 @@ export default function AdminDashboard() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid var(--border)', paddingBottom: 0 }}>
-        {['orgs', 'logs'].map(tab => (
+        {['orgs', 'conversion', 'logs'].map(tab => (
           <button key={tab} onClick={() => { setActiveTab(tab); setSearchOrg(''); setFilterPlan(''); }} style={{
             padding: '10px 20px', background: 'none', border: 'none',
             borderBottom: activeTab === tab ? '2px solid var(--accent)' : '2px solid transparent',
             color: activeTab === tab ? 'var(--accent)' : 'var(--text-muted)',
             fontWeight: activeTab === tab ? 700 : 500, cursor: 'pointer',
             fontSize: 14, marginBottom: -2, letterSpacing: 0.3, textTransform: 'capitalize'
-          }}>{tab === 'orgs' ? `Organizations (${orgs.length})` : `Activity Logs (${logs.length})`}</button>
+          }}>{
+            tab === 'orgs' ? `Organizations (${orgs.length})`
+            : tab === 'conversion' ? `Conversion (${stats.conversionRate}%)`
+            : `Activity Logs (${logs.length})`
+          }</button>
         ))}
       </div>
 
@@ -224,6 +264,93 @@ export default function AdminDashboard() {
       )}
 
       {/* LOGS TAB */}
+      {activeTab === 'conversion' && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+          {/* Funnel summary */}
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Trial → Paid Funnel</h3>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>TOTAL SIGNUPS (all time)</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--accent)' }}>{stats.total}</div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>STILL ON TRIAL</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#ffc107' }}>{stats.trial}</div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>CONVERTED TO PAID</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#4CAF50' }}>{stats.converted}</div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>TRIAL EXPIRED (no upgrade)</div>
+              <div style={{ fontSize: 22, fontWeight: 700, color: '#f44336' }}>{stats.expired}</div>
+            </div>
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 14 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4, fontWeight: 600 }}>CONVERSION RATE</div>
+              <div style={{ fontSize: 36, fontWeight: 800, color: stats.conversionRate >= 30 ? '#4CAF50' : stats.conversionRate >= 15 ? '#ffc107' : '#f44336' }}>
+                {stats.conversionRate}%
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>of finished trials converted to paid</div>
+            </div>
+          </div>
+
+          {/* Plan breakdown */}
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Active Paid Plans</h3>
+            {[
+              { key: 'starter', label: 'Starter', color: '#78909c', price: 50 },
+              { key: 'pro', label: 'Pro', color: '#1976d2', price: 150 },
+              { key: 'business', label: 'Business', color: '#388e3c', price: 250 },
+              { key: 'enterprise', label: 'Enterprise', color: '#6a1b9a', price: 350 },
+            ].map(p => (
+              <div key={p.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 12, height: 12, borderRadius: 3, background: p.color }} />
+                  <div>
+                    <div style={{ fontWeight: 600 }}>{p.label}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>${p.price}/mo each</div>
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800 }}>{paidByPlan[p.key]}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>${(paidByPlan[p.key] * p.price).toLocaleString()}/mo</div>
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(52,211,153,0.1)', borderRadius: 8 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>TOTAL MRR</div>
+              <div style={{ fontSize: 24, fontWeight: 800, color: '#34d399' }}>${stats.mrr.toLocaleString()}/mo</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>${(stats.mrr * 12).toLocaleString()} ARR</div>
+            </div>
+          </div>
+
+          {/* Signups by month */}
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 24, gridColumn: '1 / -1' }}>
+            <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Signups — Last 6 Months</h3>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, height: 180, padding: '0 8px' }}>
+              {Object.entries(signupsByMonth).map(([month, count]) => {
+                const max = Math.max(...Object.values(signupsByMonth), 1);
+                const heightPct = (count / max) * 100;
+                return (
+                  <div key={month} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{count}</div>
+                    <div style={{
+                      width: '100%',
+                      height: `${heightPct}%`,
+                      background: 'linear-gradient(180deg, #34d399 0%, #0d7a52 100%)',
+                      borderRadius: '4px 4px 0 0',
+                      minHeight: count > 0 ? 4 : 0,
+                      transition: 'height 0.3s'
+                    }} />
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>{month}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {activeTab === 'logs' && (
         <div>
           {/* Log filters */}

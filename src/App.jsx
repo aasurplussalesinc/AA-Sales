@@ -20,6 +20,8 @@ import Shipping from './pages/Shipping';
 import TermsOfService from './pages/TermsOfService';
 import BillingSuccess from './pages/BillingSuccess';
 import AdminDashboard from './pages/AdminDashboard';
+import ExportData from './pages/ExportData';
+import TrialBanner from './components/TrialBanner';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import { useTier } from './useTier';
 import { ThemeProvider, useTheme } from './ThemeContext';
@@ -183,6 +185,7 @@ function NavBar() {
 function AppLayout({ children }) {
   return (
     <div className="app">
+      <TrialBanner />
       <NavBar />
       {children}
     </div>
@@ -335,6 +338,10 @@ function AppRoutes() {
       
       {/* Catch all */}
       <Route path="/billing-success" element={<BillingSuccess />} />
+      <Route path="/export-data" element={
+        !user ? <Navigate to="/login" replace /> :
+        <AppLayout><ExportData /></AppLayout>
+      } />
       <Route path="/admin" element={
         <ProtectedRoute>
           <AppLayout><AdminDashboard /></AppLayout>

@@ -884,11 +884,13 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
         firebaseUid: context.auth.uid,
       },
       subscription_data: {
+        trial_period_days: data.includeTrial === false ? undefined : 14,
         metadata: {
           orgId,
           plan: plan.toLowerCase(),
         },
       },
+      payment_method_collection: 'always',
       allow_promotion_codes: true,
     });
 
@@ -1502,6 +1504,294 @@ exports.validateEasyPostAddress = functions.https.onCall(async (data, context) =
     };
   } catch (error) {
     console.error('validateEasyPostAddress error:', error);
+    throw new functions.https.HttpsError('internal', error.message);
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════
+// TRIAL LIFECYCLE MANAGEMENT
+// Daily scheduled function checks all orgs and:
+//   1. Sends day-7 check-in email (trial midway)
+//   2. Sends day-11 "trial ends in 3 days" email
+//   3. Sends day-13 "last day" email
+//   4. Sends day-15+1 "trial ended, data preserved 30 days" email
+//   5. After day 45 (15 trial + 30 grace), marks org for deletion
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Send a transactional email via Brevo (formerly Sendinblue).
+ * Set BREVO_API_KEY in functions/.env to enable. If not set, just logs.
+ * Brevo Free tier: 300 emails/day, 9,000/month, no credit card required.
+ */
+async function sendTrialEmail({ to, subject, html, fromName = 'SkidSling' }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    console.log(`[email skipped — no BREVO_API_KEY] ${subject} -> ${to}`);
+    return { skipped: true };
+  }
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: { name: fromName, email: 'info@skidsling.com' },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+      }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`Brevo error ${res.status}:`, errText);
+      return { success: false, error: errText };
+    }
+    const result = await res.json();
+    return { success: true, id: result.messageId };
+  } catch (err) {
+    console.error('sendTrialEmail error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/** Build the email HTML for a given trial milestone */
+function buildTrialEmailHtml(milestone, orgName, daysLeft) {
+  const upgradeUrl = 'https://skidsling.com/subscription-required';
+  let title, body, ctaText;
+
+  if (milestone === 'day7_checkin') {
+    title = `How's your SkidSling trial going?`;
+    body = `<p>Hi there,</p>
+      <p>You're a week into your SkidSling free trial. We hope you're finding it useful for managing your warehouse operations.</p>
+      <p>A few things our customers love most:</p>
+      <ul>
+        <li><strong>Pick lists & packing</strong> — turn orders into action lists in one click</li>
+        <li><strong>Multi-location inventory</strong> — track stock across racks, bays, and shelves</li>
+        <li><strong>Shipping integrations</strong> — print labels directly from the order</li>
+      </ul>
+      <p>If you have questions or want a quick demo, just reply to this email.</p>`;
+    ctaText = 'Open SkidSling';
+  } else if (milestone === 'day11_warning') {
+    title = `Your trial ends in 3 days`;
+    body = `<p>Hi there,</p>
+      <p>Your SkidSling free trial ends in <strong>3 days</strong>. After your trial ends, you'll lose access to your data unless you upgrade.</p>
+      <p>The good news: all your items, orders, customers, and locations are saved and ready when you upgrade. Pick a plan that fits your business below.</p>`;
+    ctaText = 'View Plans';
+  } else if (milestone === 'day13_lastday') {
+    title = `Last day of your free trial`;
+    body = `<p>Hi there,</p>
+      <p>Today is the last day of your SkidSling free trial. Your account access ends tomorrow.</p>
+      <p>To keep using SkidSling and preserve all your data, please choose a plan now. We've held a spot for you.</p>`;
+    ctaText = 'Choose a Plan';
+  } else if (milestone === 'expired_grace') {
+    title = `Your free trial has ended`;
+    body = `<p>Hi there,</p>
+      <p>Your SkidSling free trial has ended. We've paused your account access, but <strong>your data is safe for the next 30 days</strong>.</p>
+      <p>If you choose a plan within 30 days, everything will be exactly as you left it. After 30 days, your data will be permanently deleted.</p>
+      <p>You can also export your data to CSV anytime by signing in.</p>`;
+    ctaText = 'Reactivate Account';
+  }
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>${title}</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;margin:0;padding:0">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+    <div style="background:#0d7a52;padding:24px;text-align:center">
+      <h1 style="color:#fff;font-size:24px;margin:0;letter-spacing:0.5px">
+        <span style="color:#fff">Skid</span><span style="color:#34d399">Sling</span>
+      </h1>
+    </div>
+    <div style="padding:32px 28px">
+      <h2 style="color:#0d1b17;font-size:20px;margin:0 0 16px">${title}${orgName ? ` — ${orgName}` : ''}</h2>
+      <div style="color:#555;line-height:1.6;font-size:15px">${body}</div>
+      <div style="text-align:center;margin:32px 0 16px">
+        <a href="${upgradeUrl}" style="display:inline-block;padding:14px 28px;background:#0d7a52;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px">${ctaText}</a>
+      </div>
+      <p style="color:#888;font-size:13px;text-align:center;margin:24px 0 0;border-top:1px solid #eee;padding-top:20px">Questions? Reply to this email.<br/>SkidSling · AA Innovation Group LLC</p>
+    </div>
+  </div>
+</body></html>`;
+}
+
+/**
+ * Daily scheduled trial lifecycle function — runs once per day at 9:00 AM EST.
+ * Checks all orgs, sends appropriate emails, marks expired trials.
+ */
+exports.processTrialLifecycle = functions.pubsub.schedule('0 9 * * *')
+  .timeZone('America/New_York')
+  .onRun(async (context) => {
+    console.log('processTrialLifecycle: starting');
+    const now = Date.now();
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+
+    try {
+      // Get all orgs on trial
+      const snap = await db.collection('organizations').where('plan', '==', 'trial').get();
+      console.log(`Found ${snap.size} trial orgs to process`);
+
+      const stats = { day7: 0, day11: 0, day13: 0, expired: 0, deleted: 0, errors: 0 };
+
+      for (const doc of snap.docs) {
+        const org = doc.data();
+        const orgId = doc.id;
+        if (!org.trialEndsAt || !org.email) continue;
+
+        const trialEnd = new Date(org.trialEndsAt).getTime();
+        const trialStart = trialEnd - (14 * ONE_DAY);
+        const daysSinceStart = Math.floor((now - trialStart) / ONE_DAY);
+        const daysUntilEnd = Math.ceil((trialEnd - now) / ONE_DAY);
+        const sentReminders = org.trialEmailsSent || {};
+
+        try {
+          // Day 7 check-in
+          if (daysSinceStart >= 7 && daysSinceStart < 11 && !sentReminders.day7_checkin) {
+            await sendTrialEmail({
+              to: org.email,
+              subject: `How's your SkidSling trial going?`,
+              html: buildTrialEmailHtml('day7_checkin', org.name, daysUntilEnd),
+            });
+            await doc.ref.update({ 'trialEmailsSent.day7_checkin': now });
+            stats.day7++;
+          }
+
+          // Day 11 warning (3 days left)
+          if (daysSinceStart >= 11 && daysSinceStart < 13 && !sentReminders.day11_warning) {
+            await sendTrialEmail({
+              to: org.email,
+              subject: `Your SkidSling trial ends in 3 days`,
+              html: buildTrialEmailHtml('day11_warning', org.name, daysUntilEnd),
+            });
+            await doc.ref.update({ 'trialEmailsSent.day11_warning': now });
+            stats.day11++;
+          }
+
+          // Day 13 last-day reminder
+          if (daysSinceStart >= 13 && daysSinceStart < 14 && !sentReminders.day13_lastday) {
+            await sendTrialEmail({
+              to: org.email,
+              subject: `Last day of your SkidSling free trial`,
+              html: buildTrialEmailHtml('day13_lastday', org.name, daysUntilEnd),
+            });
+            await doc.ref.update({ 'trialEmailsSent.day13_lastday': now });
+            stats.day13++;
+          }
+
+          // Trial expired — send "data preserved 30 days" email and mark expired
+          if (now > trialEnd && org.status !== 'trial_expired' && !sentReminders.expired_grace) {
+            await sendTrialEmail({
+              to: org.email,
+              subject: `Your SkidSling trial has ended`,
+              html: buildTrialEmailHtml('expired_grace', org.name, 0),
+            });
+            await doc.ref.update({
+              status: 'trial_expired',
+              trialExpiredAt: now,
+              gracePeriodEndsAt: now + (30 * ONE_DAY),
+              'trialEmailsSent.expired_grace': now,
+            });
+            stats.expired++;
+          }
+
+          // Grace period ended — schedule for deletion (45 days after trial start)
+          if (org.status === 'trial_expired' && org.gracePeriodEndsAt && now > org.gracePeriodEndsAt) {
+            await doc.ref.update({
+              status: 'pending_deletion',
+              pendingDeletionAt: now,
+            });
+            stats.deleted++;
+          }
+        } catch (err) {
+          console.error(`Error processing org ${orgId}:`, err);
+          stats.errors++;
+        }
+      }
+
+      console.log('processTrialLifecycle complete:', stats);
+      return stats;
+    } catch (error) {
+      console.error('processTrialLifecycle error:', error);
+      throw error;
+    }
+  });
+
+/**
+ * Export an org's data to CSV (for trial users wanting to keep their data).
+ * Returns multi-tab CSV blobs the frontend can stitch together as a ZIP.
+ */
+exports.exportOrgData = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  const { orgId } = data;
+  if (!orgId) throw new functions.https.HttpsError('invalid-argument', 'orgId required');
+
+  // Verify user is a member of this org
+  const memberDoc = await db.collection('orgMembers').doc(`${orgId}_${context.auth.uid}`).get();
+  if (!memberDoc.exists) throw new functions.https.HttpsError('permission-denied', 'Not a member of this org');
+
+  const csvEscape = (val) => {
+    if (val === null || val === undefined) return '';
+    const s = String(val);
+    if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+
+  const toCSV = (rows, headers) => {
+    if (!rows.length) return headers.join(',') + '\n';
+    const headerLine = headers.join(',');
+    const dataLines = rows.map(row => headers.map(h => csvEscape(row[h])).join(','));
+    return [headerLine, ...dataLines].join('\n');
+  };
+
+  try {
+    const exports_data = {};
+
+    // Items
+    const itemsSnap = await db.collection('items').where('orgId', '==', orgId).get();
+    const items = itemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    exports_data.items = toCSV(items, ['id', 'partNumber', 'name', 'category', 'stock', 'price', 'cost', 'weight', 'location', 'lowStockThreshold', 'reorderPoint']);
+
+    // Customers
+    const custSnap = await db.collection('customers').where('orgId', '==', orgId).get();
+    const customers = custSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    exports_data.customers = toCSV(customers, ['id', 'name', 'contactName', 'email', 'phone', 'address']);
+
+    // Locations
+    const locSnap = await db.collection('locations').where('orgId', '==', orgId).get();
+    const locations = locSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    exports_data.locations = toCSV(locations, ['id', 'locationCode', 'warehouse', 'rack', 'letter', 'shelf', 'description']);
+
+    // Purchase Orders
+    const poSnap = await db.collection('purchaseOrders').where('orgId', '==', orgId).get();
+    const orders = poSnap.docs.map(d => {
+      const o = d.data();
+      return {
+        id: d.id,
+        poNumber: o.poNumber,
+        customerPO: o.customerPO || '',
+        customerName: o.customerName,
+        status: o.status,
+        invoiceDate: o.invoiceDate,
+        terms: o.terms,
+        subtotal: o.subtotal,
+        tax: o.tax,
+        shipping: o.shipping,
+        credit: o.credit,
+        discount: o.discount,
+        total: o.total,
+        notes: o.notes,
+        itemCount: (o.items || []).length,
+      };
+    });
+    exports_data.orders = toCSV(orders, ['id', 'poNumber', 'customerPO', 'customerName', 'status', 'invoiceDate', 'terms', 'subtotal', 'tax', 'shipping', 'credit', 'discount', 'total', 'notes', 'itemCount']);
+
+    return { success: true, csvData: exports_data };
+  } catch (error) {
+    console.error('exportOrgData error:', error);
     throw new functions.https.HttpsError('internal', error.message);
   }
 });

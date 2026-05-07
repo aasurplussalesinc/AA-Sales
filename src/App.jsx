@@ -87,11 +87,12 @@ function NavBar() {
 
   const { theme } = useTheme();
   const planColors = {
-    trial: '#ffc107', starter: '#78909c', pro: '#1976d2',
+    trial: '#ffc107', test: '#ff9800', starter: '#78909c', pro: '#1976d2',
     business: '#7b1fa2', enterprise: theme === 'dark' ? '#34d399' : '#34d399', owner: '#c62828'
   };
   const planLabels = {
     trial: `Trial · ${subscriptionStatus?.trialDaysRemaining ?? 0}d left`,
+    test: '🧪 Test',
     starter: 'Starter', pro: 'Pro', business: 'Business',
     enterprise: 'Enterprise', owner: '⭐ Owner'
   };

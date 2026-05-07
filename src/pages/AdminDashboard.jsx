@@ -82,7 +82,7 @@ export default function AdminDashboard() {
   const totalSignedUp = orgs.length;
   const stillOnTrial = orgs.filter(o => o.plan === 'trial' && o.status !== 'trial_expired').length;
   const trialExpired = orgs.filter(o => o.status === 'trial_expired').length;
-  const converted = orgs.filter(o => ['starter', 'pro', 'business', 'enterprise'].includes(o.plan) && o.status === 'active').length;
+  const converted = orgs.filter(o => ['test', 'starter', 'pro', 'business', 'enterprise'].includes(o.plan) && o.status === 'active').length;
   const finishedTrial = converted + trialExpired;
   const conversionRate = finishedTrial > 0 ? Math.round((converted / finishedTrial) * 100) : 0;
 
@@ -95,7 +95,7 @@ export default function AdminDashboard() {
     conversionRate,
     mrr: orgs
       .filter(o => o.status === 'active')
-      .reduce((sum, o) => sum + ({ starter: 50, pro: 150, business: 250, enterprise: 350 }[o.plan] || 0), 0)
+      .reduce((sum, o) => sum + ({ test: 1, starter: 50, pro: 150, business: 250, enterprise: 350 }[o.plan] || 0), 0)
   };
 
   // Plan breakdown for paid customers
@@ -198,7 +198,7 @@ export default function AdminDashboard() {
               background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 14
             }}>
               <option value="">All Plans</option>
-              {['trial', 'starter', 'pro', 'business', 'enterprise', 'expired'].map(p => (
+              {['trial', 'test', 'starter', 'pro', 'business', 'enterprise', 'expired'].map(p => (
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>

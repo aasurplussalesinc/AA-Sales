@@ -822,6 +822,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Price IDs from environment variables
 const PRICE_IDS = {
+  test:       process.env.STRIPE_PRICE_TEST,
   starter:    process.env.STRIPE_PRICE_STARTER,
   pro:        process.env.STRIPE_PRICE_PRO,
   business:   process.env.STRIPE_PRICE_BUSINESS,
@@ -1795,3 +1796,125 @@ exports.exportOrgData = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('internal', error.message);
   }
 });
+
+
+// ═══════════════════════════════════════════════════════════
+// WELCOME EMAIL — fires on new organization creation
+// ═══════════════════════════════════════════════════════════
+
+/** Welcome email HTML template */
+function buildWelcomeEmailHtml(orgName, userName) {
+  const dashboardUrl = 'https://skidsling.com/dashboard';
+  const loginUrl = 'https://skidsling.com/login';
+  const greeting = userName ? `Hi ${userName},` : 'Hi there,';
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Welcome to SkidSling</title></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f5f5f5;margin:0;padding:0">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+    <div style="background:#0d7a52;padding:32px;text-align:center">
+      <h1 style="color:#fff;font-size:28px;margin:0;letter-spacing:0.5px">
+        <span style="color:#fff">Skid</span><span style="color:#34d399">Sling</span>
+      </h1>
+      <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px">Warehouse Management That Ships</p>
+    </div>
+    <div style="padding:36px 32px">
+      <h2 style="color:#0d1b17;font-size:22px;margin:0 0 16px">Welcome${orgName ? `, ${orgName}` : ''}! 🎉</h2>
+      <div style="color:#444;line-height:1.6;font-size:15px">
+        <p>${greeting}</p>
+        <p>Thanks for signing up for SkidSling. Your free 14-day trial is now active and includes <strong>full Business-tier access</strong> — no credit card required.</p>
+
+        <h3 style="color:#0d1b17;font-size:16px;margin:28px 0 12px">Get started in 3 steps:</h3>
+        <div style="background:#f8f9fa;border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="margin:0 0 4px"><strong>1. Set up your warehouse</strong></p>
+          <p style="margin:0;font-size:14px;color:#666">Add your locations (warehouse → rack → bay → shelf)</p>
+        </div>
+        <div style="background:#f8f9fa;border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="margin:0 0 4px"><strong>2. Add your inventory</strong></p>
+          <p style="margin:0;font-size:14px;color:#666">Manually, by CSV import, or by scanning barcodes</p>
+        </div>
+        <div style="background:#f8f9fa;border-radius:8px;padding:16px;margin-bottom:16px">
+          <p style="margin:0 0 4px"><strong>3. Create your first order</strong></p>
+          <p style="margin:0;font-size:14px;color:#666">Build pick lists, pack orders, print shipping labels</p>
+        </div>
+
+        <h3 style="color:#0d1b17;font-size:16px;margin:28px 0 12px">What's unlocked during your trial:</h3>
+        <ul style="color:#555;line-height:1.8;margin:0 0 16px;padding-left:20px">
+          <li>Unlimited locations across multiple warehouses</li>
+          <li>Up to 2,000 inventory items</li>
+          <li>Up to 1,000 orders per month</li>
+          <li>Pick lists, packing slips, invoices</li>
+          <li>Shipping label generation (Shippo, ShipStation, EasyPost)</li>
+          <li>Reports and activity logs</li>
+        </ul>
+      </div>
+
+      <div style="text-align:center;margin:32px 0 16px">
+        <a href="${dashboardUrl}" style="display:inline-block;padding:14px 32px;background:#0d7a52;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:15px">Open SkidSling →</a>
+      </div>
+
+      <div style="background:#f0f9f4;border-left:3px solid #34d399;padding:14px 16px;margin:24px 0;border-radius:4px">
+        <p style="margin:0;color:#0d1b17;font-size:14px"><strong>Need help getting set up?</strong><br/>
+        Reply to this email and we'll help you out. We typically respond within a few hours.</p>
+      </div>
+
+      <p style="color:#888;font-size:13px;text-align:center;margin:24px 0 0;border-top:1px solid #eee;padding-top:20px">
+        SkidSling · AA Innovation Group LLC<br/>
+        <a href="${loginUrl}" style="color:#34d399;text-decoration:none">Sign in</a> · <a href="https://skidsling.com/terms" style="color:#34d399;text-decoration:none">Terms</a> · <a href="https://skidsling.com/privacy" style="color:#34d399;text-decoration:none">Privacy</a>
+      </p>
+    </div>
+  </div>
+</body></html>`;
+}
+
+/**
+ * Firestore trigger — fires when a new org doc is created.
+ * Sends a welcome email to the org's email address.
+ */
+exports.sendWelcomeEmailOnSignup = functions.firestore
+  .document('organizations/{orgId}')
+  .onCreate(async (snap, context) => {
+    const org = snap.data();
+    const orgId = context.params.orgId;
+
+    // Don't send for the owner org
+    if (orgId === 'aa-surplus-sales') {
+      console.log('Skipping welcome email for owner org');
+      return null;
+    }
+
+    if (!org.email) {
+      console.log(`Skipping welcome email — no email on org ${orgId}`);
+      return null;
+    }
+
+    // Don't send if already sent (idempotency safeguard)
+    if (org.welcomeEmailSentAt) {
+      console.log(`Welcome email already sent for ${orgId}`);
+      return null;
+    }
+
+    try {
+      const result = await sendTrialEmail({
+        to: org.email,
+        subject: `Welcome to SkidSling, ${org.name || 'there'}! Your trial is active`,
+        html: buildWelcomeEmailHtml(org.name, org.contactName || org.ownerName),
+      });
+
+      // Mark as sent
+      await snap.ref.update({
+        welcomeEmailSentAt: Date.now(),
+        welcomeEmailStatus: result.skipped ? 'skipped_no_api_key' : (result.success ? 'sent' : 'failed'),
+      });
+
+      console.log(`Welcome email sent to ${org.email} for org ${orgId}`);
+      return result;
+    } catch (err) {
+      console.error(`sendWelcomeEmailOnSignup error for ${orgId}:`, err);
+      await snap.ref.update({
+        welcomeEmailStatus: 'error',
+        welcomeEmailError: err.message,
+      });
+      return null;
+    }
+  });

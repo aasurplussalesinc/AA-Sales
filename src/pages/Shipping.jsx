@@ -1232,7 +1232,7 @@ export default function Shipping() {
                         <div>
                           <div style={{ fontWeight: 600 }}>${label.selectedRate.amount}</div>
                           <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                            {label.selectedRate.provider} {label.selectedRate.servicelevel}
+                            {label.selectedRate.provider} {label.selectedRate.servicelevelName || (typeof label.selectedRate.servicelevel === 'object' ? (label.selectedRate.servicelevel?.name || label.selectedRate.servicelevel?.token) : label.selectedRate.servicelevel)}
                           </div>
                         </div>
                       ) : (
@@ -1469,12 +1469,12 @@ export default function Shipping() {
                 <div style={{ display: 'flex', gap: 12, marginBottom: 15, flexWrap: 'wrap' }}>
                   {cheapest && (
                     <div style={{ padding: '8px 14px', background: 'var(--bg-badge-green)', borderRadius: 8, fontSize: 13 }}>
-                      💚 Cheapest: <strong>${cheapest.amount}</strong> ({cheapest.provider} {cheapest.servicelevel})
+                      💚 Cheapest: <strong>${cheapest.amount}</strong> ({cheapest.provider} {typeof cheapest.servicelevel === 'object' ? (cheapest.servicelevel?.name || cheapest.servicelevel?.token) : cheapest.servicelevel})
                     </div>
                   )}
                   {fastest && fastest.rateId !== cheapest?.rateId && (
                     <div style={{ padding: '8px 14px', background: 'var(--bg-badge-blue)', borderRadius: 8, fontSize: 13 }}>
-                      ⚡ Fastest: <strong>{fastest.estimatedDays} day{fastest.estimatedDays !== 1 ? 's' : ''}</strong> — ${fastest.amount} ({fastest.provider} {fastest.servicelevel})
+                      ⚡ Fastest: <strong>{fastest.estimatedDays} day{fastest.estimatedDays !== 1 ? 's' : ''}</strong> — ${fastest.amount} ({fastest.provider} {typeof fastest.servicelevel === 'object' ? (fastest.servicelevel?.name || fastest.servicelevel?.token) : fastest.servicelevel})
                     </div>
                   )}
                 </div>
@@ -1594,7 +1594,7 @@ export default function Shipping() {
                               background: isCheapest ? '#f1f8e9' : isFastest ? '#e8f4fd' : idx % 2 === 0 ? 'white' : '#fafafa',
                             }}>
                               <td style={{ padding: '10px 12px', fontWeight: 600 }}>{rate.provider}</td>
-                              <td style={{ padding: '10px 12px' }}>{rate.servicelevel}</td>
+                              <td style={{ padding: '10px 12px' }}>{typeof rate.servicelevel === 'object' ? (rate.servicelevel?.name || rate.servicelevel?.token) : rate.servicelevel}</td>
                               <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontSize: 15, color: 'var(--text-link)' }}>
                                 ${rate.amount}
                               </td>
@@ -1662,7 +1662,7 @@ export default function Shipping() {
                           {isFastest && <div style={{ position: 'absolute', top: -8, right: 10, background: '#2196F3', color: 'var(--text-on-dark)', padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600 }}>FASTEST</div>}
                           <div style={{ fontWeight: 700, fontSize: 20, color: 'var(--text-link)' }}>${rate.amount}</div>
                           <div style={{ fontWeight: 600, marginTop: 4 }}>{rate.provider}</div>
-                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{rate.servicelevel}</div>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{typeof rate.servicelevel === 'object' ? (rate.servicelevel?.name || rate.servicelevel?.token) : rate.servicelevel}</div>
                           <div style={{ display: 'flex', gap: 4, marginTop: 6, flexWrap: 'wrap' }}>
                             {rate.billedTo === 'Customer'
                               ? <span style={{ padding: '2px 7px', borderRadius: 8, background: 'var(--bg-badge-blue)', color: 'var(--text-badge-blue)', fontSize: 10, fontWeight: 600 }}>📦 Customer UPS</span>

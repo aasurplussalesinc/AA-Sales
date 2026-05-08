@@ -532,6 +532,30 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
     if (rateId) {
       var transaction = await purchaseLabel(apiKey, rateId);
       var parcelCount = (order.boxDetails ? Object.keys(order.boxDetails).length : 0) || (order.triwalls ? order.triwalls.length : 0) || 1;
+
+      // Fetch the actual rate details so we can update selectedRate with what was REALLY purchased
+      // (not what was auto-picked during initial rate shopping)
+      var purchasedRate = null;
+      try {
+        purchasedRate = await shippoRequest(apiKey, '/rates/' + rateId, 'GET');
+      } catch (rateErr) {
+        console.warn('Could not fetch purchased rate details:', rateErr.message);
+      }
+
+      var newSelectedRate = order.shippingLabel && order.shippingLabel.selectedRate ? order.shippingLabel.selectedRate : {};
+      if (purchasedRate) {
+        newSelectedRate = {
+          object_id: purchasedRate.object_id,
+          provider: purchasedRate.provider,
+          servicelevel: purchasedRate.servicelevel,
+          servicelevelName: (purchasedRate.servicelevel && purchasedRate.servicelevel.name) || (purchasedRate.servicelevel && purchasedRate.servicelevel.token) || '',
+          amount: purchasedRate.amount,
+          currency: purchasedRate.currency,
+          estimatedDays: purchasedRate.estimated_days,
+          durationTerms: purchasedRate.duration_terms,
+        };
+      }
+
       var result = Object.assign({}, order.shippingLabel || {}, {
         labelUrl: transaction.label_url, trackingNumber: transaction.tracking_number,
         trackingUrl: transaction.tracking_url_provider, transactionId: transaction.object_id,
@@ -539,6 +563,7 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
         labelError: transaction.status !== 'SUCCESS' ? (transaction.messages || []).map(function(m) { return m.text; }).join('; ') : null,
         purchasedAt: Date.now(), labelPageCount: parcelCount,
         allLabels: (transaction.allLabels && transaction.allLabels.length > 0) ? transaction.allLabels : null,
+        selectedRate: newSelectedRate,
       });
       await db.collection('purchaseOrders').doc(orderId).update({ shippingLabel: result, shippingStatus: result.labelStatus, updatedAt: Date.now() });
       return result;

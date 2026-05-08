@@ -1126,14 +1126,16 @@ export const OrgDB = {
       notes: `Auto-generated from Purchase Order ${po.poNumber}`,
       purchaseOrderId: poId,
       items: po.items.map(item => ({
-        itemId: item.itemId,
-        itemName: item.itemName,
-        partNumber: item.partNumber,
-        lineId: item.lineId,
-        requestedQty: item.quantity,
+        itemId: item.itemId || '',
+        itemName: item.itemName || '',
+        partNumber: item.partNumber || '',
+        lineId: item.lineId || '',
+        requestedQty: parseFloat(item.quantity) || 0,
         pickedQty: 0,
         location: item.location || '',
-        notes: item.notes || ''
+        notes: item.notes || '',
+        unitPrice: parseFloat(item.unitPrice) || 0,
+        source: item.source || 'inventory'
       }))
     };
     

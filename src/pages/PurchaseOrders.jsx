@@ -1715,12 +1715,31 @@ ${labelsHtml}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
                 <div style={{ width: 200 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Subtotal:</span><span>{formatCurrency(selectedOrder.subtotal)}</span></div>
-                  {selectedOrder.tax > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Tax:</span><span>{formatCurrency(selectedOrder.tax)}</span></div>}
-                  {selectedOrder.shipping > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Shipping:</span><span>{formatCurrency(selectedOrder.shipping)}</span></div>}
-                  {selectedOrder.credit > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#2e7d32' }}><span>Credit:</span><span>-{formatCurrency(selectedOrder.credit)}</span></div>}
-                  {selectedOrder.discount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#2e7d32' }}><span>Discount:</span><span>-{formatCurrency(selectedOrder.discount)}</span></div>}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #333', fontWeight: 'bold', fontSize: 18 }}><span>Total:</span><span>{formatCurrency(selectedOrder.total)}</span></div>
+                  {(() => {
+                    // Fallback: if saved subtotal is 0 or missing, compute from items
+                    const computedSubtotal = (selectedOrder.items || []).reduce((sum, i) => {
+                      const qty = parseFloat(i.qtyShipped || i.quantity) || 0;
+                      const price = parseFloat(i.unitPrice) || 0;
+                      return sum + (qty * price);
+                    }, 0);
+                    const subtotalToShow = parseFloat(selectedOrder.subtotal) || computedSubtotal;
+                    const tax = parseFloat(selectedOrder.tax) || 0;
+                    const shipping = parseFloat(selectedOrder.shipping) || 0;
+                    const credit = parseFloat(selectedOrder.credit) || 0;
+                    const discount = parseFloat(selectedOrder.discount) || 0;
+                    const totalToShow = parseFloat(selectedOrder.total) || (subtotalToShow + tax + shipping - credit - discount);
+                    return (
+                      <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Subtotal:</span><span>{formatCurrency(subtotalToShow)}</span></div>
+                        {tax > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Tax:</span><span>{formatCurrency(tax)}</span></div>}
+                        {shipping > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}><span>Shipping:</span><span>{formatCurrency(shipping)}</span></div>}
+                        {credit > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#2e7d32' }}><span>Credit:</span><span>-{formatCurrency(credit)}</span></div>}
+                        {discount > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', color: '#2e7d32' }}><span>Discount:</span><span>-{formatCurrency(discount)}</span></div>}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderTop: '2px solid #333', fontWeight: 'bold', fontSize: 18 }}><span>Total:</span><span>{formatCurrency(totalToShow)}</span></div>
+                      </>
+                    );
+                  })()}
+
                 </div>
               </div>
 

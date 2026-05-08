@@ -21,6 +21,7 @@ import TermsOfService from './pages/TermsOfService';
 import BillingSuccess from './pages/BillingSuccess';
 import AdminDashboard from './pages/AdminDashboard';
 import ExportData from './pages/ExportData';
+import Onboarding from './pages/Onboarding';
 import TrialBanner from './components/TrialBanner';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import { useTier } from './useTier';
@@ -183,6 +184,20 @@ function NavBar() {
 }
 
 function AppLayout({ children }) {
+  const { organization } = useAuth();
+  const location = useLocation();
+  // Redirect new orgs to onboarding (unless already there or on settings/billing/admin)
+  if (organization
+      && !organization.onboardingComplete
+      && organization.plan !== 'owner'
+      && organization.id !== 'aa-surplus-sales'
+      && location.pathname !== '/onboarding'
+      && location.pathname !== '/subscription-required'
+      && location.pathname !== '/billing-success'
+      && location.pathname !== '/export-data'
+      && location.pathname !== '/admin') {
+    return <Navigate to="/onboarding" replace />;
+  }
   return (
     <div className="app">
       <TrialBanner />
@@ -341,6 +356,11 @@ function AppRoutes() {
       <Route path="/export-data" element={
         !user ? <Navigate to="/login" replace /> :
         <AppLayout><ExportData /></AppLayout>
+      } />
+      <Route path="/onboarding" element={
+        !user ? <Navigate to="/login" replace /> :
+        !organization ? <Navigate to="/login" replace /> :
+        <Onboarding />
       } />
       <Route path="/admin" element={
         <ProtectedRoute>

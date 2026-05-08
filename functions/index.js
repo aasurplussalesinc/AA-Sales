@@ -1918,3 +1918,142 @@ exports.sendWelcomeEmailOnSignup = functions.firestore
       return null;
     }
   });
+
+
+// ═══════════════════════════════════════════════════════════
+// ADMIN: DELETE ORGANIZATION (cascading)
+// Owner-only. Deletes the org plus ALL related data across:
+//   organizations, orgMembers, items, locations, customers,
+//   purchaseOrders, pickLists, receivings, contracts, movements,
+//   activityLog, counts, invitations, inviteCodes, quickSales
+// Also cancels any active Stripe subscription.
+// ═══════════════════════════════════════════════════════════
+
+exports.adminDeleteOrganization = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+
+  const { orgId, confirmName } = data;
+  if (!orgId) throw new functions.https.HttpsError('invalid-argument', 'orgId required');
+
+  // Verify caller is a member of the owner org (SkidSling admin)
+  const callerOwnerMember = await db.collection('orgMembers')
+    .doc(`aa-surplus-sales_${context.auth.uid}`).get();
+  if (!callerOwnerMember.exists) {
+    throw new functions.https.HttpsError('permission-denied', 'Only SkidSling owner users can delete organizations');
+  }
+
+  // Hard guard: never delete the owner org itself
+  if (orgId === 'aa-surplus-sales') {
+    throw new functions.https.HttpsError('permission-denied', 'Cannot delete the owner org');
+  }
+
+  // Verify the org exists and the confirm name matches (extra safety)
+  const orgDoc = await db.collection('organizations').doc(orgId).get();
+  if (!orgDoc.exists) {
+    throw new functions.https.HttpsError('not-found', 'Organization not found');
+  }
+  const org = orgDoc.data();
+  if (confirmName && org.name && confirmName.trim().toLowerCase() !== org.name.trim().toLowerCase()) {
+    throw new functions.https.HttpsError('invalid-argument', `Name confirmation does not match. Expected: ${org.name}`);
+  }
+
+  // Cancel Stripe subscription if exists
+  let stripeCancelled = false;
+  if (org.stripeSubscriptionId) {
+    try {
+      await stripe.subscriptions.cancel(org.stripeSubscriptionId);
+      stripeCancelled = true;
+      console.log(`Cancelled Stripe subscription ${org.stripeSubscriptionId} for org ${orgId}`);
+    } catch (err) {
+      console.warn(`Stripe cancellation warning for ${orgId}:`, err.message);
+      // Continue with deletion even if Stripe cancellation fails
+    }
+  }
+
+  // Collections to clean up (everything scoped by orgId)
+  const orgScopedCollections = [
+    'orgMembers',
+    'items',
+    'locations',
+    'customers',
+    'purchaseOrders',
+    'pickLists',
+    'receivings',
+    'contracts',
+    'movements',
+    'activityLog',
+    'counts',
+    'invitations',
+    'inviteCodes',
+    'quickSales',
+  ];
+
+  const stats = { stripeCancelled, orgId, deletedDocs: {} };
+
+  // Helper — delete in batches of 400 (Firestore batch limit is 500)
+  async function deleteCollectionByOrgId(collectionName) {
+    const snap = await db.collection(collectionName).where('orgId', '==', orgId).get();
+    if (snap.empty) return 0;
+
+    let count = 0;
+    let batch = db.batch();
+    let opsInBatch = 0;
+
+    for (const doc of snap.docs) {
+      batch.delete(doc.ref);
+      opsInBatch++;
+      count++;
+      if (opsInBatch >= 400) {
+        await batch.commit();
+        batch = db.batch();
+        opsInBatch = 0;
+      }
+    }
+    if (opsInBatch > 0) await batch.commit();
+    return count;
+  }
+
+  // Delete from each collection
+  for (const coll of orgScopedCollections) {
+    try {
+      const n = await deleteCollectionByOrgId(coll);
+      stats.deletedDocs[coll] = n;
+      console.log(`Deleted ${n} docs from ${coll} for org ${orgId}`);
+    } catch (err) {
+      console.error(`Error deleting from ${coll}:`, err);
+      stats.deletedDocs[coll] = `ERROR: ${err.message}`;
+    }
+  }
+
+  // Finally, delete the org doc itself
+  try {
+    await db.collection('organizations').doc(orgId).delete();
+    stats.orgDocDeleted = true;
+    console.log(`Deleted org doc ${orgId}`);
+  } catch (err) {
+    console.error(`Error deleting org doc ${orgId}:`, err);
+    stats.orgDocDeleted = false;
+    stats.orgDocError = err.message;
+  }
+
+  // Log the deletion in the OWNER org's activity log (audit trail)
+  try {
+    await db.collection('activityLog').add({
+      orgId: 'aa-surplus-sales',
+      action: 'ORG_DELETED',
+      userEmail: context.auth.token.email || 'unknown',
+      userId: context.auth.uid,
+      timestamp: Date.now(),
+      details: {
+        deletedOrgId: orgId,
+        deletedOrgName: org.name,
+        deletedOrgEmail: org.email,
+        stats,
+      },
+    });
+  } catch (err) {
+    console.warn('Could not write audit log:', err);
+  }
+
+  return stats;
+});

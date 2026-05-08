@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../OrgAuthContext';
 import { OrgDB as DB, OWNER_ORG_ID } from '../orgDb';
 import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore';
-import { db } from '../firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../firebase';
 import { useNavigate } from 'react-router-dom';
 
 export default function AdminDashboard() {
@@ -16,6 +17,10 @@ export default function AdminDashboard() {
   const [filterPlan, setFilterPlan] = useState('');
   const [selectedOrg, setSelectedOrg] = useState(null);
   const [orgMembers, setOrgMembers] = useState([]);
+  const [deleteOrg, setDeleteOrg] = useState(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (!isOwnerOrg()) { navigate('/dashboard'); return; }
@@ -129,6 +134,33 @@ export default function AdminDashboard() {
       <p style={{ color: 'var(--text-muted)' }}>Loading admin data...</p>
     </div>
   );
+
+  const handleDeleteOrg = async () => {
+    if (!deleteOrg) return;
+    if (deleteConfirmName.trim().toLowerCase() !== (deleteOrg.name || '').trim().toLowerCase()) {
+      setDeleteError('Organization name does not match. Type it exactly to confirm.');
+      return;
+    }
+    setDeleting(true);
+    setDeleteError('');
+    try {
+      const fn = httpsCallable(functions, 'adminDeleteOrganization');
+      const result = await fn({ orgId: deleteOrg.id, confirmName: deleteConfirmName });
+      console.log('Delete result:', result.data);
+      // Close modal, refresh orgs list
+      setDeleteOrg(null);
+      setDeleteConfirmName('');
+      setSelectedOrg(null);
+      await loadAll();
+      alert(`Organization "${deleteOrg.name}" has been permanently deleted.`);
+    } catch (err) {
+      console.error('Delete error:', err);
+      setDeleteError(err.message || 'Failed to delete organization');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
 
   return (
     <div className="page-content">
@@ -245,12 +277,24 @@ export default function AdminDashboard() {
                       {org.createdAt ? new Date(org.createdAt).toLocaleDateString() : '—'}
                     </td>
                     <td>
-                      <button className="btn btn-sm" onClick={async () => {
-                        setSelectedOrg(org);
-                        await loadOrgMembers(org.id);
-                      }} style={{ background: 'var(--accent)', color: 'var(--btn-primary-color)', fontSize: 11 }}>
-                        View
-                      </button>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button className="btn btn-sm" onClick={async () => {
+                          setSelectedOrg(org);
+                          await loadOrgMembers(org.id);
+                        }} style={{ background: 'var(--accent)', color: 'var(--btn-primary-color)', fontSize: 11 }}>
+                          View
+                        </button>
+                        <button onClick={() => {
+                          setDeleteOrg(org);
+                          setDeleteConfirmName('');
+                          setDeleteError('');
+                        }} style={{
+                          background: '#c62828', color: 'white', border: 'none',
+                          padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600
+                        }}>
+                          🗑️ Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -460,6 +504,83 @@ export default function AdminDashboard() {
                   ))}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteOrg && (
+        <div className="modal-overlay" onClick={() => !deleting && setDeleteOrg(null)} style={{ zIndex: 1100 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, padding: 30 }}>
+            <div className="modal-header" style={{ background: '#c62828', color: 'white', margin: '-30px -30px 20px', padding: '16px 24px', borderRadius: '8px 8px 0 0' }}>
+              <h2 style={{ margin: 0, fontSize: 18, color: 'white' }}>🗑️ Delete Organization</h2>
+            </div>
+
+            <div style={{ background: 'rgba(244,67,54,0.08)', border: '1px solid #c62828', padding: 14, borderRadius: 6, marginBottom: 16 }}>
+              <p style={{ margin: 0, color: 'var(--text-primary)', fontSize: 14, lineHeight: 1.5 }}>
+                <strong>This permanently deletes:</strong>
+              </p>
+              <ul style={{ margin: '8px 0 0 20px', color: 'var(--text-primary)', fontSize: 13, lineHeight: 1.7 }}>
+                <li>The organization and all its settings</li>
+                <li>All items, locations, customers, contracts</li>
+                <li>All orders, pick lists, receivings, movements</li>
+                <li>All members and invitations</li>
+                <li>All activity logs and inventory counts</li>
+                <li>Any active Stripe subscription will be cancelled</li>
+              </ul>
+              <p style={{ margin: '10px 0 0', color: '#c62828', fontWeight: 700, fontSize: 13 }}>
+                This action cannot be undone.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 14 }}>
+                Type <code style={{ background: 'var(--bg-input)', padding: '2px 6px', borderRadius: 3, color: 'var(--accent)' }}>{deleteOrg.name}</code> to confirm:
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmName}
+                onChange={e => { setDeleteConfirmName(e.target.value); setDeleteError(''); }}
+                placeholder={deleteOrg.name}
+                disabled={deleting}
+                style={{
+                  width: '100%', padding: 10, borderRadius: 4,
+                  border: '1px solid var(--border)', background: 'var(--bg-input)',
+                  color: 'var(--text-primary)', fontSize: 14, boxSizing: 'border-box'
+                }}
+                autoFocus
+              />
+            </div>
+
+            {deleteError && (
+              <div style={{ padding: '10px 12px', background: 'rgba(244,67,54,0.1)', border: '1px solid #f44336', color: '#c62828', borderRadius: 4, fontSize: 13, marginBottom: 14 }}>
+                {deleteError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => { setDeleteOrg(null); setDeleteConfirmName(''); setDeleteError(''); }}
+                disabled={deleting}
+                style={{
+                  padding: '10px 20px', background: 'var(--bg-surface-2)', border: '1px solid var(--border)',
+                  borderRadius: 4, cursor: deleting ? 'not-allowed' : 'pointer', fontSize: 14, color: 'var(--text-primary)'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteOrg}
+                disabled={deleting || deleteConfirmName.trim().toLowerCase() !== (deleteOrg.name || '').trim().toLowerCase()}
+                style={{
+                  padding: '10px 20px', background: '#c62828', color: 'white', border: 'none',
+                  borderRadius: 4, cursor: deleting ? 'wait' : 'pointer', fontSize: 14, fontWeight: 700,
+                  opacity: (deleting || deleteConfirmName.trim().toLowerCase() !== (deleteOrg.name || '').trim().toLowerCase()) ? 0.5 : 1
+                }}
+              >
+                {deleting ? '⏳ Deleting…' : '🗑️ Permanently Delete'}
+              </button>
             </div>
           </div>
         </div>

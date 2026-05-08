@@ -822,7 +822,6 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 // Price IDs from environment variables
 const PRICE_IDS = {
-  test:       process.env.STRIPE_PRICE_TEST,
   starter:    process.env.STRIPE_PRICE_STARTER,
   pro:        process.env.STRIPE_PRICE_PRO,
   business:   process.env.STRIPE_PRICE_BUSINESS,
@@ -885,7 +884,8 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
         firebaseUid: context.auth.uid,
       },
       subscription_data: {
-        trial_period_days: data.includeTrial === false ? undefined : 14,
+        // No Stripe trial — users already get a 14-day free trial in-app
+        // before they upgrade. Upgrading means immediate payment.
         metadata: {
           orgId,
           plan: plan.toLowerCase(),

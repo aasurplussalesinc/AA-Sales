@@ -436,7 +436,7 @@ export const OrgDB = {
     }
     
     // Check paid subscription status
-    if (['test', 'starter', 'pro', 'business', 'enterprise'].includes(org.plan)) {
+    if (['starter', 'pro', 'business', 'enterprise'].includes(org.plan)) {
       return org.status === 'active';
     }
     

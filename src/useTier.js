@@ -10,11 +10,10 @@
 import { useAuth } from './OrgAuthContext';
 
 // Tier order for "at least X" checks
-const TIER_RANK = { trial: 3, test: 3, starter: 1, pro: 2, business: 3, enterprise: 4, owner: 99 };
+const TIER_RANK = { trial: 3, starter: 1, pro: 2, business: 3, enterprise: 4, owner: 99 };
 
 const LIMITS = {
   trial:      { users: 15,  orders: 1000, items: 2000, locations: null },
-  test:       { users: 15,  orders: 1000, items: 2000, locations: null },
   starter:    { users: 2,   orders: 50,   items: 500,  locations: 1    },
   pro:        { users: 5,   orders: 200,  items: 1000, locations: null },
   business:   { users: 15,  orders: 1000, items: 2000, locations: null },

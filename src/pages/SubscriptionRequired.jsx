@@ -4,13 +4,6 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 
 const TIERS = [
   {
-    name: 'Test', price: 1, color: '#ff9800', accent: '#ff9800',
-    tagline: 'Test transaction (internal only)',
-    limits: 'For verifying payment flow',
-    features: ['$1 charge to validate Stripe integration', 'Cancel anytime', 'Not for real use', 'Owner-only test plan'],
-    testOnly: true,
-  },
-  {
     name: 'Starter', price: 50, color: '#546e7a', accent: '#546e7a',
     tagline: 'Get off spreadsheets',
     limits: '2 users · 500 SKUs · 1 location · 50 orders/mo',

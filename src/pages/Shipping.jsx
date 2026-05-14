@@ -1408,7 +1408,44 @@ export default function Shipping() {
           {/* Rates Selection Panel */}
           {showRates && (() => {
             const order = filteredOrders.find(o => o.id === showRates);
-            if (!order?.shippingLabel?.rates?.length) return null;
+            if (!order) return null;
+            
+            // Show helpful empty state if rates are missing
+            if (!order.shippingLabel?.rates?.length) {
+              return (
+                <div style={{
+                  background: 'var(--bg-surface-2)', border: '2px solid #ff9800', borderRadius: 12,
+                  padding: 24, marginTop: 10, marginBottom: 10, textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                  <h4 style={{ margin: '0 0 8px' }}>No rates available for {order.poNumber}</h4>
+                  <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
+                    Rates may have been cleared after settings changed, or the initial rate fetch returned no results.
+                    Click below to fetch fresh rates.
+                  </p>
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                    <button
+                      onClick={() => { getRates(order.id); setShowRates(null); }}
+                      style={{
+                        padding: '10px 20px', background: '#1976d2', color: 'white',
+                        border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600
+                      }}
+                    >
+                      🔄 Get Rates
+                    </button>
+                    <button
+                      onClick={() => setShowRates(null)}
+                      style={{
+                        padding: '10px 20px', background: 'var(--bg-surface)', color: 'var(--text-primary)',
+                        border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 14
+                      }}
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              );
+            }
 
             const allRates = order.shippingLabel.rates;
             

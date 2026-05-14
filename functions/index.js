@@ -398,7 +398,31 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   console.log('=== SHIPPO DEBUG (AA Account / UPS Insurance) ===');
   console.log('Shipment ID:', shipmentAAUPS.object_id);
   console.log('Total rates returned:', (shipmentAAUPS.rates || []).length);
+  console.log('Shipment messages:', JSON.stringify(shipmentAAUPS.messages || []));
+  console.log('Insurance amount used:', insuranceAmount);
+  console.log('Parcels sent:', JSON.stringify(parcelsUPS));
   console.log('=== END DEBUG ===');
+
+  // FALLBACK: if insurance is set but no rates returned, retry without insurance
+  // This commonly happens when insurance amount exceeds carrier max or causes Shippo validation errors
+  var insuranceFallbackUsed = false;
+  if (hasInsurance && allRates.length === 0) {
+    console.log('No rates with insurance — retrying without insurance as fallback');
+    try {
+      var parcelsNoIns = formatParcelsFromOrder(order, 0, null);
+      var shipmentFallback = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsNoIns, customsDeclarationId, null, carrierAccountIds);
+      var fallbackRates = mapRates(shipmentFallback, 'AA', 'none');
+      if (fallbackRates.length > 0) {
+        allRates = fallbackRates;
+        insuranceFallbackUsed = true;
+        console.log('Fallback succeeded — got ' + fallbackRates.length + ' rates without insurance');
+      } else {
+        console.log('Fallback also returned 0 rates. Messages:', JSON.stringify(shipmentFallback.messages || []));
+      }
+    } catch (fallbackErr) {
+      console.log('Fallback retry error:', fallbackErr.message);
+    }
+  }
 
   // AA Account + XCover insurance
   if (hasInsurance) {
@@ -464,7 +488,9 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     rates: allRates,
     selectedRate: selectedRate,
     parcels: parcelsUPS.length, toAddress: toAddressRaw, createdAt: Date.now(),
-    insuranceAmount: insuranceAmount,
+    insuranceAmount: insuranceFallbackUsed ? 0 : insuranceAmount,
+    insuranceFallbackUsed: insuranceFallbackUsed,
+    shippoMessages: (shipmentAAUPS.messages || []).map(function(m) { return m.text || JSON.stringify(m); }),
   };
 
   if (orgSettings.autoPurchaseLabels && selectedRate) {
@@ -1995,6 +2021,17 @@ exports.adminDeleteOrganization = functions.https.onCall(async (data, context) =
     }
   }
 
+  // STEP 1: Capture user IDs of all members BEFORE deleting orgMembers
+  // We'll use this to clean up Firebase Auth accounts for users who only belong to this org
+  let memberUserIds = [];
+  try {
+    const memberSnap = await db.collection('orgMembers').where('orgId', '==', orgId).get();
+    memberUserIds = memberSnap.docs.map(d => d.data().userId).filter(Boolean);
+    console.log(`Found ${memberUserIds.length} members to evaluate for auth cleanup`);
+  } catch (err) {
+    console.error('Could not load member user IDs:', err);
+  }
+
   // Collections to clean up (everything scoped by orgId)
   const orgScopedCollections = [
     'orgMembers',
@@ -2013,7 +2050,7 @@ exports.adminDeleteOrganization = functions.https.onCall(async (data, context) =
     'quickSales',
   ];
 
-  const stats = { stripeCancelled, orgId, deletedDocs: {} };
+  const stats = { stripeCancelled, orgId, deletedDocs: {}, deletedAuthUsers: [], skippedAuthUsers: [] };
 
   // Helper — delete in batches of 400 (Firestore batch limit is 500)
   async function deleteCollectionByOrgId(collectionName) {
@@ -2059,6 +2096,42 @@ exports.adminDeleteOrganization = functions.https.onCall(async (data, context) =
     console.error(`Error deleting org doc ${orgId}:`, err);
     stats.orgDocDeleted = false;
     stats.orgDocError = err.message;
+  }
+
+  // STEP 2: Delete Firebase Auth users who belonged ONLY to this org
+  // Skip the caller (SkidSling admin) and skip any user that still has membership in another org
+  for (const userId of memberUserIds) {
+    // Never delete the calling admin's auth account
+    if (userId === context.auth.uid) {
+      stats.skippedAuthUsers.push({ userId, reason: 'caller (admin)' });
+      continue;
+    }
+    try {
+      // Check if user belongs to any OTHER org
+      const otherMemberships = await db.collection('orgMembers').where('userId', '==', userId).get();
+      if (!otherMemberships.empty) {
+        stats.skippedAuthUsers.push({ userId, reason: `still member of ${otherMemberships.size} other org(s)` });
+        console.log(`Skipping auth deletion for ${userId} — still in ${otherMemberships.size} other org(s)`);
+        continue;
+      }
+      // No other orgs — delete the auth account
+      try {
+        await admin.auth().deleteUser(userId);
+        stats.deletedAuthUsers.push(userId);
+        console.log(`Deleted Firebase Auth user ${userId}`);
+      } catch (authErr) {
+        // user-not-found is OK (already deleted, never existed)
+        if (authErr.code === 'auth/user-not-found') {
+          stats.skippedAuthUsers.push({ userId, reason: 'auth user not found (already deleted)' });
+        } else {
+          console.error(`Auth deletion failed for ${userId}:`, authErr);
+          stats.skippedAuthUsers.push({ userId, reason: `error: ${authErr.message}` });
+        }
+      }
+    } catch (err) {
+      console.error(`Error checking memberships for ${userId}:`, err);
+      stats.skippedAuthUsers.push({ userId, reason: `check error: ${err.message}` });
+    }
   }
 
   // Log the deletion in the OWNER org's activity log (audit trail)

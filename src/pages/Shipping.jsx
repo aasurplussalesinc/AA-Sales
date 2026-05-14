@@ -1412,6 +1412,8 @@ export default function Shipping() {
             
             // Show helpful empty state if rates are missing
             if (!order.shippingLabel?.rates?.length) {
+              const shippoMsgs = order.shippingLabel?.shippoMessages || [];
+              const hasInsurance = (order.insuranceAmount || 0) > 0 || (order.boxInsurance && Object.keys(order.boxInsurance).length > 0);
               return (
                 <div style={{
                   background: 'var(--bg-surface-2)', border: '2px solid #ff9800', borderRadius: 12,
@@ -1419,11 +1421,34 @@ export default function Shipping() {
                 }}>
                   <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
                   <h4 style={{ margin: '0 0 8px' }}>No rates available for {order.poNumber}</h4>
-                  <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>
-                    Rates may have been cleared after settings changed, or the initial rate fetch returned no results.
-                    Click below to fetch fresh rates.
+                  <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
+                    Rates may have been cleared after settings changed, or the carrier rejected the shipment details.
                   </p>
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+
+                  {shippoMsgs.length > 0 && (
+                    <div style={{
+                      background: 'rgba(244,67,54,0.08)', border: '1px solid #f44336',
+                      padding: 10, borderRadius: 6, marginBottom: 12, textAlign: 'left', fontSize: 12
+                    }}>
+                      <strong style={{ color: '#c62828' }}>Carrier messages:</strong>
+                      <ul style={{ margin: '4px 0 0 18px', color: 'var(--text-primary)' }}>
+                        {shippoMsgs.slice(0, 5).map((m, i) => <li key={i}>{m}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {hasInsurance && (
+                    <div style={{
+                      background: 'rgba(255,152,0,0.08)', border: '1px solid #ff9800',
+                      padding: 10, borderRadius: 6, marginBottom: 12, textAlign: 'left', fontSize: 12
+                    }}>
+                      <strong style={{ color: '#e65100' }}>💡 Tip:</strong> You have insurance set on this order.
+                      Some carriers won't quote when insurance values exceed their limits or coverage rules.
+                      Try clicking <strong>Get Rates Without Insurance</strong> to see if that's the issue.
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button
                       onClick={() => { getRates(order.id); setShowRates(null); }}
                       style={{
@@ -1433,6 +1458,25 @@ export default function Shipping() {
                     >
                       🔄 Get Rates
                     </button>
+                    {hasInsurance && (
+                      <button
+                        onClick={async () => {
+                          // Clear insurance and re-fetch
+                          try {
+                            const saveFn = httpsCallable(functions, 'saveInsurance');
+                            await saveFn({ orderId: order.id, orgId: organization.id, insuranceAmount: 0, boxInsurance: {} });
+                            await getRates(order.id);
+                            setShowRates(null);
+                          } catch (e) { console.error(e); }
+                        }}
+                        style={{
+                          padding: '10px 20px', background: '#ff9800', color: 'white',
+                          border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600
+                        }}
+                      >
+                        🛡️ Get Rates Without Insurance
+                      </button>
+                    )}
                     <button
                       onClick={() => setShowRates(null)}
                       style={{
@@ -1483,6 +1527,14 @@ export default function Shipping() {
                 padding: 20, marginTop: 10, marginBottom: 10
               }}>
                 {/* Header */}
+                {order.shippingLabel?.insuranceFallbackUsed && (
+                  <div style={{
+                    background: 'rgba(255,152,0,0.1)', border: '1px solid #ff9800',
+                    padding: '10px 14px', borderRadius: 6, marginBottom: 12, fontSize: 13, color: '#e65100'
+                  }}>
+                    ⚠️ <strong>Insurance was excluded</strong> from these rates — the carrier wouldn't quote with insurance applied. The label will not include insurance coverage. Adjust insurance and refetch if needed.
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15, flexWrap: 'wrap', gap: 10 }}>
                   <div>
                     <h4 style={{ margin: 0 }}>💰 Shipping Rates for {order.poNumber}</h4>

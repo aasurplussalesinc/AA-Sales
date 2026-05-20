@@ -605,6 +605,59 @@ export default function PurchaseOrders() {
   const [deleteRestoreInventory, setDeleteRestoreInventory] = useState(false);
   const [orderToDelete, setOrderToDelete] = useState(null);
 
+  // ── Cancel order state ──
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [orderToCancel, setOrderToCancel] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelRestoreInventory, setCancelRestoreInventory] = useState(false);
+
+  const openCancelOrder = (order) => {
+    setOrderToCancel(order);
+    setCancelReason('');
+    setCancelRestoreInventory(false);
+    setShowCancelConfirm(true);
+  };
+
+  const confirmCancel = async () => {
+    if (!orderToCancel) return;
+    try {
+      if (cancelRestoreInventory) {
+        const restorableItems = getRestorableItems(orderToCancel);
+        for (const item of restorableItems) {
+          if (item.itemId) {
+            await DB.adjustItemStock(item.itemId, item.qtyToRestore, {
+              reason: 'Order cancelled',
+              notes: `Restored from cancelled order ${orderToCancel.poNumber}`,
+              userId: user?.uid,
+              userEmail: user?.email
+            });
+          }
+        }
+      }
+      await DB.markPOCancelled(orderToCancel.id, cancelReason);
+      setShowCancelConfirm(false);
+      setOrderToCancel(null);
+      setCancelReason('');
+      setCancelRestoreInventory(false);
+      closeOrderModal();
+      loadData();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to cancel order: ' + e.message);
+    }
+  };
+
+  const restoreCancelledOrder = async (order) => {
+    if (!window.confirm(`Restore "${order.poNumber}" to Draft status? You can edit and re-process it.`)) return;
+    try {
+      await DB.restorePOFromCancelled(order.id, 'draft');
+      loadData();
+      closeOrderModal();
+    } catch (e) {
+      alert('Failed to restore order: ' + e.message);
+    }
+  };
+
   const deleteOrder = async (order) => {
     setOrderToDelete(order);
     setDeleteRestoreInventory(false);
@@ -687,7 +740,8 @@ export default function PurchaseOrders() {
   const getStatusColor = (status) => {
     switch (status) {
       case 'draft': return '#9e9e9e'; case 'confirmed': return '#2196F3'; case 'picking': return '#ff9800';
-      case 'packing': return '#ff9800'; case 'packed': return '#9c27b0'; case 'shipped': return '#4CAF50'; case 'paid': return '#388e3c'; default: return '#9e9e9e';
+      case 'packing': return '#ff9800'; case 'packed': return '#9c27b0'; case 'shipped': return '#4CAF50';
+      case 'paid': return '#388e3c'; case 'cancelled': return '#c62828'; default: return '#9e9e9e';
     }
   };
   const getSourceLabel = (source) => {
@@ -1806,6 +1860,12 @@ ${labelsHtml}
 
                 {/* Row 3: Danger + Close */}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  {canEdit && selectedOrder.status !== 'cancelled' && selectedOrder.status !== 'paid' && (
+                    <button className="btn" onClick={() => openCancelOrder(selectedOrder)} style={{ background: '#ff9800', color: 'white', fontSize: 12 }}>⊘ Cancel Order</button>
+                  )}
+                  {canEdit && selectedOrder.status === 'cancelled' && (
+                    <button className="btn" onClick={() => restoreCancelledOrder(selectedOrder)} style={{ background: '#1976d2', color: 'white', fontSize: 12 }}>↺ Restore Order</button>
+                  )}
                   {canEdit && (
                     <button className="btn" onClick={() => deleteOrder(selectedOrder)} style={{ background: '#f44336', color: 'white', fontSize: 12 }}>🗑️ Delete</button>
                   )}
@@ -1924,13 +1984,15 @@ ${labelsHtml}
       {/* Status Tabs */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
-          { value: 'all',       label: 'All Orders', statuses: null,          icon: '📋', color: '#455a64', bg: '#eceff1' },
-          { value: 'draft',     label: 'Draft',      statuses: ['draft'],     icon: '✏️',  color: '#78909c', bg: '#f5f5f5' },
-          { value: 'confirmed', label: 'Confirmed',  statuses: ['confirmed'], icon: '✅',  color: 'var(--text-link)', bg: '#e3f2fd' },
-          { value: 'picking',   label: 'Picking',    statuses: ['picking'],   icon: '🔍',  color: 'var(--text-badge-orange)', bg: '#fff3e0' },
-          { value: 'packed',    label: 'Packed',     statuses: ['packed'],    icon: '📦',  color: 'var(--text-badge-purple)', bg: '#f3e5f5' },
-          { value: 'shipped',   label: 'Shipped',    statuses: ['shipped'],   icon: '🚚',  color: 'var(--text-badge-green)', bg: '#e8f5e9' },
-          { value: 'paid',      label: 'Paid',       statuses: ['paid'],      icon: '💰',  color: 'var(--text-badge-green)', bg: '#c8e6c9' },
+          { value: 'all',       label: 'All Orders', statuses: null,                                                              icon: '📋', color: '#455a64', bg: '#eceff1' },
+          { value: 'draft',     label: 'Draft',      statuses: ['draft'],                                                         icon: '✏️',  color: '#78909c', bg: '#f5f5f5' },
+          { value: 'confirmed', label: 'Confirmed',  statuses: ['confirmed'],                                                     icon: '✅',  color: 'var(--text-link)', bg: '#e3f2fd' },
+          { value: 'picking',   label: 'Picking',    statuses: ['picking'],                                                       icon: '🔍',  color: 'var(--text-badge-orange)', bg: '#fff3e0' },
+          { value: 'packed',    label: 'Packed',     statuses: ['packed'],                                                        icon: '📦',  color: 'var(--text-badge-purple)', bg: '#f3e5f5' },
+          { value: 'shipped',   label: 'Shipped',    statuses: ['shipped'],                                                       icon: '🚚',  color: 'var(--text-badge-green)', bg: '#e8f5e9' },
+          { value: 'unpaid',    label: 'Unpaid',     statuses: ['draft', 'confirmed', 'picking', 'packed', 'shipped'],            icon: '⏳', color: '#d84315', bg: '#fbe9e7' },
+          { value: 'paid',      label: 'Paid',       statuses: ['paid'],                                                          icon: '💰', color: 'var(--text-badge-green)', bg: '#c8e6c9' },
+          { value: 'cancelled', label: 'Cancelled',  statuses: ['cancelled'],                                                     icon: '⊘',  color: '#c62828', bg: '#ffebee' },
         ].map(tab => {
           const count = tab.statuses ? orders.filter(o => tab.statuses.includes(o.status)).length : orders.length;
           const isActive = activeTab === tab.value;
@@ -2068,7 +2130,11 @@ ${labelsHtml}
                   if (!matchPO && !matchCustomer) return false;
                 }
                 // Status filter
-                if (filterStatus && order.status !== filterStatus) return false;
+                if (filterStatus) {
+                  if (filterStatus === 'unpaid') {
+                    if (!['draft', 'confirmed', 'picking', 'packed', 'shipped'].includes(order.status)) return false;
+                  } else if (order.status !== filterStatus) return false;
+                }
                 // Payment filter
                 if (filterPayment) {
                   const isPaid = !!order.paymentMethod;
@@ -2202,7 +2268,11 @@ ${labelsHtml}
             const search = filterSearch.toLowerCase();
             if (!order.poNumber?.toLowerCase().includes(search) && !order.customerName?.toLowerCase().includes(search)) return false;
           }
-          if (filterStatus && order.status !== filterStatus) return false;
+          if (filterStatus) {
+            if (filterStatus === 'unpaid') {
+              if (!['draft', 'confirmed', 'picking', 'packed', 'shipped'].includes(order.status)) return false;
+            } else if (order.status !== filterStatus) return false;
+          }
           if (filterPayment) {
             const isPaid = !!order.paymentMethod;
             if (filterPayment === 'paid' && !isPaid) return false;
@@ -2230,6 +2300,62 @@ ${labelsHtml}
           </div>
         );
       })()}
+
+      {/* Cancel Order Confirmation Modal */}
+      {showCancelConfirm && orderToCancel && (
+        <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowCancelConfirm(false); }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 500, padding: 0 }}>
+            <div className="modal-header" style={{ background: '#ff9800', color: 'white', padding: '14px 20px', borderRadius: '8px 8px 0 0' }}>
+              <h3 style={{ margin: 0, fontSize: 18 }}>⊘ Cancel Order</h3>
+            </div>
+            <div style={{ padding: 24 }}>
+              <p style={{ marginTop: 0, color: 'var(--text-primary)', fontSize: 14, lineHeight: 1.6 }}>
+                You're cancelling <strong>{orderToCancel.poNumber}</strong> for <strong>{orderToCancel.customerName}</strong>.
+              </p>
+              <div style={{ background: 'rgba(255,152,0,0.08)', border: '1px solid #ff9800', borderRadius: 6, padding: 12, marginBottom: 16, fontSize: 13, color: 'var(--text-primary)' }}>
+                The order will stay in your system marked as <strong>Cancelled</strong> — it won't be deleted. You can restore it later if needed.
+              </div>
+
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', marginBottom: 6, fontWeight: 600, fontSize: 13 }}>Reason for cancellation (optional)</label>
+                <textarea
+                  value={cancelReason}
+                  onChange={e => setCancelReason(e.target.value)}
+                  placeholder="e.g. Customer changed mind, out of stock, payment failed..."
+                  style={{
+                    width: '100%', padding: 10, borderRadius: 6,
+                    border: '1px solid var(--border)', background: 'var(--bg-input)',
+                    color: 'var(--text-primary)', fontSize: 13, minHeight: 70, boxSizing: 'border-box',
+                    fontFamily: 'inherit', resize: 'vertical'
+                  }}
+                />
+              </div>
+
+              {orderToCancel.packingComplete && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 13, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={cancelRestoreInventory} onChange={e => setCancelRestoreInventory(e.target.checked)} />
+                  <span>Return packed/shipped quantities back to inventory stock</span>
+                </label>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                <button
+                  onClick={() => { setShowCancelConfirm(false); setOrderToCancel(null); setCancelReason(''); setCancelRestoreInventory(false); }}
+                  style={{ padding: '9px 18px', background: 'var(--bg-surface-2)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}
+                >
+                  Keep Order
+                </button>
+                <button
+                  onClick={confirmCancel}
+                  style={{ padding: '9px 18px', background: '#ff9800', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
+                >
+                  ⊘ Cancel Order
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && orderToDelete && (

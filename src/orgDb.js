@@ -1171,6 +1171,23 @@ export const OrgDB = {
       paymentMethod: paymentMethod
     });
   },
+
+  async markPOCancelled(poId, reason = '') {
+    await this.updatePurchaseOrder(poId, {
+      status: 'cancelled',
+      cancelledAt: Date.now(),
+      cancellationReason: reason
+    });
+  },
+
+  async restorePOFromCancelled(poId, restoreToStatus = 'draft') {
+    await this.updatePurchaseOrder(poId, {
+      status: restoreToStatus,
+      cancelledAt: null,
+      cancellationReason: null,
+      restoredAt: Date.now()
+    });
+  },
   
   // ==================== PICK LISTS (ORG-SCOPED) ====================
   

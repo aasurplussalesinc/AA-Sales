@@ -145,7 +145,7 @@ function getOrgShippoKey(orgData) {
   return (orgData.settings && orgData.settings.shippoApiKey) || '';
 }
 
-function formatAddressForShippo(customerName, addressString, email, phone) {
+function formatAddressForShippo(customerName, addressString, email, phone, company) {
   // Normalize: replace newlines with commas, strip periods after state codes, collapse multiple commas/spaces
   var normalized = (addressString || '').replace(/[\r\n]+/g, ', ').replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
   // Strip periods after 2-letter state codes (e.g., "NC. 28546" -> "NC 28546")
@@ -172,7 +172,7 @@ function formatAddressForShippo(customerName, addressString, email, phone) {
     street1 = parts[0] || '';
     if (parts.length >= 3) city = parts[parts.length - 3] || parts[1] || '';
     else if (parts.length >= 2) city = parts[1] || '';
-    return { name: customerName || 'Customer', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '', is_residential: false };
+    return { name: customerName || 'Customer', company: company || '', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '', is_residential: false };
   }
   
   // Try to extract US zip code from anywhere in the text
@@ -226,7 +226,7 @@ function formatAddressForShippo(customerName, addressString, email, phone) {
   zip = (zip || '').trim();
   city = (city || '').trim();
   
-  return { name: customerName || 'Customer', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '', is_residential: false };
+  return { name: customerName || 'Customer', company: company || '', street1: street1, city: city, state: state, zip: zip, country: country, email: email || '', phone: phone || '', is_residential: false };
 }
 
 function formatStructuredAddress(data) {
@@ -295,8 +295,15 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   if (!fromAddress || !fromAddress.street1) throw new Error('Shipping "From" address not configured.');
 
   var toAddressRaw;
-  if (order.shipToAddress) toAddressRaw = formatAddressForShippo(order.customerName, order.shipToAddress, order.customerEmail, order.customerPhone);
-  else if (order.customerAddress) toAddressRaw = formatAddressForShippo(order.customerName, order.customerAddress, order.customerEmail, order.customerPhone);
+  // For drop-shipping: when shipToCompany is set, it goes on the label as the recipient business name,
+  // and customerName/contact is used as the "Attention To" person name.
+  // When no shipToCompany is set, customerName is both the name and company on the label.
+  if (order.shipToAddress) {
+    var recipientName = order.customerContact || order.customerName;
+    var recipientCompany = order.shipToCompany || order.customerName;
+    toAddressRaw = formatAddressForShippo(recipientName, order.shipToAddress, order.customerEmail, order.customerPhone, recipientCompany);
+  }
+  else if (order.customerAddress) toAddressRaw = formatAddressForShippo(order.customerName, order.customerAddress, order.customerEmail, order.customerPhone, order.customerName);
   else throw new Error('Order ' + order.poNumber + ' has no shipping address');
 
   if (order.customsInfo && order.customsInfo.destinationCountry) toAddressRaw.country = order.customsInfo.destinationCountry;
@@ -314,6 +321,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     if (validated.validation_results && validated.validation_results.is_valid) {
       toAddressRaw = {
         name: validated.name || toAddressRaw.name,
+        company: toAddressRaw.company || '',
         street1: validated.street1 || toAddressRaw.street1,
         street2: validated.street2 || '',
         city: validated.city || toAddressRaw.city,

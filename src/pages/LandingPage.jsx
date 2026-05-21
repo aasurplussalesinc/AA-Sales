@@ -108,7 +108,7 @@ export default function LandingPage() {
           <a href="#features" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14, fontWeight: 500, letterSpacing: 0.3 }}>Features</a>
           <a href="#pricing" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14, fontWeight: 500, letterSpacing: 0.3 }}>Pricing</a>
           <Link to="/login" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14, fontWeight: 500 }}>Sign In</Link>
-          <Link to="/login" style={{
+          <Link to="/login?mode=signup" style={{
             background: 'white', color: '#0a0a0a',
             padding: '9px 22px', borderRadius: 6,
             textDecoration: 'none', fontWeight: 700, fontSize: 13, letterSpacing: 0.3
@@ -190,7 +190,7 @@ export default function LandingPage() {
           </p>
 
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Link to="/login" style={{
+            <Link to="/login?mode=signup" style={{
               background: '#34d399', color: '#0a0a0a',
               padding: '15px 40px', borderRadius: 6,
               textDecoration: 'none', fontWeight: 700, fontSize: 15, letterSpacing: 0.3
@@ -422,7 +422,7 @@ export default function LandingPage() {
                   ))}
                 </div>
 
-                <Link to="/login" style={{
+                <Link to="/login?mode=signup" style={{
                   display: 'block', textAlign: 'center',
                   padding: '13px 20px', borderRadius: 6,
                   textDecoration: 'none', fontWeight: 700, fontSize: 13,
@@ -464,7 +464,7 @@ export default function LandingPage() {
             Built by operators, for operators. Move more. Track everything.
             Get set up in under an hour.
           </p>
-          <Link to="/login" style={{
+          <Link to="/login?mode=signup" style={{
             display: 'inline-block', background: '#34d399', color: '#0a0a0a',
             padding: '16px 52px', borderRadius: 6,
             textDecoration: 'none', fontWeight: 800, fontSize: 15, letterSpacing: 0.5,

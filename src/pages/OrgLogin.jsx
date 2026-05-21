@@ -1,10 +1,18 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../OrgAuthContext';
 import { OrgDB } from '../orgDb';
 
 export default function Login() {
-  const [mode, setMode] = useState('login'); // login, signup, signup-join, reset, select-org
+  const location = useLocation();
+  // Allow callers to deep-link into a specific mode via ?mode=signup or ?mode=signup-join.
+  // Only whitelist user-facing modes — 'select-org' is set internally after login.
+  const initialMode = (() => {
+    const params = new URLSearchParams(location.search);
+    const requested = params.get('mode');
+    return ['login', 'signup', 'signup-join', 'reset'].includes(requested) ? requested : 'login';
+  })();
+  const [mode, setMode] = useState(initialMode); // login, signup, signup-join, reset, select-org
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

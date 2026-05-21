@@ -20,7 +20,7 @@ const TIERS = [
     name: 'Business', price: 250, color: '#7b1fa2', accent: '#7b1fa2',
     tagline: 'Ship professionally',
     limits: '15 users · 2,000 SKUs · unlimited locations · 1,000 orders/mo',
-    features: ['Everything in Pro', 'Live shipping rates', 'Own UPS account', 'Batch label printing', 'International & customs', 'Triwall packing', 'Vendor contracts'],
+    features: ['Everything in Pro', 'Live shipping rates', 'Integrate Shippo, ShipStation & EasyPost accounts', 'Batch label printing', 'International & customs', 'Triwall packing', 'Vendor contracts'],
   },
   {
     name: 'Enterprise', price: 350, color: '#0d7a52', accent: '#0d7a52',

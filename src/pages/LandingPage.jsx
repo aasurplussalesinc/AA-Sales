@@ -39,7 +39,7 @@ const TIERS = [
     features: [
       '✅ Everything in Pro',
       '🚚 Live rates — UPS, USPS, FedEx, DHL',
-      '🔗 Own UPS account (negotiated rates)',
+      '🔗 Integrate Shippo, ShipStation & EasyPost accounts',
       '🏷️ Label generation & batch printing',
       '🌍 International & customs declarations',
       '🪵 Triwall packing mode',
@@ -63,7 +63,7 @@ const TIERS = [
 
 const FEATURES = [
   { icon: '📦', title: 'Real-Time Inventory', description: 'Track stock across warehouses, racks, and shelves with instant updates and low-stock alerts.' },
-  { icon: '🚚', title: 'Smart Shipping', description: 'Live rate shopping across UPS, USPS, FedEx & DHL. Connect your own UPS account for negotiated rates.' },
+  { icon: '🚚', title: 'Smart Shipping', description: 'Live rate shopping across UPS, USPS, FedEx & DHL. Connect Shippo, ShipStation, or EasyPost for negotiated rates.' },
   { icon: '🧾', title: 'Order Management', description: 'Full PO lifecycle from Draft to Paid. Pick lists, box packing, invoices, and packing slips built in.' },
   { icon: '📷', title: 'QR Code Scanning', description: 'Scan warehouse locations and items from your phone. Add, pick, or move stock in seconds.' },
   { icon: '📊', title: 'Reports & Analytics', description: 'Dead stock reports, inventory turnover, value by category, and custom CSV exports.' },
@@ -296,7 +296,7 @@ export default function LandingPage() {
             {[
               { step: '01', title: 'Create Your Account', desc: 'Sign up free — no credit card. Your 14-day trial starts immediately with full access.' },
               { step: '02', title: 'Import Your Inventory', desc: 'Drop in a CSV or add manually. Auto-detects columns and bulk-assigns locations.' },
-              { step: '03', title: 'Connect & Ship', desc: 'Add your Shippo key and UPS account. Live rates in under 60 seconds.' },
+              { step: '03', title: 'Connect & Ship', desc: 'Add your Shippo, ShipStation, or EasyPost API key. Live rates in under 60 seconds.' },
             ].map(s => (
               <div key={s.step} style={{ flex: '1', minWidth: 220, textAlign: 'center' }}>
                 <div style={{

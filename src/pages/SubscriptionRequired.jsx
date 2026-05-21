@@ -31,7 +31,7 @@ const TIERS = [
 ];
 
 export default function SubscriptionRequired() {
-  const { organization, logout, subscriptionStatus } = useAuth();
+  const { organization, logout, subscriptionStatus, loading } = useAuth();
   const [loadingPlan, setLoadingPlan] = useState(null);
   const [error, setError] = useState('');
   const [billingCycle, setBillingCycle] = useState('monthly');
@@ -40,7 +40,57 @@ export default function SubscriptionRequired() {
   const isTrial = subscriptionStatus?.plan === 'trial';
   const isPastDue = subscriptionStatus?.status === 'past_due';
 
+  // If the auth context finished loading but we still don't have an organization,
+  // the user is signed in but unaffiliated — show a clear message instead of
+  // letting them click plan buttons that would crash on null.id.
+  if (!loading && !organization) {
+    return (
+      <div style={{
+        minHeight: '100vh', background: '#0a0a0a',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '40px 20px', fontFamily: "'DM Sans', system-ui, sans-serif"
+      }}>
+        <div style={{ maxWidth: 480, textAlign: 'center' }}>
+          <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 56, mixBlendMode: 'screen', marginBottom: 20 }} />
+          <h1 style={{ color: '#f0f0f0', fontSize: 26, fontWeight: 800, marginBottom: 12 }}>
+            No Organization Found
+          </h1>
+          <p style={{ color: '#a0a0a0', fontSize: 15, lineHeight: 1.6, marginBottom: 24 }}>
+            You're signed in, but we couldn't find an organization linked to your account. Sign out and back in, or contact support if this keeps happening.
+          </p>
+          <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+            <button
+              onClick={logout}
+              style={{
+                background: '#34d399', color: '#0a0a0a', border: 'none',
+                padding: '12px 28px', borderRadius: 8, cursor: 'pointer',
+                fontWeight: 700, fontSize: 14
+              }}
+            >
+              Sign Out
+            </button>
+            <a
+              href="mailto:support@skidsling.com"
+              style={{
+                background: 'transparent', color: '#a0a0a0',
+                border: '1px solid rgba(255,255,255,0.15)',
+                padding: '12px 28px', borderRadius: 8,
+                textDecoration: 'none', fontWeight: 600, fontSize: 14
+              }}
+            >
+              Contact Support
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const handleSelectPlan = async (planName) => {
+    if (!organization?.id) {
+      setError('Organization is still loading. Please wait a moment and try again.');
+      return;
+    }
     setLoadingPlan(planName);
     setError('');
     try {
@@ -62,6 +112,10 @@ export default function SubscriptionRequired() {
   };
 
   const handleManageBilling = async () => {
+    if (!organization?.id) {
+      setError('Organization is still loading. Please wait a moment and try again.');
+      return;
+    }
     setLoadingPlan('portal');
     setError('');
     try {

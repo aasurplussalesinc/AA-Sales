@@ -4,26 +4,26 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 
 const TIERS = [
   {
-    name: 'Starter', price: 75, color: '#546e7a', accent: '#546e7a',
+    name: 'Starter', monthly: 100, annual: 1000, color: '#546e7a', accent: '#546e7a',
     tagline: 'Get off spreadsheets',
     limits: '2 users · 500 SKUs · 1 location · 50 orders/mo',
     features: ['Real-time inventory', 'QR scanning', 'Customer CRM', 'CSV import/export', 'Receiving & stock-in', 'Audit trail'],
   },
   {
-    name: 'Pro', price: 199, color: '#1976d2', accent: '#1976d2',
+    name: 'Pro', monthly: 225, annual: 2250, color: '#1976d2', accent: '#1976d2',
     tagline: 'Run your orders',
     limits: '5 users · 1,000 SKUs · unlimited locations · 200 orders/mo',
     features: ['Everything in Starter', 'Purchase orders', 'Pick lists', 'Box packing & invoices', 'Reports & analytics'],
     popular: true,
   },
   {
-    name: 'Business', price: 250, color: '#7b1fa2', accent: '#7b1fa2',
+    name: 'Business', monthly: 325, annual: 3250, color: '#7b1fa2', accent: '#7b1fa2',
     tagline: 'Ship professionally',
     limits: '15 users · 2,000 SKUs · unlimited locations · 1,000 orders/mo',
     features: ['Everything in Pro', 'Live shipping rates', 'Integrate Shippo, ShipStation & EasyPost accounts', 'Batch label printing', 'International & customs', 'Triwall packing', 'Vendor contracts'],
   },
   {
-    name: 'Enterprise', price: 350, color: '#0d7a52', accent: '#0d7a52',
+    name: 'Enterprise', monthly: 399, annual: 3990, color: '#0d7a52', accent: '#0d7a52',
     tagline: 'The full operation',
     limits: 'Unlimited users · Unlimited SKUs · Unlimited orders',
     features: ['Everything in Business', 'Bill to customer UPS account', 'Dual insurance comparison', 'Unlimited everything', 'Priority support & SLA'],
@@ -34,6 +34,7 @@ export default function SubscriptionRequired() {
   const { organization, logout, subscriptionStatus } = useAuth();
   const [loadingPlan, setLoadingPlan] = useState(null);
   const [error, setError] = useState('');
+  const [billingCycle, setBillingCycle] = useState('monthly');
 
   const isExpired = subscriptionStatus && !subscriptionStatus.isActive;
   const isTrial = subscriptionStatus?.plan === 'trial';
@@ -47,6 +48,7 @@ export default function SubscriptionRequired() {
       const createCheckout = httpsCallable(functions, 'createCheckoutSession');
       const result = await createCheckout({
         plan: planName.toLowerCase(),
+        billingCycle,
         orgId: organization.id,
         orgName: organization.name,
       });
@@ -136,6 +138,44 @@ export default function SubscriptionRequired() {
           </div>
         )}
 
+        {/* Monthly / Annual toggle */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+            padding: 4, borderRadius: 10
+          }}>
+            {['monthly', 'annual'].map(cycle => (
+              <button
+                key={cycle}
+                onClick={() => setBillingCycle(cycle)}
+                disabled={loadingPlan !== null}
+                style={{
+                  background: billingCycle === cycle ? '#34d399' : 'transparent',
+                  color: billingCycle === cycle ? '#0a0a0a' : 'rgba(255,255,255,0.7)',
+                  border: 'none', cursor: loadingPlan ? 'not-allowed' : 'pointer',
+                  padding: '8px 22px', borderRadius: 7,
+                  fontSize: 13, fontWeight: 700, letterSpacing: 0.5,
+                  textTransform: 'uppercase',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {cycle === 'monthly' ? 'Monthly' : 'Annual'}
+                {cycle === 'annual' && (
+                  <span style={{
+                    marginLeft: 8, fontSize: 10, fontWeight: 800,
+                    background: billingCycle === 'annual' ? 'rgba(10,10,10,0.15)' : 'rgba(52,211,153,0.2)',
+                    color: billingCycle === 'annual' ? '#0a0a0a' : '#34d399',
+                    padding: '2px 7px', borderRadius: 10, letterSpacing: 0.5
+                  }}>
+                    SAVE 2 MO
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Pricing cards */}
         <div style={{
           display: 'grid',
@@ -173,10 +213,22 @@ export default function SubscriptionRequired() {
                 <div style={{ fontSize: 13, color: '#606060', marginBottom: 8 }}>{tier.tagline}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                   <span style={{ fontSize: 38, fontWeight: 800, color: '#f0f0f0', letterSpacing: '-1px' }}>
-                    ${tier.price}
+                    ${billingCycle === 'annual' ? tier.annual.toLocaleString() : tier.monthly}
                   </span>
-                  <span style={{ color: '#606060', fontSize: 13 }}>/month</span>
+                  <span style={{ color: '#606060', fontSize: 13 }}>
+                    {billingCycle === 'annual' ? '/year' : '/month'}
+                  </span>
                 </div>
+                {billingCycle === 'annual' && (
+                  <div style={{
+                    display: 'inline-block', marginTop: 6,
+                    background: 'rgba(52,211,153,0.12)', color: '#34d399',
+                    padding: '2px 8px', borderRadius: 4,
+                    fontSize: 11, fontWeight: 700, letterSpacing: 0.3
+                  }}>
+                    Save ${(tier.monthly * 12 - tier.annual).toLocaleString()}/yr
+                  </div>
+                )}
                 <div style={{ fontSize: 12, color: '#404040', marginTop: 6 }}>{tier.limits}</div>
               </div>
 

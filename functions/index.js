@@ -906,17 +906,34 @@ exports.updateCarrierInvoice = functions.https.onCall(async function(data, conte
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// Price IDs from environment variables
+// Price IDs from environment variables — nested by billing cycle
 const PRICE_IDS = {
-  starter:    process.env.STRIPE_PRICE_STARTER,
-  pro:        process.env.STRIPE_PRICE_PRO,
-  business:   process.env.STRIPE_PRICE_BUSINESS,
-  enterprise: process.env.STRIPE_PRICE_ENTERPRISE,
+  starter: {
+    monthly: process.env.STRIPE_PRICE_STARTER_MONTHLY,
+    annual:  process.env.STRIPE_PRICE_STARTER_ANNUAL,
+  },
+  pro: {
+    monthly: process.env.STRIPE_PRICE_PRO_MONTHLY,
+    annual:  process.env.STRIPE_PRICE_PRO_ANNUAL,
+  },
+  business: {
+    monthly: process.env.STRIPE_PRICE_BUSINESS_MONTHLY,
+    annual:  process.env.STRIPE_PRICE_BUSINESS_ANNUAL,
+  },
+  enterprise: {
+    monthly: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY,
+    annual:  process.env.STRIPE_PRICE_ENTERPRISE_ANNUAL,
+  },
 };
 
-// Plan name mapping (price_id -> plan name)
+// Reverse lookup: price_id -> { plan, billingCycle }
+// Built once at module load so the webhook can map a Stripe price back to our plan.
 const PRICE_TO_PLAN = {};
-// Built dynamically from PRICE_IDS at runtime
+for (const [plan, cycles] of Object.entries(PRICE_IDS)) {
+  for (const [cycle, id] of Object.entries(cycles)) {
+    if (id) PRICE_TO_PLAN[id] = { plan, billingCycle: cycle };
+  }
+}
 
 // ── Create Stripe Checkout Session ──
 exports.createCheckoutSession = functions.https.onCall(async (data, context) => {
@@ -924,15 +941,23 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
     throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   }
 
-  const { plan, orgId, orgName } = data;
+  const { plan, orgId, orgName, billingCycle = 'monthly' } = data;
 
   if (!plan || !orgId) {
     throw new functions.https.HttpsError('invalid-argument', 'plan and orgId required');
   }
 
-  const priceId = PRICE_IDS[plan.toLowerCase()];
-  if (!priceId) {
+  if (!['monthly', 'annual'].includes(billingCycle)) {
+    throw new functions.https.HttpsError('invalid-argument', `Invalid billingCycle: ${billingCycle}`);
+  }
+
+  const planCycles = PRICE_IDS[plan.toLowerCase()];
+  if (!planCycles) {
     throw new functions.https.HttpsError('invalid-argument', `Unknown plan: ${plan}`);
+  }
+  const priceId = planCycles[billingCycle];
+  if (!priceId) {
+    throw new functions.https.HttpsError('invalid-argument', `No ${billingCycle} price configured for plan: ${plan}`);
   }
 
   try {
@@ -967,6 +992,7 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
       metadata: {
         orgId,
         plan: plan.toLowerCase(),
+        billingCycle,
         firebaseUid: context.auth.uid,
       },
       subscription_data: {
@@ -975,6 +1001,7 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
         metadata: {
           orgId,
           plan: plan.toLowerCase(),
+          billingCycle,
         },
       },
       payment_method_collection: 'always',
@@ -1040,17 +1067,19 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
         const session = event.data.object;
         const orgId = session.metadata?.orgId;
         const plan = session.metadata?.plan;
+        const billingCycle = session.metadata?.billingCycle || 'monthly';
 
         if (orgId && plan) {
           await db.collection('organizations').doc(orgId).update({
             plan: plan,
+            billingCycle: billingCycle,
             status: 'active',
             stripeSubscriptionId: session.subscription,
             stripeCustomerId: session.customer,
             subscriptionStartedAt: admin.firestore.FieldValue.serverTimestamp(),
             trialEndsAt: null,
           });
-          console.log(`Activated ${plan} for org ${orgId}`);
+          console.log(`Activated ${plan} (${billingCycle}) for org ${orgId}`);
         }
         break;
       }
@@ -1064,15 +1093,18 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
 
         if (!orgSnap.empty) {
           const orgRef = orgSnap.docs[0].ref;
-          // Find plan from price ID
+          // Map Stripe price ID back to our { plan, billingCycle }
           const priceId = sub.items.data[0]?.price?.id;
-          const plan = Object.entries(PRICE_IDS).find(([, id]) => id === priceId)?.[0];
+          const mapped = priceId ? PRICE_TO_PLAN[priceId] : null;
 
           const updateData = {
             stripeSubscriptionId: sub.id,
             status: sub.status === 'active' ? 'active' : sub.status,
           };
-          if (plan) updateData.plan = plan;
+          if (mapped) {
+            updateData.plan = mapped.plan;
+            updateData.billingCycle = mapped.billingCycle;
+          }
 
           await orgRef.update(updateData);
           console.log(`Updated subscription for customer ${sub.customer}`);

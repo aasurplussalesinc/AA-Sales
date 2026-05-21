@@ -91,6 +91,21 @@ export default function AdminDashboard() {
   const finishedTrial = converted + trialExpired;
   const conversionRate = finishedTrial > 0 ? Math.round((converted / finishedTrial) * 100) : 0;
 
+  // Plan pricing — monthly subs count at face value, annual subs normalized as annual/12.
+  // Orgs without a billingCycle (legacy subs) default to monthly.
+  const PLAN_PRICES = {
+    starter:    { monthly: 100, annual: 1000 },
+    pro:        { monthly: 225, annual: 2250 },
+    business:   { monthly: 325, annual: 3250 },
+    enterprise: { monthly: 399, annual: 3990 },
+  };
+  const mrrContribution = (org) => {
+    const tier = PLAN_PRICES[org.plan];
+    if (!tier) return 0;
+    const cycle = org.billingCycle === 'annual' ? 'annual' : 'monthly';
+    return cycle === 'annual' ? tier.annual / 12 : tier.monthly;
+  };
+
   const stats = {
     total: totalSignedUp,
     active: orgs.filter(o => o.status === 'active').length,
@@ -98,9 +113,11 @@ export default function AdminDashboard() {
     expired: trialExpired,
     converted,
     conversionRate,
-    mrr: orgs
-      .filter(o => o.status === 'active')
-      .reduce((sum, o) => sum + ({ starter: 75, pro: 199, business: 250, enterprise: 350 }[o.plan] || 0), 0)
+    mrr: Math.round(
+      orgs
+        .filter(o => o.status === 'active')
+        .reduce((sum, o) => sum + mrrContribution(o), 0)
+    ),
   };
 
   // Plan breakdown for paid customers
@@ -342,25 +359,41 @@ export default function AdminDashboard() {
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
             <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Active Paid Plans</h3>
             {[
-              { key: 'starter', label: 'Starter', color: '#78909c', price: 75 },
-              { key: 'pro', label: 'Pro', color: '#1976d2', price: 199 },
-              { key: 'business', label: 'Business', color: '#388e3c', price: 250 },
-              { key: 'enterprise', label: 'Enterprise', color: '#6a1b9a', price: 350 },
-            ].map(p => (
-              <div key={p.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 12, height: 12, borderRadius: 3, background: p.color }} />
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{p.label}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>${p.price}/mo each</div>
+              { key: 'starter', label: 'Starter', color: '#78909c' },
+              { key: 'pro', label: 'Pro', color: '#1976d2' },
+              { key: 'business', label: 'Business', color: '#388e3c' },
+              { key: 'enterprise', label: 'Enterprise', color: '#6a1b9a' },
+            ].map(p => {
+              const tier = PLAN_PRICES[p.key];
+              const planOrgs = orgs.filter(o => o.plan === p.key && o.status === 'active');
+              const monthlyCount = planOrgs.filter(o => o.billingCycle !== 'annual').length;
+              const annualCount  = planOrgs.filter(o => o.billingCycle === 'annual').length;
+              const planMrr = Math.round(monthlyCount * tier.monthly + annualCount * (tier.annual / 12));
+              return (
+                <div key={p.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 12, height: 12, borderRadius: 3, background: p.color }} />
+                    <div>
+                      <div style={{ fontWeight: 600 }}>{p.label}</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        ${tier.monthly}/mo · ${tier.annual.toLocaleString()}/yr
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: 22, fontWeight: 800 }}>{planOrgs.length}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      ${planMrr.toLocaleString()}/mo
+                      {annualCount > 0 && (
+                        <span style={{ marginLeft: 6, opacity: 0.7 }}>
+                          ({monthlyCount}m · {annualCount}a)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 22, fontWeight: 800 }}>{paidByPlan[p.key]}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>${(paidByPlan[p.key] * p.price).toLocaleString()}/mo</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(52,211,153,0.1)', borderRadius: 8 }}>
               <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>TOTAL MRR</div>
               <div style={{ fontSize: 24, fontWeight: 800, color: '#34d399' }}>${stats.mrr.toLocaleString()}/mo</div>

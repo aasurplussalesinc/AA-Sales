@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 
 const TIERS = [
   {
-    name: 'Starter', price: 75, color: '#b8860b', bg: 'rgba(184,134,11,0.12)',
+    name: 'Starter', monthly: 100, annual: 1000, color: '#b8860b', bg: 'rgba(184,134,11,0.12)',
     tagline: 'Get off spreadsheets',
     limits: '2 users · 500 SKUs · 1 location · 50 orders/mo',
     features: [
@@ -18,7 +18,7 @@ const TIERS = [
     ],
   },
   {
-    name: 'Pro', price: 199, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
+    name: 'Pro', monthly: 225, annual: 2250, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
     tagline: 'Run your orders',
     limits: '5 users · 1,000 SKUs · unlimited locations · 200 orders/mo',
     features: [
@@ -33,7 +33,7 @@ const TIERS = [
     popular: true,
   },
   {
-    name: 'Business', price: 250, color: '#a78bfa', bg: 'rgba(167,139,250,0.12)',
+    name: 'Business', monthly: 325, annual: 3250, color: '#a78bfa', bg: 'rgba(167,139,250,0.12)',
     tagline: 'Ship professionally',
     limits: '15 users · 2,000 SKUs · unlimited locations · 1,000 orders/mo',
     features: [
@@ -48,7 +48,7 @@ const TIERS = [
     ],
   },
   {
-    name: 'Enterprise', price: 350, color: '#34d399', bg: 'rgba(52,211,153,0.12)',
+    name: 'Enterprise', monthly: 399, annual: 3990, color: '#34d399', bg: 'rgba(52,211,153,0.12)',
     tagline: 'The full operation',
     limits: 'Unlimited users · Unlimited SKUs · Unlimited orders',
     features: [
@@ -74,6 +74,7 @@ const FEATURES = [
 
 export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
+  const [billingCycle, setBillingCycle] = useState('monthly');
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 60);
@@ -223,7 +224,7 @@ export default function LandingPage() {
         borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap'
       }}>
         {[
-          { number: '$75/mo', label: 'Starting Price' },
+          { number: '$100/mo', label: 'Starting Price' },
           { number: '4', label: 'Carriers Supported' },
           { number: '14-Day', label: 'Free Trial' },
           { number: '99.9%', label: 'Uptime' },
@@ -319,13 +320,48 @@ export default function LandingPage() {
       {/* ── PRICING ── */}
       <section id="pricing" style={{ padding: '100px 48px', background: '#0a0a0a', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-          <div style={{ textAlign: 'center', marginBottom: 72 }}>
+          <div style={{ textAlign: 'center', marginBottom: 40 }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 3, color: '#34d399', textTransform: 'uppercase', marginBottom: 14 }}>Pricing</div>
             <h2 style={{
               fontFamily: "'Barlow Condensed', sans-serif",
               fontSize: 52, fontWeight: 800, textTransform: 'uppercase', marginBottom: 14
             }}>Simple, Transparent Pricing</h2>
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 16 }}>Start free. Upgrade when you're ready. Downgrade anytime.</p>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 16, marginBottom: 28 }}>Start free. Upgrade when you're ready. Downgrade anytime.</p>
+
+            {/* Monthly / Annual toggle */}
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+              padding: 4, borderRadius: 10, marginBottom: 16
+            }}>
+              {['monthly', 'annual'].map(cycle => (
+                <button
+                  key={cycle}
+                  onClick={() => setBillingCycle(cycle)}
+                  style={{
+                    background: billingCycle === cycle ? '#34d399' : 'transparent',
+                    color: billingCycle === cycle ? '#0a0a0a' : 'rgba(255,255,255,0.7)',
+                    border: 'none', cursor: 'pointer',
+                    padding: '8px 22px', borderRadius: 7,
+                    fontSize: 13, fontWeight: 700, letterSpacing: 0.5,
+                    textTransform: 'uppercase',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {cycle === 'monthly' ? 'Monthly' : 'Annual'}
+                  {cycle === 'annual' && (
+                    <span style={{
+                      marginLeft: 8, fontSize: 10, fontWeight: 800,
+                      background: billingCycle === 'annual' ? 'rgba(10,10,10,0.15)' : 'rgba(52,211,153,0.2)',
+                      color: billingCycle === 'annual' ? '#0a0a0a' : '#34d399',
+                      padding: '2px 7px', borderRadius: 10, letterSpacing: 0.5
+                    }}>
+                      SAVE 2 MO
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(255px, 1fr))', gap: 16 }}>
@@ -357,9 +393,21 @@ export default function LandingPage() {
                   <span style={{
                     fontFamily: "'Barlow Condensed', sans-serif",
                     fontSize: 56, fontWeight: 800, color: 'white', lineHeight: 1
-                  }}>${tier.price}</span>
-                  <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>/month</span>
+                  }}>${billingCycle === 'annual' ? tier.annual.toLocaleString() : tier.monthly}</span>
+                  <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
+                    {billingCycle === 'annual' ? '/year' : '/month'}
+                  </span>
                 </div>
+                {billingCycle === 'annual' && (
+                  <div style={{
+                    display: 'inline-block', marginBottom: 10,
+                    background: 'rgba(52,211,153,0.15)', color: '#34d399',
+                    padding: '3px 10px', borderRadius: 4,
+                    fontSize: 11, fontWeight: 700, letterSpacing: 0.5
+                  }}>
+                    Save ${(tier.monthly * 12 - tier.annual).toLocaleString()}/yr
+                  </div>
+                )}
 
                 <div style={{ fontSize: 13, fontWeight: 600, color: tier.color, marginBottom: 6 }}>{tier.tagline}</div>
                 <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginBottom: 24, lineHeight: 1.6, letterSpacing: 0.3 }}>{tier.limits}</div>

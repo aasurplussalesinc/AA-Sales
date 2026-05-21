@@ -411,6 +411,33 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   console.log('Parcels sent:', JSON.stringify(parcelsUPS));
   console.log('=== END DEBUG ===');
 
+  // ── ADDITIONAL CALL: no-provider insurance to give non-UPS carriers (USPS/FedEx/DHL) a chance to quote
+  // The UPS-specific insurance above causes USPS/FedEx/etc. to decline the entire shipment because
+  // they can't sell UPS insurance. By making a second call without a specific provider, those carriers
+  // can quote with their own native insurance or no insurance.
+  try {
+    var parcelsAgnostic = formatParcelsFromOrder(order, hasInsurance ? insuranceAmount : 0, null);
+    var shipmentAgnostic = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAgnostic, customsDeclarationId, null, carrierAccountIds);
+    var agnosticRates = mapRates(shipmentAgnostic, 'AA', hasInsurance ? 'native' : 'none');
+
+    console.log('=== SHIPPO DEBUG (AA Account / Carrier-Native Insurance) ===');
+    console.log('Total rates returned:', (shipmentAgnostic.rates || []).length);
+    console.log('=== END DEBUG ===');
+
+    // Add any rates from carriers we don't already have (USPS, FedEx, DHL, etc.)
+    var existingProviders = {};
+    allRates.forEach(function(r) {
+      var key = (r.provider || '') + '|' + (typeof r.servicelevel === 'object' ? (r.servicelevel.token || r.servicelevel.name) : r.servicelevel) + '|' + r.billedTo;
+      existingProviders[key] = true;
+    });
+    agnosticRates.forEach(function(r) {
+      var key = (r.provider || '') + '|' + (typeof r.servicelevel === 'object' ? (r.servicelevel.token || r.servicelevel.name) : r.servicelevel) + '|' + r.billedTo;
+      if (!existingProviders[key]) allRates.push(r);
+    });
+  } catch (e) {
+    console.log('Agnostic-insurance shipment failed (non-critical):', e.message);
+  }
+
   // FALLBACK: if insurance is set but no rates returned, retry without insurance
   // This commonly happens when insurance amount exceeds carrier max or causes Shippo validation errors
   var insuranceFallbackUsed = false;

@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 
 const TIERS = [
   {
-    name: 'Starter', price: 50, color: '#b8860b', bg: 'rgba(184,134,11,0.12)',
+    name: 'Starter', price: 75, color: '#b8860b', bg: 'rgba(184,134,11,0.12)',
     tagline: 'Get off spreadsheets',
     limits: '2 users · 500 SKUs · 1 location · 50 orders/mo',
     features: [
@@ -18,7 +18,7 @@ const TIERS = [
     ],
   },
   {
-    name: 'Pro', price: 150, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
+    name: 'Pro', price: 199, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
     tagline: 'Run your orders',
     limits: '5 users · 1,000 SKUs · unlimited locations · 200 orders/mo',
     features: [
@@ -223,7 +223,7 @@ export default function LandingPage() {
         borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap'
       }}>
         {[
-          { number: '$50/mo', label: 'Starting Price' },
+          { number: '$75/mo', label: 'Starting Price' },
           { number: '4', label: 'Carriers Supported' },
           { number: '14-Day', label: 'Free Trial' },
           { number: '99.9%', label: 'Uptime' },

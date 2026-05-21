@@ -4,13 +4,13 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 
 const TIERS = [
   {
-    name: 'Starter', price: 50, color: '#546e7a', accent: '#546e7a',
+    name: 'Starter', price: 75, color: '#546e7a', accent: '#546e7a',
     tagline: 'Get off spreadsheets',
     limits: '2 users · 500 SKUs · 1 location · 50 orders/mo',
     features: ['Real-time inventory', 'QR scanning', 'Customer CRM', 'CSV import/export', 'Receiving & stock-in', 'Audit trail'],
   },
   {
-    name: 'Pro', price: 150, color: '#1976d2', accent: '#1976d2',
+    name: 'Pro', price: 199, color: '#1976d2', accent: '#1976d2',
     tagline: 'Run your orders',
     limits: '5 users · 1,000 SKUs · unlimited locations · 200 orders/mo',
     features: ['Everything in Starter', 'Purchase orders', 'Pick lists', 'Box packing & invoices', 'Reports & analytics'],

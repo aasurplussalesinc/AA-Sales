@@ -100,7 +100,7 @@ export default function AdminDashboard() {
     conversionRate,
     mrr: orgs
       .filter(o => o.status === 'active')
-      .reduce((sum, o) => sum + ({ starter: 50, pro: 150, business: 250, enterprise: 350 }[o.plan] || 0), 0)
+      .reduce((sum, o) => sum + ({ starter: 75, pro: 199, business: 250, enterprise: 350 }[o.plan] || 0), 0)
   };
 
   // Plan breakdown for paid customers
@@ -342,8 +342,8 @@ export default function AdminDashboard() {
           <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 24 }}>
             <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Active Paid Plans</h3>
             {[
-              { key: 'starter', label: 'Starter', color: '#78909c', price: 50 },
-              { key: 'pro', label: 'Pro', color: '#1976d2', price: 150 },
+              { key: 'starter', label: 'Starter', color: '#78909c', price: 75 },
+              { key: 'pro', label: 'Pro', color: '#1976d2', price: 199 },
               { key: 'business', label: 'Business', color: '#388e3c', price: 250 },
               { key: 'enterprise', label: 'Enterprise', color: '#6a1b9a', price: 350 },
             ].map(p => (

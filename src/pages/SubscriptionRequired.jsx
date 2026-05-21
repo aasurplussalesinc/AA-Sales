@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../OrgAuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 
@@ -51,7 +52,9 @@ export default function SubscriptionRequired() {
         padding: '40px 20px', fontFamily: "'DM Sans', system-ui, sans-serif"
       }}>
         <div style={{ maxWidth: 480, textAlign: 'center' }}>
-          <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 56, mixBlendMode: 'screen', marginBottom: 20 }} />
+          <Link to="/" aria-label="SkidSling home">
+            <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 56, mixBlendMode: 'screen', marginBottom: 20, cursor: 'pointer' }} />
+          </Link>
           <h1 style={{ color: '#f0f0f0', fontSize: 26, fontWeight: 800, marginBottom: 12 }}>
             No Organization Found
           </h1>
@@ -140,7 +143,9 @@ export default function SubscriptionRequired() {
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 56, mixBlendMode: 'screen', marginBottom: 16 }} />
+          <Link to="/" aria-label="SkidSling home">
+            <img src="/logo.png" alt="SkidSling" style={{ width: 56, height: 56, mixBlendMode: 'screen', marginBottom: 16, cursor: 'pointer' }} />
+          </Link>
           <h1 style={{ color: '#f0f0f0', fontSize: 34, fontWeight: 800, marginBottom: 12, letterSpacing: '-0.5px' }}>
             {isPastDue ? 'Payment Past Due' : isTrial ? 'Your Trial Has Ended' : 'Choose Your Plan'}
           </h1>

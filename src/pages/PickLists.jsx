@@ -6,6 +6,7 @@ import { useAuth } from '../OrgAuthContext';
 export default function PickLists() {
   const { organization } = useAuth();
   const [pickLists, setPickLists] = useState([]);
+  const [selectedIds, setSelectedIds] = useState(new Set()); // for bulk print
   const [items, setItems] = useState([]);
   const [locations, setLocations] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -409,88 +410,156 @@ export default function PickLists() {
     loadData();
   };
 
+  // Builds the printable HTML body for a single pick list.
+  // Shared between single-print and bulk-print so both produce identical layouts.
+  const buildPickListPrintBody = (list) => `
+    <div class="pl-page">
+      <div class="header">
+        <div class="title">📋 PICK LIST: ${list.name}</div>
+        <div class="meta">
+          <div class="status">${list.status?.toUpperCase()}</div>
+          <div style="margin-top: 8px;">Created: ${formatDate(list.createdAt)}</div>
+          <div>By: ${list.createdBy}</div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40px">#</th>
+            <th>Item</th>
+            <th class="text-center" style="width: 100px">Location</th>
+            <th class="text-center" style="width: 80px">Requested</th>
+            <th class="text-center" style="width: 80px">Picked</th>
+            <th class="text-center" style="width: 60px">✓</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${list.items?.map((item, idx) => `
+            <tr>
+              <td class="text-center">${idx + 1}</td>
+              <td>
+                <strong>${item.itemName}</strong>
+                <div class="sku">${item.partNumber || ''}</div>
+                ${item.notes ? `<div style="font-size:9px;color:#795548;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}
+              </td>
+              <td class="text-center"><strong>${item.location || '-'}</strong></td>
+              <td class="text-center"><strong>${item.requestedQty}</strong></td>
+              <td class="text-center">${list.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>'}</td>
+              <td class="text-center">${list.status === 'completed' ? (item.pickedQty >= item.requestedQty ? '✅' : '⚠️') : '☐'}</td>
+            </tr>
+          `).join('') || ''}
+        </tbody>
+      </table>
+
+      ${list.notes ? `<div class="notes"><strong>Notes:</strong> ${list.notes}</div>` : ''}
+
+      <div class="signature">
+        <div class="signature-line">Picker Signature</div>
+        <div class="signature-line">Date</div>
+        <div class="signature-line">Verified By</div>
+      </div>
+
+      <div class="footer">
+        <p>Printed: ${new Date().toLocaleString()}</p>
+      </div>
+    </div>
+  `;
+
+  // Shared styles for both single and bulk printing.
+  const pickListPrintStyles = (list) => `
+    body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+    .pl-page { page-break-after: always; }
+    .pl-page:last-child { page-break-after: auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #2d5f3f; padding-bottom: 15px; }
+    .title { font-size: 24px; font-weight: bold; color: #2d5f3f; }
+    .meta { text-align: right; color: #666; font-size: 14px; }
+    .status { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; background: ${getStatusColor(list?.status)}; color: white; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { background: #2d5f3f; color: white; padding: 12px; text-align: left; }
+    td { padding: 12px; border-bottom: 1px solid #ddd; }
+    .text-center { text-align: center; }
+    .location { font-size: 12px; color: #2d5f3f; margin-top: 4px; }
+    .sku { font-size: 12px; color: #666; }
+    .pick-box { width: 50px; height: 30px; border: 2px solid #333; display: inline-block; }
+    .notes { margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px; }
+    .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; }
+    .signature { margin-top: 40px; display: flex; justify-content: space-between; }
+    .signature-line { width: 200px; border-top: 1px solid #333; padding-top: 5px; text-align: center; }
+    @media print { body { padding: 20px; } }
+  `;
+
   const printPickList = (list) => {
     const printWindow = window.open('', '_blank');
+    // Status color is per-list, but the existing single-print uses one status — keep that behavior here.
     printWindow.document.write(`
       <html>
         <head>
           <title>Pick List - ${list.name}</title>
-          <style>
-            body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
-            .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #2d5f3f; padding-bottom: 15px; }
-            .title { font-size: 24px; font-weight: bold; color: #2d5f3f; }
-            .meta { text-align: right; color: #666; font-size: 14px; }
-            .status { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; background: ${getStatusColor(list.status)}; color: white; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th { background: #2d5f3f; color: white; padding: 12px; text-align: left; }
-            td { padding: 12px; border-bottom: 1px solid #ddd; }
-            .text-center { text-align: center; }
-            .location { font-size: 12px; color: #2d5f3f; margin-top: 4px; }
-            .sku { font-size: 12px; color: #666; }
-            .pick-box { width: 50px; height: 30px; border: 2px solid #333; display: inline-block; }
-            .notes { margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px; }
-            .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; }
-            .signature { margin-top: 40px; display: flex; justify-content: space-between; }
-            .signature-line { width: 200px; border-top: 1px solid #333; padding-top: 5px; text-align: center; }
-            @media print { body { padding: 20px; } }
-          </style>
+          <style>${pickListPrintStyles(list)}</style>
         </head>
         <body>
-          <div class="header">
-            <div class="title">📋 PICK LIST: ${list.name}</div>
-            <div class="meta">
-              <div class="status">${list.status?.toUpperCase()}</div>
-              <div style="margin-top: 8px;">Created: ${formatDate(list.createdAt)}</div>
-              <div>By: ${list.createdBy}</div>
-            </div>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th style="width: 40px">#</th>
-                <th>Item</th>
-                <th class="text-center" style="width: 100px">Location</th>
-                <th class="text-center" style="width: 80px">Requested</th>
-                <th class="text-center" style="width: 80px">Picked</th>
-                <th class="text-center" style="width: 60px">✓</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${list.items?.map((item, idx) => `
-                <tr>
-                  <td class="text-center">${idx + 1}</td>
-                  <td>
-                    <strong>${item.itemName}</strong>
-                    <div class="sku">${item.partNumber || ''}</div>
-                    ${item.notes ? `<div style="font-size:9px;color:#795548;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}
-                  </td>
-                  <td class="text-center"><strong>${item.location || '-'}</strong></td>
-                  <td class="text-center"><strong>${item.requestedQty}</strong></td>
-                  <td class="text-center">${list.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>'}</td>
-                  <td class="text-center">${list.status === 'completed' ? (item.pickedQty >= item.requestedQty ? '✅' : '⚠️') : '☐'}</td>
-                </tr>
-              `).join('') || ''}
-            </tbody>
-          </table>
-
-          ${list.notes ? `<div class="notes"><strong>Notes:</strong> ${list.notes}</div>` : ''}
-
-          <div class="signature">
-            <div class="signature-line">Picker Signature</div>
-            <div class="signature-line">Date</div>
-            <div class="signature-line">Verified By</div>
-          </div>
-
-          <div class="footer">
-            <p>Printed: ${new Date().toLocaleString()}</p>
-          </div>
+          ${buildPickListPrintBody(list)}
         </body>
       </html>
     `);
     printWindow.document.close();
     printWindow.print();
   };
+
+  // Bulk print: opens ONE window containing all selected lists, separated by page breaks,
+  // so the user gets a single print dialog and a single stack of paper in order.
+  // Status colors per-list are inlined into the status badge so each page renders correctly
+  // even though the shared <style> can only embed one status color.
+  const buildBulkBody = (lists) => lists.map(list => {
+    const body = buildPickListPrintBody(list);
+    // Patch the status badge background per-list since the global style uses only the first list's color.
+    return body.replace(
+      'class="status">',
+      `class="status" style="background:${getStatusColor(list.status)}">`
+    );
+  }).join('\n');
+
+  const printSelectedPickLists = () => {
+    // Resolve selected IDs to actual pick list objects, preserving the on-screen order.
+    const lists = pickLists.filter(pl => selectedIds.has(pl.id));
+    if (lists.length === 0) return;
+
+    // Single-list case: just use the regular print so behavior is identical.
+    if (lists.length === 1) {
+      printPickList(lists[0]);
+      return;
+    }
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Print window was blocked. Please allow popups for this site and try again.');
+      return;
+    }
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Pick Lists (${lists.length})</title>
+          <style>${pickListPrintStyles(lists[0])}</style>
+        </head>
+        <body>
+          ${buildBulkBody(lists)}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  // Selection helpers — kept inline (no need for useCallback at this scale).
+  const toggleSelected = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const clearSelection = () => setSelectedIds(new Set());
 
   // ==================== PACK ORDER FUNCTIONS ====================
   
@@ -1687,11 +1756,98 @@ export default function PickLists() {
         </div>
       )}
 
+      {/* Bulk actions bar */}
+      {(() => {
+        // Recompute filtered+paginated here so the bulk bar's "select all on page"
+        // matches exactly what's currently visible in the table below.
+        const filtered = pickLists.filter(list => {
+          if (filterSearch) {
+            const search = filterSearch.toLowerCase();
+            const matchName = list.name?.toLowerCase().includes(search);
+            const matchPO = list.purchaseOrderId?.toLowerCase().includes(search);
+            const matchItems = list.items?.some(i =>
+              i.itemName?.toLowerCase().includes(search) ||
+              i.partNumber?.toLowerCase().includes(search)
+            );
+            if (!matchName && !matchPO && !matchItems) return false;
+          }
+          if (filterAssignee && list.assignedTo !== filterAssignee) return false;
+          if (filterPriority && (list.priority || 'normal') !== filterPriority) return false;
+          if (activeTab !== 'all') {
+            const s = getDisplayStatus(list);
+            if (activeTab === 'open' && (s === 'completed' || s === 'cancelled')) return false;
+            if (activeTab === 'completed' && s !== 'completed') return false;
+            if (activeTab === 'cancelled' && s !== 'cancelled') return false;
+          }
+          return true;
+        });
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        const safePage = Math.min(currentPage, totalPages);
+        const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+        const visibleIds = visible.map(l => l.id);
+        const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedIds.has(id));
+
+        const toggleAllVisible = () => {
+          setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (allVisibleSelected) visibleIds.forEach(id => next.delete(id));
+            else visibleIds.forEach(id => next.add(id));
+            return next;
+          });
+        };
+
+        if (visible.length === 0 && selectedIds.size === 0) return null;
+
+        return (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+            padding: '10px 14px', marginBottom: 12,
+            background: selectedIds.size > 0 ? 'var(--bg-badge-blue, #e3f2fd)' : 'var(--bg-surface, #fafafa)',
+            color: selectedIds.size > 0 ? 'var(--text-badge-blue, #0d47a1)' : 'inherit',
+            border: '1px solid var(--border)', borderRadius: 6,
+            fontSize: 13
+          }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleAllVisible}
+                style={{ width: 16, height: 16, cursor: 'pointer' }}
+              />
+              Select all on this page
+            </label>
+            {selectedIds.size > 0 ? (
+              <>
+                <span style={{ opacity: 0.7 }}>·</span>
+                <strong>{selectedIds.size}</strong> selected
+                <button
+                  className="btn btn-sm"
+                  onClick={printSelectedPickLists}
+                  style={{ background: '#2d5f3f', color: 'white', fontWeight: 600 }}
+                >
+                  🖨️ Print {selectedIds.size} Pick List{selectedIds.size === 1 ? '' : 's'}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={clearSelection}
+                  style={{ background: 'transparent', color: 'inherit', textDecoration: 'underline' }}
+                >
+                  Clear selection
+                </button>
+              </>
+            ) : (
+              <span style={{ opacity: 0.6 }}>Tick rows below to bulk-print pick lists.</span>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Pick Lists Table */}
       <div className="data-table">
         <table>
           <thead>
             <tr>
+              <th style={{ width: 36, textAlign: 'center' }} title="Select for bulk print">☐</th>
               <th>Priority</th>
               <th>Name</th>
               <th>Assigned To</th>
@@ -1757,7 +1913,7 @@ export default function PickLists() {
               if (filtered.length === 0) {
                 return (
                   <tr>
-                    <td colSpan={7} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+                    <td colSpan={8} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
                       {pickLists.length === 0 ? 'No pick lists yet.' : 'No pick lists match your filters.'}
                     </td>
                   </tr>
@@ -1768,7 +1924,16 @@ export default function PickLists() {
               const displayStatus = getDisplayStatus(list);
               const priorityInfo = priorityOptions.find(p => p.value === (list.priority || 'normal')) || priorityOptions[2];
               return (
-              <tr key={list.id}>
+              <tr key={list.id} style={selectedIds.has(list.id) ? { background: 'var(--bg-badge-blue, #e3f2fd)' } : undefined}>
+                <td style={{ padding: 8, textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(list.id)}
+                    onChange={() => toggleSelected(list.id)}
+                    aria-label={`Select pick list ${list.name}`}
+                    style={{ width: 16, height: 16, cursor: 'pointer' }}
+                  />
+                </td>
                 <td style={{ padding: 8 }}>
                   <select
                     value={list.priority || 'normal'}

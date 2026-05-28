@@ -76,6 +76,7 @@ export default function Items() {
   const [newItem, setNewItem] = useState({
     partNumber: '',
     name: '',
+    grade: '',
     category: '',
     stock: 0,
     price: 0,
@@ -176,6 +177,7 @@ export default function Items() {
     setNewItem({
       partNumber: nextSku,
       name: '',
+      grade: '',
       category: '',
       stock: 0,
       price: 0,
@@ -501,6 +503,7 @@ export default function Items() {
     const itemId = await DB.createItem({
       partNumber: newItem.partNumber,
       name: newItem.name,
+      grade: newItem.grade || '',
       category: newItem.category,
       stock: totalStock,
       price: parseFloat(newItem.price) || 0,
@@ -533,6 +536,7 @@ export default function Items() {
       // Keep modal open, preserve name and category, clear the rest
       const savedName = newItem.name;
       const savedCategory = newItem.category;
+      const savedGrade = newItem.grade; // Variants often share a grade
       const savedPrice = newItem.price; // Often same price for variants
       
       // Reload data first so we can generate correct next SKU
@@ -548,6 +552,7 @@ export default function Items() {
       setNewItem({
         partNumber: nextSku,
         name: savedName,
+        grade: savedGrade,
         category: savedCategory,
         stock: 0,
         price: savedPrice,
@@ -567,6 +572,7 @@ export default function Items() {
       setNewItem({
         partNumber: '',
         name: '',
+        grade: '',
         category: '',
         stock: 0,
         price: 0,
@@ -588,6 +594,7 @@ export default function Items() {
     setNewItem({
       partNumber: '', // Clear SKU - must be unique
       name: item.name || '',
+      grade: item.grade || '',
       category: item.category || '',
       stock: 0, // Start with 0 stock
       price: item.price || 0,
@@ -642,6 +649,7 @@ export default function Items() {
         await DB.updateItemWithSync(editingItem.id, {
           partNumber: editingItem.partNumber,
           name: editingItem.name,
+          grade: editingItem.grade || '',
           category: editingItem.category,
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
@@ -655,6 +663,7 @@ export default function Items() {
         await DB.updateItem(editingItem.id, {
           partNumber: editingItem.partNumber,
           name: editingItem.name,
+          grade: editingItem.grade || '',
           category: editingItem.category,
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
@@ -701,10 +710,10 @@ export default function Items() {
 
   // Download CSV template
   const downloadTemplate = () => {
-    const template = `SKU,Item Name,Category,Quantity,Price,Location,Low Stock Threshold,Reorder Point
-PART-001,Example Widget,Electronics,100,29.99,W1-R1-A1,10,20
-PART-002,Sample Gadget,Hardware,50,49.99,W1-R1-A2,5,15
-PART-003,Test Component,Parts,200,9.99,,10,25`;
+    const template = `SKU,Item Name,Grade,Category,Quantity,Price,Location,Low Stock Threshold,Reorder Point
+PART-001,Example Widget,A,Electronics,100,29.99,W1-R1-A1,10,20
+PART-002,Sample Gadget,B,Hardware,50,49.99,W1-R1-A2,5,15
+PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     
     const blob = new Blob([template], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -718,12 +727,13 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
   // Export to CSV
   const exportToCSV = () => {
     // CSV headers
-    const headers = ['SKU', 'Item Name', 'Category', 'Quantity', 'Price', 'Location', 'Date Added'];
+    const headers = ['SKU', 'Item Name', 'Grade', 'Category', 'Quantity', 'Price', 'Location', 'Date Added'];
     
     // Convert items to CSV rows
     const rows = sortedItems.map(item => [
       item.partNumber || '',
       item.name || '',
+      item.grade || '',
       item.category || '',
       item.stock || 0,
       item.price || 0,
@@ -779,6 +789,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         const headerMap = {
           'sku': ['sku', 'partnumber', 'part number', 'part_number', 'item number', 'item_number', 'itemnumber'],
           'name': ['name', 'item name', 'item_name', 'itemname', 'description', 'product name', 'product_name'],
+          'grade': ['grade', 'condition', 'quality'],
           'category': ['category', 'cat', 'type', 'group'],
           'stock': ['stock', 'quantity', 'qty', 'count', 'amount', 'on hand', 'on_hand'],
           'price': ['price', 'unit price', 'unitprice', 'unit_price', 'sell price', 'sellprice', 'msrp'],
@@ -802,13 +813,28 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
         // Parse data rows and group by SKU for multi-location support
         const itemsBySku = new Map();
         const locationInventory = []; // Track location assignments
-        
+
+        // Auto-SKU assignment for rows that have a name but no SKU.
+        // Mirrors the Add Item form: start from the org's configured series start,
+        // continue past the highest existing numeric SKU. A running counter keeps
+        // multiple SKU-less rows in the same file from colliding with each other.
+        const existingForSku = await DB.getItems();
+        const skuSeriesStart = parseInt(organization?.skuSeriesStart) || 1000;
+        const existingNumericSkus = existingForSku
+          .map(it => parseInt(it.partNumber))
+          .filter(n => !isNaN(n) && n >= skuSeriesStart);
+        let nextAutoSku = existingNumericSkus.length === 0
+          ? skuSeriesStart
+          : Math.max(...existingNumericSkus) + 1;
+        const autoAssignedKeys = new Set(); // keys that must always CREATE (never name-match)
+
         for (let i = 1; i < lines.length; i++) {
           const values = parseCSVLine(lines[i]);
           if (values.length === 0) continue;
 
           const sku = columnIndices.sku !== undefined ? values[columnIndices.sku]?.trim() : '';
           const name = columnIndices.name !== undefined ? values[columnIndices.name]?.trim() : '';
+          const grade = columnIndices.grade !== undefined ? values[columnIndices.grade]?.trim() : '';
           const category = columnIndices.category !== undefined ? values[columnIndices.category]?.trim() : '';
           const qty = columnIndices.stock !== undefined ? parseInt(values[columnIndices.stock]) || 0 : 0;
           const price = columnIndices.price !== undefined ? parseFloat(values[columnIndices.price]?.replace(/[^0-9.-]/g, '')) || 0 : 0;
@@ -817,13 +843,26 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           // Skip empty rows
           if (!name && !sku) continue;
 
-          const key = sku || name; // Use SKU as key, fallback to name
-          
+          // Auto-assign a SKU when the row has a name but no SKU.
+          // These always become NEW items, so each gets its own unique key and
+          // is flagged so the upsert step won't try to match it by name.
+          let effectiveSku = sku;
+          let forceCreate = false;
+          if (!sku && name) {
+            effectiveSku = String(nextAutoSku);
+            nextAutoSku += 1;
+            forceCreate = true;
+          }
+
+          const key = effectiveSku || name; // SKU (real or auto-assigned) is the key
+          if (forceCreate) autoAssignedKeys.add(key);
+
           if (!itemsBySku.has(key)) {
             // First time seeing this item
             itemsBySku.set(key, {
-              partNumber: sku,
+              partNumber: effectiveSku,
               name: name,
+              grade: grade,
               category: category,
               stock: qty, // Will be summed if multiple locations
               price: price,
@@ -836,6 +875,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
             existing.stock += qty;
             // Keep first non-empty values for other fields
             if (!existing.name && name) existing.name = name;
+            if (!existing.grade && grade) existing.grade = grade;
             if (!existing.category && category) existing.category = category;
             if (!existing.price && price) existing.price = price;
           }
@@ -858,26 +898,97 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           return;
         }
 
-        // Show summary with multi-location info
+        // Match incoming rows against existing items by SKU (preferred) or name.
+        // UPSERT behavior: existing items are updated in place (same doc ID preserved),
+        // new SKUs are added, and nothing is ever deleted.
+        // (Reuse the items list already fetched for auto-SKU assignment above.)
+        const existingItems = existingForSku;
+        const existingBySku = new Map();
+        const existingByName = new Map();
+        for (const it of existingItems) {
+          if (it.partNumber) existingBySku.set(String(it.partNumber).trim().toLowerCase(), it);
+          if (it.name) existingByName.set(String(it.name).trim().toLowerCase(), it);
+        }
+
+        // Which mapped columns were actually present in this CSV. Per the chosen rule,
+        // a present column updates the field even when the cell is blank (blank clears it).
+        // Columns NOT in the file are never touched. "stock" is handled via location sync
+        // / quantity below, not blanked here.
+        const fieldToProp = { name: 'name', grade: 'grade', category: 'category', price: 'price' };
+        const presentProps = Object.keys(fieldToProp).filter(f => columnIndices[f] !== undefined);
+
+        const toUpdate = []; // { id, patch }
+        const toCreate = []; // full item objects
+        for (const [key, incoming] of itemsBySku.entries()) {
+          // Auto-assigned (SKU-less) rows always create a brand-new item — never name-match.
+          if (autoAssignedKeys.has(key)) {
+            toCreate.push(incoming);
+            continue;
+          }
+
+          const skuKey = incoming.partNumber ? incoming.partNumber.trim().toLowerCase() : '';
+          const nameKey = incoming.name ? incoming.name.trim().toLowerCase() : '';
+          const match = (skuKey && existingBySku.get(skuKey)) || (nameKey && existingByName.get(nameKey)) || null;
+
+          if (match) {
+            const patch = {};
+            for (const prop of presentProps) {
+              const val = incoming[prop] !== undefined ? incoming[prop] : '';
+              // Name is required — never clear it to empty. A blank name cell on a
+              // SKU-matched row is treated as "leave the existing name alone".
+              if (prop === 'name' && (!val || val.trim() === '')) continue;
+              patch[prop] = val;
+            }
+            // Quantity: only overwrite when a Quantity column was provided in the CSV.
+            if (columnIndices.stock !== undefined) patch.stock = incoming.stock;
+            toUpdate.push({ id: match.id, patch });
+          } else {
+            toCreate.push(incoming);
+          }
+        }
+
         const hasMultiLocation = locationInventory.length > newItems.length;
-        let confirmMsg = `This will REPLACE ALL existing inventory with ${newItems.length} unique items from the CSV.`;
+        const autoCount = autoAssignedKeys.size;
+        let confirmMsg =
+          `Import summary (nothing will be deleted):\n\n` +
+          `✓ ${toUpdate.length} existing item${toUpdate.length === 1 ? '' : 's'} will be UPDATED\n` +
+          `✓ ${toCreate.length} new item${toCreate.length === 1 ? '' : 's'} will be ADDED`;
+        if (autoCount > 0) {
+          confirmMsg += `\n\n🔖 ${autoCount} row${autoCount === 1 ? '' : 's'} had no SKU — auto-assigned from your series (next: ${nextAutoSku - autoCount}).`;
+        }
+        if (presentProps.length > 0) {
+          confirmMsg += `\n\nFields updated from CSV: ${presentProps.join(', ')}` +
+            (columnIndices.stock !== undefined ? ', stock' : '') +
+            `.\n(Blank cells in these columns will clear the matching field.)`;
+        }
         if (hasMultiLocation) {
           confirmMsg += `\n\n📍 Multi-location detected: ${locationInventory.length} location assignments will be created.`;
         }
-        confirmMsg += '\n\nAre you sure?';
-        
+        confirmMsg += '\n\nProceed?';
+
         if (!confirm(confirmMsg)) {
           setImporting(false);
           return;
         }
 
-        // Import items to database
-        const result = await DB.importItems(newItems);
-        
+        // Apply updates (preserves doc IDs, so pick lists / orders keep working)
+        let updated = 0;
+        for (const u of toUpdate) {
+          await DB.updateItem(u.id, u.patch);
+          updated++;
+        }
+        // Apply creates
+        let added = 0;
+        for (const item of toCreate) {
+          await DB.createItem(item);
+          added++;
+        }
+        const result = { updated, added };
+
         // Now assign inventory to locations
         let locationAssignments = 0;
         if (locationInventory.length > 0) {
-          // Get fresh items list to get IDs
+          // Get fresh items list to get IDs (covers both updated and newly created)
           const freshItems = await DB.getItems();
           
           for (const inv of locationInventory) {
@@ -903,7 +1014,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           }
         }
         
-        let successMsg = `Import complete!\n\n✓ ${result.deleted} old items removed\n✓ ${result.added} new items imported`;
+        let successMsg = `Import complete!\n\n✓ ${result.updated} item${result.updated === 1 ? '' : 's'} updated\n✓ ${result.added} item${result.added === 1 ? '' : 's'} added`;
         if (locationAssignments > 0) {
           successMsg += `\n✓ ${locationAssignments} location assignments created`;
         }
@@ -1908,6 +2019,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
               </th>
               <th style={{ width: 80 }}>SKU</th>
               <th style={{ minWidth: 250 }}>Item Name</th>
+              <th style={{ width: 90 }}>Grade</th>
               <th style={{ width: 100 }}>Category</th>
               <th style={{ width: 130 }}>Quantity</th>
               <th style={{ width: 80 }}>Price</th>
@@ -1968,6 +2080,19 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                       📊
                     </button>
                   </div>
+                </td>
+                <td>
+                  {canEdit ? (
+                    <input
+                      type="text"
+                      value={item.grade || ''}
+                      onChange={e => updateItem(item.id, 'grade', e.target.value)}
+                      style={{ width: '75px' }}
+                      placeholder="—"
+                    />
+                  ) : (
+                    <span style={{ fontSize: 13 }}>{item.grade || '-'}</span>
+                  )}
                 </td>
                 <td>
                   {canEdit ? (
@@ -2182,7 +2307,7 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
           {/* Phantom rows to fill space when < 5 items */}
           {paginatedItems.length > 0 && paginatedItems.length < 5 && Array.from({ length: 5 - paginatedItems.length }).map((_, i) => (
             <tr key={`phantom-${i}`} style={{ height: 52 }}>
-              <td colSpan="9" style={{ borderBottom: '1px solid var(--border)', opacity: 0 }} />
+              <td colSpan="10" style={{ borderBottom: '1px solid var(--border)', opacity: 0 }} />
             </tr>
           ))}
           </tbody>
@@ -2245,6 +2370,16 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   value={newItem.name}
                   onChange={e => setNewItem({ ...newItem, name: e.target.value })}
                   placeholder="Enter item name..."
+                />
+              </div>
+              <div className="form-group">
+                <label>Grade</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={newItem.grade || ''}
+                  onChange={e => setNewItem({ ...newItem, grade: e.target.value })}
+                  placeholder="e.g. A, B, New, Refurb..."
                 />
               </div>
               <div className="form-group">
@@ -2520,6 +2655,16 @@ PART-003,Test Component,Parts,200,9.99,,10,25`;
                   className="form-input"
                   value={editingItem.name || ''}
                   onChange={e => setEditingItem({ ...editingItem, name: e.target.value })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Grade</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editingItem.grade || ''}
+                  onChange={e => setEditingItem({ ...editingItem, grade: e.target.value })}
+                  placeholder="e.g. A, B, New, Refurb..."
                 />
               </div>
               <div className="form-group">

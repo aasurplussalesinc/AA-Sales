@@ -834,6 +834,15 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           : Math.max(...existingNumericSkus) + 1;
         const autoAssignedKeys = new Set(); // keys that must always CREATE (never name-match)
 
+        // Map of existing item names -> their SKU, used to guard against SKU-less
+        // rows duplicating an item that already exists under the same name.
+        const existingNameToSku = new Map();
+        for (const it of existingForSku) {
+          if (it.name && it.partNumber) {
+            existingNameToSku.set(String(it.name).trim().toLowerCase(), String(it.partNumber).trim());
+          }
+        }
+
         for (let i = 1; i < lines.length; i++) {
           const values = parseCSVLine(lines[i]);
           if (values.length === 0) continue;
@@ -867,14 +876,21 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           if (!name && !sku) continue;
 
           // Auto-assign a SKU when the row has a name but no SKU.
-          // These always become NEW items, so each gets its own unique key and
-          // is flagged so the upsert step won't try to match it by name.
+          // GUARD: if a SKU-less row's name already matches an existing item,
+          // treat it as an UPDATE to that item (use its SKU) instead of creating
+          // a duplicate. Only genuinely-new names get a freshly assigned SKU.
           let effectiveSku = sku;
           let forceCreate = false;
           if (!sku && name) {
-            effectiveSku = String(nextAutoSku);
-            nextAutoSku += 1;
-            forceCreate = true;
+            const existingSkuForName = existingNameToSku.get(name.toLowerCase());
+            if (existingSkuForName) {
+              // Name already exists — route to that item, don't duplicate.
+              effectiveSku = existingSkuForName;
+            } else {
+              effectiveSku = String(nextAutoSku);
+              nextAutoSku += 1;
+              forceCreate = true;
+            }
           }
 
           const key = effectiveSku || name; // SKU (real or auto-assigned) is the key
@@ -908,12 +924,15 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
             }
           }
           
-          // Track location assignment if location is specified
-          if (location && qty > 0) {
+          // Track location assignment whenever a location is specified.
+          // (Previously this required qty>0, which silently dropped locations for
+          // zero-qty or blank-qty rows.) Quantity is applied only if it was provided.
+          if (location) {
             locationInventory.push({
               sku: key,
               location: location,
-              quantity: qty
+              quantity: qty,
+              hasQty: provided.stock
             });
           }
         }
@@ -1017,29 +1036,40 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         }
         const result = { updated, added };
 
-        // Now assign inventory to locations
+        // Now assign locations. We set the item's own `location` field (the dropdown
+        // shown in the Items table) AND sync the location's inventory map. Using
+        // updateItemWithSync handles both, for updated and newly-created items alike.
         let locationAssignments = 0;
         if (locationInventory.length > 0) {
           // Get fresh items list to get IDs (covers both updated and newly created)
           const freshItems = await DB.getItems();
-          
+
           for (const inv of locationInventory) {
-            // Find the item by SKU or name
-            const item = freshItems.find(i => 
-              (i.partNumber && i.partNumber === inv.sku) || 
-              (i.name && i.name === inv.sku)
+            // Find the item by SKU (case-insensitive) or name
+            const skuKey = String(inv.sku).trim().toLowerCase();
+            const item = freshItems.find(i =>
+              (i.partNumber && String(i.partNumber).trim().toLowerCase() === skuKey) ||
+              (i.name && String(i.name).trim().toLowerCase() === skuKey)
             );
-            
+
             if (item) {
-              // Find the location
-              const loc = locations.find(l => 
-                l.locationCode === inv.location ||
-                `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}` === inv.location
-              );
-              
+              // Resolve the location record by code (normalized either side)
+              const loc = locations.find(l => {
+                const code = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
+                return code === inv.location ||
+                  DB.normalizeLocationCode(code) === DB.normalizeLocationCode(inv.location);
+              });
+
               if (loc) {
-                // Add inventory to location
-                await DB.addInventoryToLocation(loc.id, item.id, inv.quantity);
+                // Determine quantity to place at the location:
+                //  - if the CSV provided a qty, use it
+                //  - otherwise keep whatever stock the item already has
+                const qtyToSet = inv.hasQty ? inv.quantity : (item.stock || 0);
+                // Set the item's location field + sync the location inventory map.
+                await DB.updateItemWithSync(item.id, {
+                  location: inv.location,
+                  stock: qtyToSet
+                });
                 locationAssignments++;
               }
             }

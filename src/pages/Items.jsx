@@ -714,14 +714,20 @@ export default function Items() {
 PART-001,Example Widget,A,Electronics,100,29.99,W1-R1-A1,10,20
 PART-002,Sample Gadget,B,Hardware,50,49.99,W1-R1-A2,5,15
 PART-003,Test Component,New,Parts,200,9.99,,10,25`;
-    
-    const blob = new Blob([template], { type: 'text/csv' });
+
+    const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = 'items-import-template.csv';
+    // Append to DOM before clicking — required by Firefox and avoids some
+    // browsers ignoring a click on a detached element.
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    // Delay revoke so the browser has finished reading the blob for the download.
+    // Revoking synchronously can cancel/duplicate the download on some browsers.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   // Export to CSV
@@ -760,7 +766,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   // Import from CSV

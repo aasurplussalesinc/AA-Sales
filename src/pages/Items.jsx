@@ -838,13 +838,30 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           const values = parseCSVLine(lines[i]);
           if (values.length === 0) continue;
 
+          // Raw cell values (untrimmed-to-empty check) so we can tell
+          // "user left it blank" from "user typed 0 / empty".
+          const rawGrade = columnIndices.grade !== undefined ? (values[columnIndices.grade] ?? '').trim() : '';
+          const rawCategory = columnIndices.category !== undefined ? (values[columnIndices.category] ?? '').trim() : '';
+          const rawPrice = columnIndices.price !== undefined ? (values[columnIndices.price] ?? '').trim() : '';
+          const rawStock = columnIndices.stock !== undefined ? (values[columnIndices.stock] ?? '').trim() : '';
+
           const sku = columnIndices.sku !== undefined ? values[columnIndices.sku]?.trim() : '';
           const name = columnIndices.name !== undefined ? values[columnIndices.name]?.trim() : '';
-          const grade = columnIndices.grade !== undefined ? values[columnIndices.grade]?.trim() : '';
-          const category = columnIndices.category !== undefined ? values[columnIndices.category]?.trim() : '';
-          const qty = columnIndices.stock !== undefined ? parseInt(values[columnIndices.stock]) || 0 : 0;
-          const price = columnIndices.price !== undefined ? parseFloat(values[columnIndices.price]?.replace(/[^0-9.-]/g, '')) || 0 : 0;
+          const grade = rawGrade;
+          const category = rawCategory;
+          const qty = rawStock !== '' ? (parseInt(rawStock) || 0) : 0;
+          const price = rawPrice !== '' ? (parseFloat(rawPrice.replace(/[^0-9.-]/g, '')) || 0) : 0;
           const location = columnIndices.location !== undefined ? values[columnIndices.location]?.trim() : '';
+
+          // Which fields this row actually supplied a non-blank value for.
+          // Blank cells are NOT recorded, so the upsert leaves them untouched.
+          const provided = {
+            name: name !== '',
+            grade: rawGrade !== '',
+            category: rawCategory !== '',
+            price: rawPrice !== '',
+            stock: rawStock !== '',
+          };
 
           // Skip empty rows
           if (!name && !sku) continue;
@@ -873,7 +890,8 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
               stock: qty, // Will be summed if multiple locations
               price: price,
               location: location, // Primary location (first one seen)
-              createdAt: Date.now()
+              createdAt: Date.now(),
+              _provided: provided
             });
           } else {
             // Duplicate SKU - add to stock total
@@ -884,6 +902,10 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
             if (!existing.grade && grade) existing.grade = grade;
             if (!existing.category && category) existing.category = category;
             if (!existing.price && price) existing.price = price;
+            // OR together provided-flags across duplicate rows for the same SKU
+            for (const f of Object.keys(provided)) {
+              if (provided[f]) existing._provided[f] = true;
+            }
           }
           
           // Track location assignment if location is specified
@@ -938,16 +960,19 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
 
           if (match) {
             const patch = {};
+            const prov = incoming._provided || {};
             for (const prop of presentProps) {
-              const val = incoming[prop] !== undefined ? incoming[prop] : '';
-              // Name is required — never clear it to empty. A blank name cell on a
-              // SKU-matched row is treated as "leave the existing name alone".
-              if (prop === 'name' && (!val || val.trim() === '')) continue;
-              patch[prop] = val;
+              // Blank cell = leave the existing value alone. Only write fields
+              // the row actually supplied a non-blank value for.
+              if (!prov[prop]) continue;
+              patch[prop] = incoming[prop];
             }
-            // Quantity: only overwrite when a Quantity column was provided in the CSV.
-            if (columnIndices.stock !== undefined) patch.stock = incoming.stock;
-            toUpdate.push({ id: match.id, patch });
+            // Quantity: only overwrite when a non-blank Quantity cell was provided.
+            if (prov.stock) patch.stock = incoming.stock;
+            // If every relevant cell was blank, there's nothing to change — skip.
+            if (Object.keys(patch).length > 0) {
+              toUpdate.push({ id: match.id, patch });
+            }
           } else {
             toCreate.push(incoming);
           }
@@ -965,7 +990,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         if (presentProps.length > 0) {
           confirmMsg += `\n\nFields updated from CSV: ${presentProps.join(', ')}` +
             (columnIndices.stock !== undefined ? ', stock' : '') +
-            `.\n(Blank cells in these columns will clear the matching field.)`;
+            `.\n(Blank cells are ignored — existing values are kept.)`;
         }
         if (hasMultiLocation) {
           confirmMsg += `\n\n📍 Multi-location detected: ${locationInventory.length} location assignments will be created.`;
@@ -986,7 +1011,8 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         // Apply creates
         let added = 0;
         for (const item of toCreate) {
-          await DB.createItem(item);
+          const { _provided, ...cleanItem } = item; // drop internal tracking flag
+          await DB.createItem(cleanItem);
           added++;
         }
         const result = { updated, added };

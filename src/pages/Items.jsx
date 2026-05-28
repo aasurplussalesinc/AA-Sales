@@ -2018,8 +2018,12 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                 />
               </th>
               <th style={{ width: 80 }}>SKU</th>
-              <th style={{ minWidth: 250 }}>Item Name</th>
-              <th style={{ width: 90 }}>Grade</th>
+              <th style={{ minWidth: 250 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Item Name</span>
+                  <span style={{ width: 90, textAlign: 'center', marginRight: 30 }}>Grade</span>
+                </div>
+              </th>
               <th style={{ width: 100 }}>Category</th>
               <th style={{ width: 130 }}>Quantity</th>
               <th style={{ width: 80 }}>Price</th>
@@ -2063,6 +2067,18 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                     ) : (
                       <span style={{ minWidth: '250px' }}>{item.name || '-'}</span>
                     )}
+                    {canEdit ? (
+                      <input
+                        type="text"
+                        value={item.grade || ''}
+                        onChange={e => updateItem(item.id, 'grade', e.target.value)}
+                        style={{ width: '60px', flexShrink: 0 }}
+                        placeholder="—"
+                        title="Grade"
+                      />
+                    ) : (
+                      <span style={{ fontSize: 13, flexShrink: 0, width: '60px', textAlign: 'center' }}>{item.grade || '-'}</span>
+                    )}
                     <button
                       onClick={() => loadItemHistory(item)}
                       title="View Order History"
@@ -2080,19 +2096,6 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                       📊
                     </button>
                   </div>
-                </td>
-                <td>
-                  {canEdit ? (
-                    <input
-                      type="text"
-                      value={item.grade || ''}
-                      onChange={e => updateItem(item.id, 'grade', e.target.value)}
-                      style={{ width: '75px' }}
-                      placeholder="—"
-                    />
-                  ) : (
-                    <span style={{ fontSize: 13 }}>{item.grade || '-'}</span>
-                  )}
                 </td>
                 <td>
                   {canEdit ? (
@@ -2307,7 +2310,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           {/* Phantom rows to fill space when < 5 items */}
           {paginatedItems.length > 0 && paginatedItems.length < 5 && Array.from({ length: 5 - paginatedItems.length }).map((_, i) => (
             <tr key={`phantom-${i}`} style={{ height: 52 }}>
-              <td colSpan="10" style={{ borderBottom: '1px solid var(--border)', opacity: 0 }} />
+              <td colSpan="9" style={{ borderBottom: '1px solid var(--border)', opacity: 0 }} />
             </tr>
           ))}
           </tbody>

@@ -11,20 +11,20 @@ const TIERS = [
     features: ['Real-time inventory', 'QR scanning', 'Customer CRM', 'CSV import/export', 'Receiving & stock-in', 'Audit trail'],
   },
   {
-    name: 'Pro', monthly: 225, annual: 2250, color: '#1976d2', accent: '#1976d2',
+    name: 'Pro', monthly: 250, annual: 2500, color: '#1976d2', accent: '#1976d2',
     tagline: 'Run your orders',
     limits: '5 users · 1,000 SKUs · unlimited locations · 200 orders/mo',
     features: ['Everything in Starter', 'Purchase orders', 'Pick lists', 'Box packing & invoices', 'Reports & analytics'],
     popular: true,
   },
   {
-    name: 'Business', monthly: 325, annual: 3250, color: '#7b1fa2', accent: '#7b1fa2',
+    name: 'Business', monthly: 350, annual: 3500, color: '#7b1fa2', accent: '#7b1fa2',
     tagline: 'Ship professionally',
     limits: '15 users · 2,000 SKUs · unlimited locations · 1,000 orders/mo',
     features: ['Everything in Pro', 'Live shipping rates', 'Integrate Shippo, ShipStation & EasyPost accounts', 'Batch label printing', 'International & customs', 'Triwall packing', 'Vendor contracts'],
   },
   {
-    name: 'Enterprise', monthly: 399, annual: 3990, color: '#0d7a52', accent: '#0d7a52',
+    name: 'Enterprise', monthly: 500, annual: 5000, color: '#0d7a52', accent: '#0d7a52',
     tagline: 'The full operation',
     limits: 'Unlimited users · Unlimited SKUs · Unlimited orders',
     features: ['Everything in Business', 'Bill to customer UPS account', 'Dual insurance comparison', 'Unlimited everything', 'Priority support & SLA'],

@@ -95,9 +95,9 @@ export default function AdminDashboard() {
   // Orgs without a billingCycle (legacy subs) default to monthly.
   const PLAN_PRICES = {
     starter:    { monthly: 100, annual: 1000 },
-    pro:        { monthly: 225, annual: 2250 },
-    business:   { monthly: 325, annual: 3250 },
-    enterprise: { monthly: 399, annual: 3990 },
+    pro:        { monthly: 250, annual: 2500 },
+    business:   { monthly: 350, annual: 3500 },
+    enterprise: { monthly: 500, annual: 5000 },
   };
   const mrrContribution = (org) => {
     const tier = PLAN_PRICES[org.plan];

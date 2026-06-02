@@ -72,7 +72,7 @@ export default function TermsOfService() {
           </Section>
 
           <Section title="4. Subscription Plans and Payment">
-            <P>SkidSling offers the following subscription tiers, billed monthly or annually: Starter ($100/month or $1,000/year), Pro ($225/month or $2,250/year), Business ($325/month or $3,250/year), and Enterprise ($399/month or $3,990/year). Annual plans offer a discount equivalent to two months free. Pricing is subject to change with 30 days' notice.</P>
+            <P>SkidSling offers the following subscription tiers, billed monthly or annually: Starter ($100/month or $1,000/year), Pro ($250/month or $2,500/year), Business ($350/month or $3,500/year), and Enterprise ($500/month or $5,000/year). Annual plans offer a discount equivalent to two months free. Pricing is subject to change with 30 days' notice.</P>
             <P>New accounts receive a 14-day free trial with no credit card required. After the trial period, continued use requires a paid subscription.</P>
             <P>Monthly subscriptions are billed monthly in advance; annual subscriptions are billed once per year in advance. Payment is processed through Stripe. You authorize us to charge your payment method on a recurring basis until you cancel.</P>
             <P>All fees are non-refundable except as required by law or as explicitly stated in a refund request reviewed at our discretion. We may issue credits or refunds on a case-by-case basis.</P>

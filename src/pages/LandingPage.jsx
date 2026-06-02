@@ -18,7 +18,7 @@ const TIERS = [
     ],
   },
   {
-    name: 'Pro', monthly: 225, annual: 2250, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
+    name: 'Pro', monthly: 250, annual: 2500, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
     tagline: 'Run your orders',
     limits: '5 users · 1,000 SKUs · unlimited locations · 200 orders/mo',
     features: [
@@ -33,7 +33,7 @@ const TIERS = [
     popular: true,
   },
   {
-    name: 'Business', monthly: 325, annual: 3250, color: '#a78bfa', bg: 'rgba(167,139,250,0.12)',
+    name: 'Business', monthly: 350, annual: 3500, color: '#a78bfa', bg: 'rgba(167,139,250,0.12)',
     tagline: 'Ship professionally',
     limits: '15 users · 2,000 SKUs · unlimited locations · 1,000 orders/mo',
     features: [
@@ -48,7 +48,7 @@ const TIERS = [
     ],
   },
   {
-    name: 'Enterprise', monthly: 399, annual: 3990, color: '#34d399', bg: 'rgba(52,211,153,0.12)',
+    name: 'Enterprise', monthly: 500, annual: 5000, color: '#34d399', bg: 'rgba(52,211,153,0.12)',
     tagline: 'The full operation',
     limits: 'Unlimited users · Unlimited SKUs · Unlimited orders',
     features: [

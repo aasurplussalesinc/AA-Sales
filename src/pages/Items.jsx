@@ -1041,9 +1041,13 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         const result = { updated, added };
 
         // Now assign locations. We set the item's own `location` field (the dropdown
-        // shown in the Items table) AND sync the location's inventory map. Using
-        // updateItemWithSync handles both, for updated and newly-created items alike.
+        // shown in the Items table) for EVERY row with a location, even if no
+        // Firestore Locations record matches the code. The inventory-map sync
+        // (updateItemWithSync) only runs when the location record is found —
+        // that's a separate concern from the dropdown text.
         let locationAssignments = 0;
+        let locationsOnlyOnItem = 0; // wrote item.location but no Firestore location record matched
+        const unmatchedLocationCodes = new Set();
         if (locationInventory.length > 0) {
           // Get fresh items list to get IDs (covers both updated and newly created)
           const freshItems = await DB.getItems();
@@ -1056,26 +1060,35 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
               (i.name && String(i.name).trim().toLowerCase() === skuKey)
             );
 
-            if (item) {
-              // Resolve the location record by code (normalized either side)
-              const loc = locations.find(l => {
-                const code = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
-                return code === inv.location ||
-                  DB.normalizeLocationCode(code) === DB.normalizeLocationCode(inv.location);
-              });
+            if (!item) continue;
 
-              if (loc) {
-                // Determine quantity to place at the location:
-                //  - if the CSV provided a qty, use it
-                //  - otherwise keep whatever stock the item already has
-                const qtyToSet = inv.hasQty ? inv.quantity : (item.stock || 0);
-                // Set the item's location field + sync the location inventory map.
-                await DB.updateItemWithSync(item.id, {
-                  location: inv.location,
-                  stock: qtyToSet
-                });
-                locationAssignments++;
-              }
+            // Resolve the Firestore Locations record by code (normalized either side).
+            const loc = locations.find(l => {
+              const code = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
+              return code === inv.location ||
+                DB.normalizeLocationCode(code) === DB.normalizeLocationCode(inv.location);
+            });
+
+            const qtyToSet = inv.hasQty ? inv.quantity : (item.stock || 0);
+
+            if (loc) {
+              // Best case: write item.location AND sync the location's inventory map.
+              await DB.updateItemWithSync(item.id, {
+                location: inv.location,
+                stock: qtyToSet
+              });
+              locationAssignments++;
+            } else {
+              // Fallback: location code in the CSV doesn't match any existing Locations
+              // record. Still write the string to item.location so the dropdown isn't
+              // blank — matches how brand-new items already work — but flag it so the
+              // user knows to either create the Location record or fix the CSV.
+              await DB.updateItem(item.id, {
+                location: inv.location,
+                stock: qtyToSet
+              });
+              locationsOnlyOnItem++;
+              unmatchedLocationCodes.add(inv.location);
             }
           }
         }
@@ -1083,6 +1096,11 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         let successMsg = `Import complete!\n\n✓ ${result.updated} item${result.updated === 1 ? '' : 's'} updated\n✓ ${result.added} item${result.added === 1 ? '' : 's'} added`;
         if (locationAssignments > 0) {
           successMsg += `\n✓ ${locationAssignments} location assignments created`;
+        }
+        if (locationsOnlyOnItem > 0) {
+          const codes = Array.from(unmatchedLocationCodes).slice(0, 10).join(', ');
+          const more = unmatchedLocationCodes.size > 10 ? ` (+${unmatchedLocationCodes.size - 10} more)` : '';
+          successMsg += `\n\n⚠️ ${locationsOnlyOnItem} item${locationsOnlyOnItem === 1 ? '' : 's'} had a location set on the item record, but the location code didn't match any existing Locations entry — so they aren't tracked in that location's inventory map.\n\nUnmatched codes: ${codes}${more}\n\nFix: either create those Locations entries in the Locations page, or correct the CSV location codes to match existing ones (e.g. W3-R3-E2).`;
         }
         alert(successMsg);
         

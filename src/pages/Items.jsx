@@ -292,6 +292,19 @@ export default function Items() {
     return code.replace(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i, '$1-R$2-$3$4');
   }).sort();
 
+  // Robust location-by-code lookup. Normalizes BOTH sides so picking the normalized
+  // code "W4-R2-F2" from the dropdown still matches a stored "W4-R2-F-2" record.
+  // Without this, multi-location saves silently no-op when the stored format differs
+  // from the dropdown format.
+  const findLocationByCode = (code) => {
+    if (!code) return null;
+    const target = DB.normalizeLocationCode(code);
+    return locations.find(l => {
+      const raw = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
+      return raw === code || DB.normalizeLocationCode(raw) === target;
+    }) || null;
+  };
+
   // Quantity filter options
   const quantityOptions = [
     { value: '', label: 'All' },
@@ -522,14 +535,17 @@ export default function Items() {
     if (useMultiLocation && itemId) {
       // Multi-location: update each location's inventory
       const validLocations = newItem.locationBreakdown.filter(lb => lb.location && lb.quantity > 0);
+      const unmatchedLocs = [];
       for (const lb of validLocations) {
-        const loc = locations.find(l => {
-          const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
-          return locCode === lb.location;
-        });
+        const loc = findLocationByCode(lb.location);
         if (loc) {
           await DB.setInventoryAtLocationWithSync(loc.id, itemId, parseInt(lb.quantity) || 0);
+        } else {
+          unmatchedLocs.push(lb.location);
         }
+      }
+      if (unmatchedLocs.length > 0) {
+        alert(`⚠️ Couldn't match these location codes to existing Locations records — they were NOT saved:\n\n${unmatchedLocs.join(', ')}\n\nCheck the Locations page to confirm those entries exist.`);
       }
     } else if (newItem.location && itemId) {
       // Single location: sync to location inventory
@@ -618,12 +634,19 @@ export default function Items() {
     
     // Load current location breakdown from location inventory
     const itemLocations = getItemLocations(item.id);
-    if (itemLocations.length > 0) {
+    if (itemLocations.length > 1) {
+      // Truly multi-location: open the multi-location UI
       setEditLocationBreakdown(itemLocations.map(loc => ({
         location: loc.locationCode,
         quantity: loc.quantity
       })));
       setEditUseMultiLocation(true);
+    } else if (itemLocations.length === 1) {
+      // Single location coming from the locations collection — single-location UI
+      const only = itemLocations[0];
+      setEditingItem(prev => ({ ...prev, location: only.locationCode, stock: only.quantity }));
+      setEditLocationBreakdown([{ location: only.locationCode, quantity: only.quantity }]);
+      setEditUseMultiLocation(false);
     } else if (item.location) {
       setEditLocationBreakdown([{ location: item.location, quantity: item.stock || 0 }]);
       setEditUseMultiLocation(false);
@@ -690,14 +713,17 @@ export default function Items() {
         
         // Set new location inventories (with sync)
         const validLocations = editLocationBreakdown.filter(lb => lb.location && lb.quantity > 0);
+        const unmatchedLocs = [];
         for (const lb of validLocations) {
-          const loc = locations.find(l => {
-            const locCode = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
-            return locCode === lb.location;
-          });
+          const loc = findLocationByCode(lb.location);
           if (loc) {
             await DB.setInventoryAtLocationWithSync(loc.id, editingItem.id, parseInt(lb.quantity) || 0);
+          } else {
+            unmatchedLocs.push(lb.location);
           }
+        }
+        if (unmatchedLocs.length > 0) {
+          alert(`⚠️ Couldn't match these location codes to existing Locations records — they were NOT saved:\n\n${unmatchedLocs.join(', ')}\n\nCheck the Locations page to confirm those entries exist.`);
         }
       }
 

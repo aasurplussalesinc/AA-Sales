@@ -49,6 +49,10 @@ export default function Items() {
   // Batch location state
   const [showBatchLocation, setShowBatchLocation] = useState(false);
   const [batchLocation, setBatchLocation] = useState('');
+
+  // Batch price state
+  const [showBatchPrice, setShowBatchPrice] = useState(false);
+  const [batchPrice, setBatchPrice] = useState('');
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -1358,6 +1362,35 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     alert(`Location "${batchLocation || '(cleared)'}" applied to ${selectedItems.length} items.\n\n⚠️ Click the green "Save Changes" button to save to database!`);
   };
 
+  // Apply price to all selected items
+  const applyBatchPrice = () => {
+    if (selectedItems.length === 0) {
+      alert('Select items first');
+      return;
+    }
+    // Parse — strip $ and commas so users can paste "$25.00" or "1,299.99"
+    const parsed = parseFloat(String(batchPrice).replace(/[^0-9.\-]/g, ''));
+    if (!isFinite(parsed) || parsed < 0) {
+      alert('Enter a valid non-negative price (e.g. 25 or 25.00)');
+      return;
+    }
+    // Round to 2 decimals so we never get floating-point noise like 25.000000001
+    const newPrice = Math.round(parsed * 100) / 100;
+
+    const updatedItems = items.map(item => {
+      if (selectedItems.includes(item.id)) {
+        return { ...item, price: newPrice };
+      }
+      return item;
+    });
+
+    setItems(updatedItems);
+    setHasChanges(true);
+    setShowBatchPrice(false);
+    setBatchPrice('');
+    alert(`Price $${newPrice.toFixed(2)} applied to ${selectedItems.length} items.\n\n⚠️ Click the green "Save Changes" button to save to database!`);
+  };
+
   const printBulkLabels = async (format) => {
     const itemsToPrint = items.filter(i => selectedItems.includes(i.id));
     if (itemsToPrint.length === 0) return alert('Select items first');
@@ -1559,6 +1592,16 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           </button>
         )}
         
+        {canEdit && (
+          <button 
+            className="btn"
+            onClick={() => setShowBatchPrice(true)}
+            style={{ background: '#388e3c', color: 'var(--text-on-dark)' }}
+          >
+            💲 Batch Price
+          </button>
+        )}
+        
         <button 
           className="btn"
           onClick={() => setShowLabelModal(true)}
@@ -1747,6 +1790,76 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                 onClick={applyBatchLocation}
                 disabled={selectedItems.length === 0 || !batchLocation}
                 style={{ flex: 1, background: '#2196f3', color: 'var(--text-on-dark)' }}
+              >
+                Apply to {selectedItems.length} Items
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Batch Price Modal */}
+      {showBatchPrice && (
+        <div className="modal-overlay" style={{ zIndex: 1000 }}>
+          <div className="modal" style={{ maxWidth: 500, padding: 30 }}>
+            <h3 style={{ marginBottom: 20 }}>💲 Batch Set Price</h3>
+
+            {/* Selection controls */}
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ marginBottom: 10 }}>
+                <strong>{selectedItems.length}</strong> items selected
+              </p>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button className="btn btn-primary btn-sm" onClick={selectAllFiltered}>
+                  Select All Filtered ({sortedItems.length})
+                </button>
+                <button className="btn btn-sm" onClick={() => setSelectedItems(paginatedItems.map(i => i.id))} style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>
+                  Select This Page ({paginatedItems.length})
+                </button>
+                {selectedItems.length > 0 && (
+                  <button className="btn btn-sm" onClick={clearSelection} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
+                    Clear Selection
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Price input */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', marginBottom: 8, fontWeight: 600 }}>New Price (USD)</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-muted)' }}>$</span>
+                <input
+                  type="number"
+                  className="form-input"
+                  value={batchPrice}
+                  onChange={e => setBatchPrice(e.target.value)}
+                  placeholder="0.00"
+                  step="0.01"
+                  min="0"
+                  autoFocus
+                  style={{ flex: 1, fontSize: 18 }}
+                />
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                This will overwrite the existing price on all selected items.
+              </p>
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                className="btn"
+                onClick={() => { setShowBatchPrice(false); setBatchPrice(''); }}
+                style={{ flex: 1, background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn"
+                onClick={applyBatchPrice}
+                disabled={selectedItems.length === 0 || batchPrice === '' || parseFloat(batchPrice) < 0}
+                style={{ flex: 1, background: '#388e3c', color: 'var(--text-on-dark)' }}
               >
                 Apply to {selectedItems.length} Items
               </button>

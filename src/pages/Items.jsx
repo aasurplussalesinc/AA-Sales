@@ -2407,20 +2407,51 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                   )}
                 </td>
                 <td>
-                  {canEdit ? (
-                    <select
-                      value={normalizeLocationCode(item.location) || ''}
-                      onChange={e => updateItem(item.id, 'location', e.target.value)}
-                      style={{ width: '110px', padding: '4px' }}
-                    >
-                      <option value="">--</option>
-                      {locationOptions.map(loc => (
-                        <option key={loc} value={loc}>{loc}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span style={{ fontSize: 13 }}>{normalizeLocationCode(item.location) || '-'}</span>
-                  )}
+                  {(() => {
+                    const itemLocs = getItemLocations(item.id);
+                    // Multi-location: show a compact pill that opens the locations popup.
+                    // Single-location: render the editable dropdown so users can change inline.
+                    if (itemLocs.length > 1) {
+                      const primary = itemLocs[0].locationCode;
+                      const moreCount = itemLocs.length - 1;
+                      return (
+                        <button
+                          onClick={() => setViewingItemLocations(item)}
+                          title={`In ${itemLocs.length} locations — click to view all`}
+                          style={{
+                            background: 'rgba(33,150,243,0.10)',
+                            border: '1px solid rgba(33,150,243,0.35)',
+                            color: 'var(--text-primary)',
+                            padding: '4px 8px',
+                            borderRadius: 4,
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            whiteSpace: 'nowrap',
+                            width: '110px',
+                            textAlign: 'center'
+                          }}
+                        >
+                          📍 {primary} <span style={{ color: '#2196f3' }}>+{moreCount}</span>
+                        </button>
+                      );
+                    }
+                    // Single-location (or unassigned) — keep existing dropdown
+                    return canEdit ? (
+                      <select
+                        value={normalizeLocationCode(item.location) || ''}
+                        onChange={e => updateItem(item.id, 'location', e.target.value)}
+                        style={{ width: '110px', padding: '4px' }}
+                      >
+                        <option value="">--</option>
+                        {locationOptions.map(loc => (
+                          <option key={loc} value={loc}>{loc}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <span style={{ fontSize: 13 }}>{normalizeLocationCode(item.location) || '-'}</span>
+                    );
+                  })()}
                 </td>
                 <td style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)', fontSize: 12 }}>
                   {formatDate(item.createdAt)}

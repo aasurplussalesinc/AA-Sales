@@ -161,16 +161,15 @@ function NavBar() {
       </div>
       <div className="nav-tabs">
         <Link to="/" className={`nav-tab ${isActive('/') ? 'active' : ''}`}>📊 Dashboard</Link>
-        <Link to="/scanner" className={`nav-tab ${isActive('/scanner') ? 'active' : ''}`}>📷 Scan</Link>
-        <Link to="/items" className={`nav-tab ${isActive('/items') ? 'active' : ''}`}>📦 Items</Link>
-        <Link to="/locations" className={`nav-tab ${isActive('/locations') ? 'active' : ''}`}>📍 Locations</Link>
-        <Link to="/customers" className={`nav-tab ${isActive('/customers') ? 'active' : ''}`}>👥 Customers</Link>
         <Link to="/receiving" className={`nav-tab ${isActive('/receiving') ? 'active' : ''}`}>📥 Receiving</Link>
-        {tier.canUseOrders && <Link to="/purchase-orders" className={`nav-tab ${isActive('/purchase-orders') ? 'active' : ''}`}>🧾 Orders</Link>}
+        <Link to="/locations" className={`nav-tab ${isActive('/locations') ? 'active' : ''}`}>📍 Locations</Link>
+        <Link to="/items" className={`nav-tab ${isActive('/items') ? 'active' : ''}`}>📦 Items</Link>
         {tier.canUsePickLists && <Link to="/pick-lists" className={`nav-tab ${isActive('/pick-lists') ? 'active' : ''}`}>📋 Pick Lists</Link>}
-        {tier.canUseReports && <Link to="/reports" className={`nav-tab ${isActive('/reports') ? 'active' : ''}`}>📈 Reports</Link>}
+        {tier.canUseOrders && <Link to="/purchase-orders" className={`nav-tab ${isActive('/purchase-orders') ? 'active' : ''}`}>🧾 Orders</Link>}
         {tier.canUseShipping && <Link to="/shipping" className={`nav-tab ${isActive('/shipping') ? 'active' : ''}`}>🚚 Shipping</Link>}
+        <Link to="/customers" className={`nav-tab ${isActive('/customers') ? 'active' : ''}`}>👥 Customers</Link>
         {tier.canUseContracts && <Link to="/contracts" className={`nav-tab ${isActive('/contracts') ? 'active' : ''}`}>📄 Contracts</Link>}
+        {tier.canUseReports && <Link to="/reports" className={`nav-tab ${isActive('/reports') ? 'active' : ''}`}>📈 Reports</Link>}
         <Link to="/movements" className={`nav-tab ${isActive('/movements') ? 'active' : ''}`}>🔄 Movements</Link>
         <Link to="/activity" className={`nav-tab ${isActive('/activity') ? 'active' : ''}`}>📜 Activity</Link>
         <Link to="/settings" className={`nav-tab ${isActive('/settings') ? 'active' : ''}`}>⚙️ Settings</Link>

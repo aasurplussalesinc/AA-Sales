@@ -120,16 +120,26 @@ export default function PurchaseOrders() {
   // Pull-the-latest-customer-record-onto-this-order action. Used from the
   // view-order modal when the user knows the customer changed and wants
   // this specific order to reflect it.
-  const refreshCustomerInfo = async (order) => {
-    if (!order?.customerId) {
-      alert("This order isn't linked to a customer record — nothing to refresh from.");
-      return;
-    }
-    const current = customers.find(c => c.id === order.customerId);
+  const refreshCustomerInfo = async (order, resolvedCustomer = null) => {
+    // Resolve the customer the same way the button does — by id first, then by name.
+    let current = resolvedCustomer;
     if (!current) {
-      alert("Couldn't find the customer record for this order. They may have been deleted.");
+      if (order.customerId) {
+        current = customers.find(c => c.id === order.customerId);
+      }
+      if (!current && order.customerName) {
+        const target = order.customerName.trim().toLowerCase();
+        current = customers.find(c =>
+          (c.company || '').trim().toLowerCase() === target ||
+          (c.customerName || '').trim().toLowerCase() === target
+        );
+      }
+    }
+    if (!current) {
+      alert("Couldn't find a matching customer record for this order. If the customer name doesn't match any record in the Customers page, there's nothing to refresh from.");
       return;
     }
+
     const snapshot = buildCustomerSnapshot(current);
 
     // Show a diff so the user knows what they're overwriting.
@@ -143,14 +153,15 @@ export default function PurchaseOrders() {
         changes.push(`${label}:\n  was:  ${before || '(blank)'}\n  now:  ${after || '(blank)'}`);
       }
     }
-
-    if (changes.length === 0) {
+    // Track whether we're stamping the customerId for the first time (for older orders).
+    const stampingId = !order.customerId && current.id;
+    if (changes.length === 0 && !stampingId) {
       alert("This order already matches the current customer record — nothing to update.");
       return;
     }
 
     const confirmMsg = `The following will be updated on order ${order.poNumber || order.id}:\n\n` +
-      changes.join('\n\n') +
+      (changes.length ? changes.join('\n\n') : '(no field changes — just linking customerId)') +
       `\n\nProceed?`;
     if (!confirm(confirmMsg)) return;
 
@@ -1803,28 +1814,53 @@ ${labelsHtml}
             <div className="modal-body" style={{ padding: 20 }}>
               <div style={{ background: 'var(--bg-surface-2)', padding: 15, borderRadius: 8, marginBottom: 20 }}>
                 {(() => {
+                  // Find the customer record this order is tied to. Prefer customerId,
+                  // but fall back to a case-insensitive name match for older orders
+                  // that were created before customerId got snapshotted.
+                  let current = selectedOrder.customerId
+                    ? customers.find(c => c.id === selectedOrder.customerId)
+                    : null;
+                  if (!current && selectedOrder.customerName) {
+                    const target = selectedOrder.customerName.trim().toLowerCase();
+                    current = customers.find(c =>
+                      (c.company || '').trim().toLowerCase() === target ||
+                      (c.customerName || '').trim().toLowerCase() === target
+                    );
+                  }
+
                   // Detect mismatch between snapshot on order and current customer record
-                  if (!selectedOrder.customerId) return null;
-                  const current = customers.find(c => c.id === selectedOrder.customerId);
-                  if (!current) return null;
-                  const liveSnap = buildCustomerSnapshot(current);
-                  const fields = ['customerName', 'customerContact', 'customerEmail', 'customerPhone', 'customerAddress'];
-                  const isStale = fields.some(f => (selectedOrder[f] || '') !== (liveSnap[f] || ''));
+                  let isStale = false;
+                  let helpMsg = '';
+                  if (!current) {
+                    helpMsg = "Couldn't find a matching customer record — refresh won't have anything to pull from.";
+                  } else {
+                    const liveSnap = buildCustomerSnapshot(current);
+                    const fields = ['customerName', 'customerContact', 'customerEmail', 'customerPhone', 'customerAddress'];
+                    isStale = fields.some(f => (selectedOrder[f] || '') !== (liveSnap[f] || ''));
+                  }
+
                   return (
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
                       {isStale ? (
                         <span style={{ fontSize: 12, color: '#b26a00', background: 'rgba(245,166,35,0.15)', padding: '4px 10px', borderRadius: 4, fontWeight: 600 }}>
                           ⚠️ Customer record has changed since this order was created
                         </span>
+                      ) : helpMsg ? (
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>{helpMsg}</span>
                       ) : <span />}
                       <button
-                        onClick={() => refreshCustomerInfo(selectedOrder)}
-                        title="Pull the latest name / address / phone / email from the customer record onto this order"
+                        onClick={() => refreshCustomerInfo(selectedOrder, current)}
+                        title={current
+                          ? "Pull the latest name / address / phone / email from the customer record onto this order"
+                          : "No matching customer record found to refresh from"}
+                        disabled={!current}
                         style={{
                           background: isStale ? '#f57c00' : 'var(--btn-secondary-bg)',
                           color: isStale ? 'white' : 'var(--btn-secondary-color)',
                           border: 'none', padding: '6px 12px', borderRadius: 4,
-                          cursor: 'pointer', fontSize: 12, fontWeight: 600
+                          cursor: current ? 'pointer' : 'not-allowed',
+                          opacity: current ? 1 : 0.5,
+                          fontSize: 12, fontWeight: 600
                         }}
                       >
                         🔄 Refresh Customer Info

@@ -99,15 +99,71 @@ export default function PurchaseOrders() {
     c.customerName?.toLowerCase().includes(searchCustomer.toLowerCase())
   ));
 
+  // Build the customer snapshot the same way for create AND refresh, so they
+  // never drift apart. Returns the fields that get copied onto an order from
+  // a customer record.
+  const buildCustomerSnapshot = (customer) => ({
+    customerId: customer.id,
+    customerName: customer.company || customer.customerName,
+    customerContact: customer.company ? customer.customerName : '',
+    customerEmail: customer.email || '',
+    customerPhone: customer.phone || '',
+    customerAddress: [customer.address, customer.city, customer.state, customer.zipCode]
+      .filter(Boolean).join(', ')
+  });
+
   const selectCustomerForPO = (customer) => {
-    setNewPO({
-      ...newPO, customerId: customer.id, 
-      customerName: customer.company || customer.customerName,
-      customerContact: customer.company ? customer.customerName : '', // Contact is customerName if company exists
-      customerEmail: customer.email || '', customerPhone: customer.phone || '',
-      customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', ')
-    });
+    setNewPO({ ...newPO, ...buildCustomerSnapshot(customer) });
     setSearchCustomer('');
+  };
+
+  // Pull-the-latest-customer-record-onto-this-order action. Used from the
+  // view-order modal when the user knows the customer changed and wants
+  // this specific order to reflect it.
+  const refreshCustomerInfo = async (order) => {
+    if (!order?.customerId) {
+      alert("This order isn't linked to a customer record — nothing to refresh from.");
+      return;
+    }
+    const current = customers.find(c => c.id === order.customerId);
+    if (!current) {
+      alert("Couldn't find the customer record for this order. They may have been deleted.");
+      return;
+    }
+    const snapshot = buildCustomerSnapshot(current);
+
+    // Show a diff so the user knows what they're overwriting.
+    const fields = ['customerName', 'customerContact', 'customerEmail', 'customerPhone', 'customerAddress'];
+    const changes = [];
+    for (const f of fields) {
+      const before = order[f] || '';
+      const after = snapshot[f] || '';
+      if (before !== after) {
+        const label = f.replace(/^customer/, '').replace(/([A-Z])/g, ' $1').trim();
+        changes.push(`${label}:\n  was:  ${before || '(blank)'}\n  now:  ${after || '(blank)'}`);
+      }
+    }
+
+    if (changes.length === 0) {
+      alert("This order already matches the current customer record — nothing to update.");
+      return;
+    }
+
+    const confirmMsg = `The following will be updated on order ${order.poNumber || order.id}:\n\n` +
+      changes.join('\n\n') +
+      `\n\nProceed?`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      await DB.updatePurchaseOrder(order.id, snapshot);
+      // Refresh local state so the modal shows the new values
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...snapshot } : o));
+      setSelectedOrder(prev => prev && prev.id === order.id ? { ...prev, ...snapshot } : prev);
+      alert('Customer info refreshed on this order.');
+    } catch (err) {
+      console.error('Refresh failed:', err);
+      alert('Failed to refresh customer info: ' + (err.message || err));
+    }
   };
 
   const addItemToPO = (item) => {
@@ -1746,6 +1802,36 @@ ${labelsHtml}
             </div>
             <div className="modal-body" style={{ padding: 20 }}>
               <div style={{ background: 'var(--bg-surface-2)', padding: 15, borderRadius: 8, marginBottom: 20 }}>
+                {(() => {
+                  // Detect mismatch between snapshot on order and current customer record
+                  if (!selectedOrder.customerId) return null;
+                  const current = customers.find(c => c.id === selectedOrder.customerId);
+                  if (!current) return null;
+                  const liveSnap = buildCustomerSnapshot(current);
+                  const fields = ['customerName', 'customerContact', 'customerEmail', 'customerPhone', 'customerAddress'];
+                  const isStale = fields.some(f => (selectedOrder[f] || '') !== (liveSnap[f] || ''));
+                  return (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
+                      {isStale ? (
+                        <span style={{ fontSize: 12, color: '#b26a00', background: 'rgba(245,166,35,0.15)', padding: '4px 10px', borderRadius: 4, fontWeight: 600 }}>
+                          ⚠️ Customer record has changed since this order was created
+                        </span>
+                      ) : <span />}
+                      <button
+                        onClick={() => refreshCustomerInfo(selectedOrder)}
+                        title="Pull the latest name / address / phone / email from the customer record onto this order"
+                        style={{
+                          background: isStale ? '#f57c00' : 'var(--btn-secondary-bg)',
+                          color: isStale ? 'white' : 'var(--btn-secondary-color)',
+                          border: 'none', padding: '6px 12px', borderRadius: 4,
+                          cursor: 'pointer', fontSize: 12, fontWeight: 600
+                        }}
+                      >
+                        🔄 Refresh Customer Info
+                      </button>
+                    </div>
+                  );
+                })()}
                 <p style={{ margin: '3px 0' }}><strong>Customer:</strong> {selectedOrder.customerName}</p>
                 {selectedOrder.customerContact && <p style={{ margin: '3px 0' }}><strong>Contact:</strong> {selectedOrder.customerContact}</p>}
                 {selectedOrder.customerPhone && <p style={{ margin: '3px 0' }}>Phone: {selectedOrder.customerPhone}</p>}

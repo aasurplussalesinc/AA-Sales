@@ -259,11 +259,11 @@ export default function PurchaseOrders() {
         await DB.updatePurchaseOrder(editingOrderId, newPO);
         createdOrderId = editingOrderId;
         
-        // If order has been confirmed, sync the pick list with updated items
-        console.log('Looking for pick list, pickLists count:', pickLists.length);
-        console.log('editingOrderId:', editingOrderId);
-        const linkedPickList = pickLists.find(pl => pl.purchaseOrderId === editingOrderId);
-        console.log('Found linkedPickList:', linkedPickList);
+        // If order has been confirmed, sync the pick list with updated items.
+        // Fetch pick lists fresh from the DB so this does not depend on stale in-memory state.
+        const freshPickLists = await DB.getPickLists();
+        const linkedPickList = freshPickLists.find(pl => pl.purchaseOrderId === editingOrderId);
+        console.log('Sync: linked pick list found?', !!linkedPickList);
         
         if (linkedPickList) {
           // Build updated pick list items, preserving picked quantities for existing items
@@ -279,7 +279,7 @@ export default function PurchaseOrders() {
               itemId: poItem.itemId,
               itemName: poItem.itemName,
               partNumber: poItem.partNumber,
-              requestedQty: poItem.quantity,
+              requestedQty: parseInt(poItem.quantity) || 0,
               pickedQty: existingPlItem?.pickedQty || 0,
               location: poItem.location || existingPlItem?.location || '',
               unitPrice: poItem.unitPrice

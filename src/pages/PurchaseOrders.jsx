@@ -262,7 +262,17 @@ export default function PurchaseOrders() {
         // If order has been confirmed, sync the pick list with updated items.
         // Fetch pick lists fresh from the DB so this does not depend on stale in-memory state.
         const freshPickLists = await DB.getPickLists();
-        const linkedPickList = freshPickLists.find(pl => pl.purchaseOrderId === editingOrderId);
+        let linkedPickList = freshPickLists.find(pl => pl.purchaseOrderId === editingOrderId);
+        // Fallback: some pick lists may be missing the purchaseOrderId link (older lists, or
+        // created before linking existed). Match by the auto-generated name ("PO: {poNumber} - ...")
+        // and repair the link so future syncs work by id.
+        if (!linkedPickList && newPO.poNumber) {
+          linkedPickList = freshPickLists.find(pl => pl.name && pl.name.includes('PO: ' + newPO.poNumber));
+          if (linkedPickList && linkedPickList.purchaseOrderId !== editingOrderId) {
+            await DB.updatePickList(linkedPickList.id, { purchaseOrderId: editingOrderId });
+            console.log('Repaired pick list link for', newPO.poNumber);
+          }
+        }
         console.log('Sync: linked pick list found?', !!linkedPickList);
         
         if (linkedPickList) {

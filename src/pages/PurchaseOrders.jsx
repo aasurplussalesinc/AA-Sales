@@ -99,82 +99,15 @@ export default function PurchaseOrders() {
     c.customerName?.toLowerCase().includes(searchCustomer.toLowerCase())
   ));
 
-  // Build the customer snapshot the same way for create AND refresh, so they
-  // never drift apart. Returns the fields that get copied onto an order from
-  // a customer record.
-  const buildCustomerSnapshot = (customer) => ({
-    customerId: customer.id,
-    customerName: customer.company || customer.customerName,
-    customerContact: customer.company ? customer.customerName : '',
-    customerEmail: customer.email || '',
-    customerPhone: customer.phone || '',
-    customerAddress: [customer.address, customer.city, customer.state, customer.zipCode]
-      .filter(Boolean).join(', ')
-  });
-
   const selectCustomerForPO = (customer) => {
-    setNewPO({ ...newPO, ...buildCustomerSnapshot(customer) });
+    setNewPO({
+      ...newPO, customerId: customer.id, 
+      customerName: customer.company || customer.customerName,
+      customerContact: customer.company ? customer.customerName : '', // Contact is customerName if company exists
+      customerEmail: customer.email || '', customerPhone: customer.phone || '',
+      customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', ')
+    });
     setSearchCustomer('');
-  };
-
-  // Pull-the-latest-customer-record-onto-this-order action. Used from the
-  // view-order modal when the user knows the customer changed and wants
-  // this specific order to reflect it.
-  const refreshCustomerInfo = async (order, resolvedCustomer = null) => {
-    // Resolve the customer the same way the button does — by id first, then by name.
-    let current = resolvedCustomer;
-    if (!current) {
-      if (order.customerId) {
-        current = customers.find(c => c.id === order.customerId);
-      }
-      if (!current && order.customerName) {
-        const target = order.customerName.trim().toLowerCase();
-        current = customers.find(c =>
-          (c.company || '').trim().toLowerCase() === target ||
-          (c.customerName || '').trim().toLowerCase() === target
-        );
-      }
-    }
-    if (!current) {
-      alert("Couldn't find a matching customer record for this order. If the customer name doesn't match any record in the Customers page, there's nothing to refresh from.");
-      return;
-    }
-
-    const snapshot = buildCustomerSnapshot(current);
-
-    // Show a diff so the user knows what they're overwriting.
-    const fields = ['customerName', 'customerContact', 'customerEmail', 'customerPhone', 'customerAddress'];
-    const changes = [];
-    for (const f of fields) {
-      const before = order[f] || '';
-      const after = snapshot[f] || '';
-      if (before !== after) {
-        const label = f.replace(/^customer/, '').replace(/([A-Z])/g, ' $1').trim();
-        changes.push(`${label}:\n  was:  ${before || '(blank)'}\n  now:  ${after || '(blank)'}`);
-      }
-    }
-    // Track whether we're stamping the customerId for the first time (for older orders).
-    const stampingId = !order.customerId && current.id;
-    if (changes.length === 0 && !stampingId) {
-      alert("This order already matches the current customer record — nothing to update.");
-      return;
-    }
-
-    const confirmMsg = `The following will be updated on order ${order.poNumber || order.id}:\n\n` +
-      (changes.length ? changes.join('\n\n') : '(no field changes — just linking customerId)') +
-      `\n\nProceed?`;
-    if (!confirm(confirmMsg)) return;
-
-    try {
-      await DB.updatePurchaseOrder(order.id, snapshot);
-      // Refresh local state so the modal shows the new values
-      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, ...snapshot } : o));
-      setSelectedOrder(prev => prev && prev.id === order.id ? { ...prev, ...snapshot } : prev);
-      alert('Customer info refreshed on this order.');
-    } catch (err) {
-      console.error('Refresh failed:', err);
-      alert('Failed to refresh customer info: ' + (err.message || err));
-    }
   };
 
   const addItemToPO = (item) => {
@@ -183,6 +116,7 @@ export default function PurchaseOrders() {
     const newItem = {
       lineId: lineId,
       itemId: item.id, itemName: item.name, partNumber: item.partNumber, location: item.location || '',
+      grade: item.grade || '',
       quantity: '', qtyShipped: '', unitPrice: unitPrice, estTotal: 0, lineTotal: 0,
       source: 'inventory', contractId: '', contractNumber: '', costPerLb: 0,
       weightPerItem: item.weight || '', itemCost: item.cost || 0
@@ -400,6 +334,7 @@ export default function PurchaseOrders() {
       const price = parseFloat(item.unitPrice) || 0;
       return { ...item, quantity: item.quantity === '' ? '' : qty, qtyShipped: item.qtyShipped === '' ? '' : qtyShipped,
         unitPrice: price, estTotal: qty * price, lineTotal: qtyShipped * price,
+        grade: item.grade || (items.find(it => it.id === item.itemId)?.grade) || '',
         source: item.source || 'inventory', contractId: item.contractId || '', contractNumber: item.contractNumber || '',
         costPerLb: item.costPerLb || 0, weightPerItem: item.weightPerItem || '', itemCost: item.itemCost || 0 };
     });
@@ -1248,12 +1183,13 @@ export default function PurchaseOrders() {
   const printPO = (order, printType = 'invoice') => {
     const isEstimate = printType === 'estimate';
     const accentColor = isEstimate ? '#1976d2' : '#4a5d23';
-    const items = (order.items || []).map(item => {
+    const lineItems = (order.items || []).map(item => {
       const qty = isEstimate ? (item.quantity || 0) : (item.qtyShipped || 0);
       const price = parseFloat(item.unitPrice) || 0;
-      return { ...item, displayQty: qty, displayTotal: qty * price };
+      const resolvedGrade = item.grade || (items.find(it => it.id === item.itemId)?.grade) || '';
+      return { ...item, displayQty: qty, displayTotal: qty * price, resolvedGrade };
     });
-    const subtotal = items.reduce((sum, i) => sum + i.displayTotal, 0);
+    const subtotal = lineItems.reduce((sum, i) => sum + i.displayTotal, 0);
     const tax = parseFloat(order.tax) || 0;
     const shipping = parseFloat(order.shipping) || 0;
     const credit = parseFloat(order.credit) || 0;
@@ -1297,7 +1233,7 @@ export default function PurchaseOrders() {
       <div class="header"><div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : '<div style="font-size:18px;font-weight:bold;color:' + accentColor + '">' + (organization?.name || 'Company') + '</div>'}</div><div class="company-details"><strong>${organization?.name || 'AA Surplus Sales'}</strong>2153 Pond Road, Ronkonkoma NY 11779<br>${organization?.phone || '716-496-2451'}</div></div>
       <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${order.poNumber}</div>
       <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerContact ? '<p>Attn: ' + order.customerContact + '</p>' : ''}${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3>' + (order.shipToCompany ? '<p class="highlight">' + order.shipToCompany + '</p>' : '') + '<p>' + order.shipToAddress.replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${displayDate}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p>${order.customerPO ? '<p><strong>Customer PO:</strong> ' + order.customerPO + '</p>' : ''}</div></div>
-      <table><thead><tr><th style="width:60px">SKU</th><th>Description</th>${isEstimate ? '<th style="text-align:center;width:50px">Qty</th>' : '<th style="text-align:center;width:50px">Ord</th><th style="text-align:center;width:50px">Ship</th>'}<th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${items.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + (item.notes ? '<div style="font-size:9px;color:#666;font-style:italic">' + item.notes + '</div>' : '') + '</td>' + (isEstimate ? '<td style="text-align:center">' + (item.quantity || 0) + '</td>' : '<td style="text-align:center">' + (item.quantity || 0) + '</td><td style="text-align:center;font-weight:bold">' + (item.qtyShipped || 0) + '</td>') + '<td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
+      <table><thead><tr><th style="width:60px">SKU</th><th>Description</th>${isEstimate ? '<th style="text-align:center;width:50px">Qty</th>' : '<th style="text-align:center;width:50px">Ord</th><th style="text-align:center;width:50px">Ship</th>'}<th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${lineItems.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + (item.resolvedGrade ? '<div style="font-size:9px;color:' + accentColor + ';font-weight:600;margin-top:1px">Condition: ' + item.resolvedGrade + '</div>' : '') + (item.notes ? '<div style="font-size:9px;color:#666;font-style:italic">' + item.notes + '</div>' : '') + '</td>' + (isEstimate ? '<td style="text-align:center">' + (item.quantity || 0) + '</td>' : '<td style="text-align:center">' + (item.quantity || 0) + '</td><td style="text-align:center;font-weight:bold">' + (item.qtyShipped || 0) + '</td>') + '<td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
       <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : ''}${credit > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Credit</span><span>-$' + credit.toFixed(2) + '</span></div>' : ''}${discount > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Discount</span><span>-$' + discount.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
       <div style="margin-top:10px;font-size:9px;color:#666;font-style:italic;text-align:right">Payments by credit card are subject to a 3.5% processing fee</div>
       ${order.notes ? '<div class="notes"><h3>Notes</h3><p>' + order.notes + '</p></div>' : ''}
@@ -1650,18 +1586,18 @@ ${labelsHtml}
 
               {/* Line Items Table */}
               {newPO.items.length > 0 && (
-                <div style={{ marginBottom: 20, overflowX: 'auto' }}>
+                <div style={{ marginBottom: 20, overflowX: 'auto', overflowY: 'auto', maxHeight: '50vh' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
                       <tr style={{ background: 'var(--bg-surface-2)' }}>
-                        <th style={{ padding: 8, textAlign: 'left' }}>Item</th>
-                        <th style={{ padding: 8, width: 140 }}>Source</th>
-                        <th style={{ padding: 8, width: 70 }}>Qty Ord</th>
-                        <th style={{ padding: 8, width: 70 }}>Qty Ship</th>
-                        <th style={{ padding: 8, width: 80 }}>Price</th>
-                        <th style={{ padding: 8, width: 80, background: 'var(--bg-badge-green)' }}>Total</th>
-                        <th style={{ padding: 8, width: 90, color: 'var(--text-muted)', fontStyle: 'italic' }}>Notes</th>
-                        <th style={{ padding: 8, width: 40 }}></th>
+                        <th style={{ padding: 8, textAlign: 'left', position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-surface-2)' }}>Item</th>
+                        <th style={{ padding: 8, width: 140, position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-surface-2)' }}>Source</th>
+                        <th style={{ padding: 8, width: 70, position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-surface-2)' }}>Qty Ord</th>
+                        <th style={{ padding: 8, width: 70, position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-surface-2)' }}>Qty Ship</th>
+                        <th style={{ padding: 8, width: 80, position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-surface-2)' }}>Price</th>
+                        <th style={{ padding: 8, width: 80, position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-badge-green)' }}>Total</th>
+                        <th style={{ padding: 8, width: 90, color: 'var(--text-muted)', fontStyle: 'italic', position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-surface-2)' }}>Notes</th>
+                        <th style={{ padding: 8, width: 40, position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-surface-2)' }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1813,61 +1749,6 @@ ${labelsHtml}
             </div>
             <div className="modal-body" style={{ padding: 20 }}>
               <div style={{ background: 'var(--bg-surface-2)', padding: 15, borderRadius: 8, marginBottom: 20 }}>
-                {(() => {
-                  // Find the customer record this order is tied to. Prefer customerId,
-                  // but fall back to a case-insensitive name match for older orders
-                  // that were created before customerId got snapshotted.
-                  let current = selectedOrder.customerId
-                    ? customers.find(c => c.id === selectedOrder.customerId)
-                    : null;
-                  if (!current && selectedOrder.customerName) {
-                    const target = selectedOrder.customerName.trim().toLowerCase();
-                    current = customers.find(c =>
-                      (c.company || '').trim().toLowerCase() === target ||
-                      (c.customerName || '').trim().toLowerCase() === target
-                    );
-                  }
-
-                  // Detect mismatch between snapshot on order and current customer record
-                  let isStale = false;
-                  let helpMsg = '';
-                  if (!current) {
-                    helpMsg = "Couldn't find a matching customer record — refresh won't have anything to pull from.";
-                  } else {
-                    const liveSnap = buildCustomerSnapshot(current);
-                    const fields = ['customerName', 'customerContact', 'customerEmail', 'customerPhone', 'customerAddress'];
-                    isStale = fields.some(f => (selectedOrder[f] || '') !== (liveSnap[f] || ''));
-                  }
-
-                  return (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 12, flexWrap: 'wrap' }}>
-                      {isStale ? (
-                        <span style={{ fontSize: 12, color: '#b26a00', background: 'rgba(245,166,35,0.15)', padding: '4px 10px', borderRadius: 4, fontWeight: 600 }}>
-                          ⚠️ Customer record has changed since this order was created
-                        </span>
-                      ) : helpMsg ? (
-                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>{helpMsg}</span>
-                      ) : <span />}
-                      <button
-                        onClick={() => refreshCustomerInfo(selectedOrder, current)}
-                        title={current
-                          ? "Pull the latest name / address / phone / email from the customer record onto this order"
-                          : "No matching customer record found to refresh from"}
-                        disabled={!current}
-                        style={{
-                          background: isStale ? '#f57c00' : 'var(--btn-secondary-bg)',
-                          color: isStale ? 'white' : 'var(--btn-secondary-color)',
-                          border: 'none', padding: '6px 12px', borderRadius: 4,
-                          cursor: current ? 'pointer' : 'not-allowed',
-                          opacity: current ? 1 : 0.5,
-                          fontSize: 12, fontWeight: 600
-                        }}
-                      >
-                        🔄 Refresh Customer Info
-                      </button>
-                    </div>
-                  );
-                })()}
                 <p style={{ margin: '3px 0' }}><strong>Customer:</strong> {selectedOrder.customerName}</p>
                 {selectedOrder.customerContact && <p style={{ margin: '3px 0' }}><strong>Contact:</strong> {selectedOrder.customerContact}</p>}
                 {selectedOrder.customerPhone && <p style={{ margin: '3px 0' }}>Phone: {selectedOrder.customerPhone}</p>}

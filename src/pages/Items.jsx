@@ -1220,6 +1220,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           const changed = 
             (item.partNumber || '') !== (original.partNumber || '') ||
             (item.name || '') !== (original.name || '') ||
+            (item.grade || '') !== (original.grade || '') ||
             (item.category || '') !== (original.category || '') ||
             String(item.stock || 0) !== String(original.stock || 0) ||
             String(item.price || 0) !== String(original.price || 0) ||
@@ -1235,6 +1236,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
             await DB.updateItemWithSync(item.id, {
               partNumber: item.partNumber || '',
               name: item.name || '',
+              grade: item.grade || '',
               category: item.category || '',
               stock: parseInt(item.stock) || 0,
               price: parseFloat(item.price) || 0,

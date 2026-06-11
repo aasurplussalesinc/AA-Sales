@@ -326,9 +326,13 @@ export default function Items() {
       return false;
     }
     
-    // Name filter
-    if (filters.name && !item.name?.toLowerCase().includes(filters.name.toLowerCase())) {
-      return false;
+    // Name filter — every typed word must appear somewhere in the name, in any order
+    if (filters.name) {
+      const itemName = (item.name || '').toLowerCase();
+      const words = filters.name.toLowerCase().split(/\s+/).filter(Boolean);
+      if (!words.every(w => itemName.includes(w))) {
+        return false;
+      }
     }
     
     // Category filter

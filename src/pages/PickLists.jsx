@@ -924,7 +924,9 @@ export default function PickLists() {
   const getUniqueBoxNumbers = () => {
     const boxes = new Set();
     Object.values(boxAssignments).forEach(dists => {
-      dists.forEach(d => boxes.add(d.box));
+      dists.forEach(d => {
+        if (d.box !== '' && d.box !== null && d.box !== undefined) boxes.add(d.box);
+      });
     });
     return Array.from(boxes).sort((a, b) => a - b);
   };
@@ -979,6 +981,13 @@ export default function PickLists() {
       const expected = getItemQty(item);
       const actual = getDistributionTotal(idx);
       if (actual !== expected) return false;
+      // Every distribution holding quantity must have a box number
+      const dists = boxAssignments[idx] || [];
+      for (const d of dists) {
+        const hasQty = (parseInt(d.qty) || 0) > 0;
+        const noBox = d.box === '' || d.box === null || d.box === undefined;
+        if (hasQty && noBox) return false;
+      }
     }
     return true;
   };
@@ -1057,6 +1066,8 @@ export default function PickLists() {
     if (typeof obj === 'object') {
       const cleaned = {};
       Object.keys(obj).forEach(k => {
+        // Firestore rejects empty field names (e.g. a box with no number -> key "")
+        if (String(k).trim() === '') return;
         if (obj[k] !== undefined) cleaned[k] = cleanForFirestore(obj[k]);
       });
       return cleaned;
@@ -1108,6 +1119,9 @@ export default function PickLists() {
         const dists = boxAssignments[idx] || [];
         dists.forEach(d => {
           const boxNum = d.box;
+          // Skip distributions with no box number (left blank while typing) —
+          // an empty key would be rejected by Firestore
+          if (boxNum === '' || boxNum === null || boxNum === undefined) return;
           if (!boxValues[boxNum]) boxValues[boxNum] = 0;
           boxValues[boxNum] += (parseInt(d.qty) || 0) * (parseFloat(item.unitPrice) || 0);
         });
@@ -1219,6 +1233,8 @@ export default function PickLists() {
         const dists = boxAssignments[idx] || [];
         dists.forEach(d => {
           const boxNum = d.box;
+          // Skip distributions with no box number — empty keys are rejected by Firestore
+          if (boxNum === '' || boxNum === null || boxNum === undefined) return;
           if (!boxValues[boxNum]) boxValues[boxNum] = 0;
           boxValues[boxNum] += (parseInt(d.qty) || 0) * (parseFloat(item.unitPrice) || 0);
         });
@@ -2514,7 +2530,7 @@ export default function PickLists() {
                 </div>
               ) : (
                 <div style={{ marginTop: 20, padding: 15, background: validatePacking() ? '#e8f5e9' : '#fff3e0', borderRadius: 8 }}>
-                  <strong>Summary:</strong> {new Set(Object.values(boxAssignments).flatMap(d => d.map(x => x.box))).size} boxes
+                  <strong>Summary:</strong> {getUniqueBoxNumbers().length} boxes
                   {!validatePacking() && <span style={{ color: 'var(--text-badge-orange)', marginLeft: 10 }}>⚠️ Quantity mismatches — use "Save for Now" to save progress</span>}
                 </div>
               )}

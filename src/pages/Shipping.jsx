@@ -41,6 +41,7 @@ export default function Shipping() {
   const [rateFilterCarrier, setRateFilterCarrier] = useState('all'); // all, ups, usps, fedex, dhl
   const [rateFilterBilling, setRateFilterBilling] = useState('all'); // all, AA, Customer
   const [rateViewMode, setRateViewMode] = useState('table'); // table, cards
+  const [eodDate, setEodDate] = useState(''); // End-of-Day report date; '' = today
   const [hideTriwalls, setHideTriwalls] = useState(true); // hide triwall orders by default
 
   useEffect(() => {
@@ -466,19 +467,22 @@ export default function Shipping() {
 
   // Generate End of Day manifest PDF (4x6 thermal)
   const generateEndOfDay = async () => {
-    const today = new Date();
-    const todayStr = today.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
-    
-    // Get all orders with labels purchased today
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+    // Use the selected report date if set, otherwise today
+    const baseDate = eodDate ? new Date(eodDate + 'T00:00:00') : new Date();
+    const dateStr = baseDate.toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }).toUpperCase();
+
+    // Bound the report to the selected calendar day [start, end)
+    const startOfDay = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()).getTime();
+    const endOfDay = startOfDay + 24 * 60 * 60 * 1000;
     const shippedToday = orders.filter(o => {
       const label = o.shippingLabel;
       if (!label || label.labelStatus !== 'purchased') return false;
-      return (label.purchasedAt || 0) >= startOfDay || (o.shippedAt || 0) >= startOfDay;
+      const purchased = label.purchasedAt || o.shippedAt || 0;
+      return purchased >= startOfDay && purchased < endOfDay;
     });
 
     if (shippedToday.length === 0) {
-      setError('No labels purchased today for End of Day report.');
+      setError('No labels purchased on ' + dateStr + ' for End of Day report.');
       setTimeout(() => setError(''), 3000);
       return;
     }
@@ -507,7 +511,7 @@ export default function Shipping() {
     try {
       const mergeFn = httpsCallable(functions, 'generateEndOfDayPdf');
       const result = await mergeFn({
-        shipDate: todayStr,
+        shipDate: dateStr,
         accountNumber: acctNum,
         companyName,
         street,
@@ -531,7 +535,15 @@ export default function Shipping() {
       const byteArray = new Uint8Array(byteChars.length);
       for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);
       const blob = new Blob([byteArray], { type: 'application/pdf' });
-      window.open(URL.createObjectURL(blob), '_blank');
+      const url = URL.createObjectURL(blob);
+      // Save the report as a file (so a past day can be reprinted) and also open it for viewing
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'EndOfDay_' + dateStr.replace(/[^A-Z0-9]/gi, '_') + '.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.open(url, '_blank');
     } catch (err) {
       console.error('End of Day failed:', err);
       setError('Failed to generate End of Day report: ' + err.message);
@@ -553,6 +565,14 @@ export default function Shipping() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
+          <input
+            type="date"
+            value={eodDate}
+            onChange={e => setEodDate(e.target.value)}
+            max={new Date().toISOString().split('T')[0]}
+            title="End of Day report date (leave blank for today)"
+            style={{ padding: '9px 10px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 14 }}
+          />
           <button
             onClick={generateEndOfDay}
             style={{
@@ -1583,7 +1603,7 @@ export default function Shipping() {
                         key={s.value}
                         onClick={() => setRateSortBy(s.value)}
                         style={{
-                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
+                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', cursor: 'pointer',
                           background: rateSortBy === s.value ? '#1976d2' : 'white',
                           color: rateSortBy === s.value ? 'white' : '#333',
                           fontWeight: rateSortBy === s.value ? 600 : 400, fontSize: 12
@@ -1600,7 +1620,7 @@ export default function Shipping() {
                     <button
                       onClick={() => setRateFilterCarrier('all')}
                       style={{
-                        padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
+                        padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', cursor: 'pointer',
                         background: rateFilterCarrier === 'all' ? '#424242' : 'white',
                         color: rateFilterCarrier === 'all' ? 'white' : '#333',
                         fontWeight: rateFilterCarrier === 'all' ? 600 : 400, fontSize: 12
@@ -1615,7 +1635,7 @@ export default function Shipping() {
                           key={c}
                           onClick={() => setRateFilterCarrier(rateFilterCarrier === c.toLowerCase() ? 'all' : c.toLowerCase())}
                           style={{
-                            padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
+                            padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', cursor: 'pointer',
                             background: rateFilterCarrier === c.toLowerCase() ? '#424242' : 'white',
                             color: rateFilterCarrier === c.toLowerCase() ? 'white' : '#333',
                             fontWeight: rateFilterCarrier === c.toLowerCase() ? 600 : 400, fontSize: 12
@@ -1637,7 +1657,7 @@ export default function Shipping() {
                         { value: 'Customer', label: `📦 Customer (${order.thirdPartyBilling?.account || ''})` },
                       ].map(b => (
                         <button key={b.value} onClick={() => setRateFilterBilling(b.value)} style={{
-                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)',  color: 'var(--text-primary)', cursor: 'pointer',
+                          padding: '5px 12px', borderRadius: 16, border: '1px solid var(--border)', cursor: 'pointer',
                           background: rateFilterBilling === b.value ? '#1565c0' : 'white',
                           color: rateFilterBilling === b.value ? 'white' : '#333',
                           fontWeight: rateFilterBilling === b.value ? 600 : 400, fontSize: 12
@@ -1649,11 +1669,11 @@ export default function Shipping() {
                   {/* View Toggle */}
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
                     <button onClick={() => setRateViewMode('table')} style={{
-                      padding: '5px 10px', border: '1px solid var(--border)',  color: 'var(--text-primary)', borderRadius: '6px 0 0 6px', cursor: 'pointer',
+                      padding: '5px 10px', border: '1px solid var(--border)', borderRadius: '6px 0 0 6px', cursor: 'pointer',
                       background: rateViewMode === 'table' ? '#424242' : 'white', color: rateViewMode === 'table' ? 'white' : '#333', fontSize: 12
                     }}>☰ Table</button>
                     <button onClick={() => setRateViewMode('cards')} style={{
-                      padding: '5px 10px', border: '1px solid var(--border)',  color: 'var(--text-primary)', borderRadius: '0 6px 6px 0', cursor: 'pointer',
+                      padding: '5px 10px', border: '1px solid var(--border)', borderRadius: '0 6px 6px 0', cursor: 'pointer',
                       background: rateViewMode === 'cards' ? '#424242' : 'white', color: rateViewMode === 'cards' ? 'white' : '#333', fontSize: 12
                     }}>▦ Cards</button>
                   </div>

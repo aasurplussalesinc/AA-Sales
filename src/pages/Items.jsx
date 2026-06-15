@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { toast } from '../utils/toast';
 import QRCode from 'qrcode';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
@@ -497,7 +498,7 @@ export default function Items() {
   // Add new item (addAnother = true keeps modal open with name/category prefilled)
   const addNewItem = async (addAnother = false) => {
     if (!newItem.name && !newItem.partNumber) {
-      alert('Please enter at least a name or SKU');
+      toast('Please enter at least a name or SKU');
       return;
     }
 
@@ -549,7 +550,7 @@ export default function Items() {
         }
       }
       if (unmatchedLocs.length > 0) {
-        alert(`⚠️ Couldn't match these location codes to existing Locations records — they were NOT saved:\n\n${unmatchedLocs.join(', ')}\n\nCheck the Locations page to confirm those entries exist.`);
+        toast(`⚠️ Couldn't match these location codes to existing Locations records — they were NOT saved:\n\n${unmatchedLocs.join(', ')}\n\nCheck the Locations page to confirm those entries exist.`);
       }
     } else if (newItem.location && itemId) {
       // Single location: sync to location inventory
@@ -727,7 +728,7 @@ export default function Items() {
           }
         }
         if (unmatchedLocs.length > 0) {
-          alert(`⚠️ Couldn't match these location codes to existing Locations records — they were NOT saved:\n\n${unmatchedLocs.join(', ')}\n\nCheck the Locations page to confirm those entries exist.`);
+          toast(`⚠️ Couldn't match these location codes to existing Locations records — they were NOT saved:\n\n${unmatchedLocs.join(', ')}\n\nCheck the Locations page to confirm those entries exist.`);
         }
       }
 
@@ -817,7 +818,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         const lines = text.split('\n').filter(line => line.trim());
         
         if (lines.length < 2) {
-          alert('CSV file is empty or has no data rows');
+          toast('CSV file is empty or has no data rows');
           setImporting(false);
           return;
         }
@@ -845,7 +846,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         }
 
         if (!columnIndices.name && !columnIndices.sku) {
-          alert('CSV must have at least a "Name" or "SKU" column');
+          toast('CSV must have at least a "Name" or "SKU" column');
           setImporting(false);
           return;
         }
@@ -974,7 +975,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         const newItems = Array.from(itemsBySku.values());
 
         if (newItems.length === 0) {
-          alert('No valid items found in CSV');
+          toast('No valid items found in CSV');
           setImporting(false);
           return;
         }
@@ -1082,44 +1083,81 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           // Get fresh items list to get IDs (covers both updated and newly created)
           const freshItems = await DB.getItems();
 
+          // Group every location entry by the item it resolves to, so an item that appears in
+          // several rows/locations is handled once with ALL of its locations together.
+          const byItem = new Map(); // itemId -> { item, entries: [{ code, qty, hasQty, loc }] }
           for (const inv of locationInventory) {
-            // Find the item by SKU (case-insensitive) or name
             const skuKey = String(inv.sku).trim().toLowerCase();
             const item = freshItems.find(i =>
               (i.partNumber && String(i.partNumber).trim().toLowerCase() === skuKey) ||
               (i.name && String(i.name).trim().toLowerCase() === skuKey)
             );
-
             if (!item) continue;
-
             // Resolve the Firestore Locations record by code (normalized either side).
             const loc = locations.find(l => {
               const code = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
               return code === inv.location ||
                 DB.normalizeLocationCode(code) === DB.normalizeLocationCode(inv.location);
             });
+            if (!byItem.has(item.id)) byItem.set(item.id, { item, entries: [] });
+            byItem.get(item.id).entries.push({
+              code: inv.location,
+              qty: inv.hasQty ? inv.quantity : 0,
+              hasQty: inv.hasQty,
+              loc
+            });
+          }
 
-            const qtyToSet = inv.hasQty ? inv.quantity : (item.stock || 0);
+          for (const { item, entries } of byItem.values()) {
+            // Total stock = sum of the per-location quantities (when any were provided),
+            // otherwise leave the item's existing stock untouched.
+            const anyQty = entries.some(e => e.hasQty);
+            const totalStock = anyQty ? entries.reduce((s, e) => s + e.qty, 0) : (item.stock || 0);
 
-            if (loc) {
-              // Best case: write item.location AND sync the location's inventory map.
-              await DB.updateItemWithSync(item.id, {
-                location: inv.location,
-                stock: qtyToSet
-              });
-              locationAssignments++;
-            } else {
-              // Fallback: location code in the CSV doesn't match any existing Locations
-              // record. Still write the string to item.location so the dropdown isn't
-              // blank — matches how brand-new items already work — but flag it so the
-              // user knows to either create the Location record or fix the CSV.
-              await DB.updateItem(item.id, {
-                location: inv.location,
-                stock: qtyToSet
-              });
-              locationsOnlyOnItem++;
-              unmatchedLocationCodes.add(inv.location);
+            if (entries.length === 1) {
+              // ── Single location: keep the original authoritative behavior ──
+              const e = entries[0];
+              const qtyToSet = e.hasQty ? e.qty : (item.stock || 0);
+              if (e.loc) {
+                // Write item.location AND sync the location's inventory map (clears stale locations).
+                await DB.updateItemWithSync(item.id, { location: e.code, stock: qtyToSet });
+                locationAssignments++;
+              } else {
+                // Location code didn't match any Locations record — still set the dropdown text, flag it.
+                await DB.updateItem(item.id, { location: e.code, stock: qtyToSet });
+                locationsOnlyOnItem++;
+                unmatchedLocationCodes.add(e.code);
+              }
+              continue;
             }
+
+            // ── Multiple locations: place the item in EVERY listed location with its own
+            // quantity, set the item's total stock to the sum, and keep a primary location. ──
+            const matched = entries.filter(e => e.loc);
+            const unmatched = entries.filter(e => !e.loc);
+
+            if (matched.length > 0) {
+              // First matched location clears any stale assignments (authoritative, like the
+              // single-location path); the rest are added additively without removing each other.
+              await DB.syncItemToLocation(item.id, matched[0].code, matched[0].qty);
+              for (let i = 1; i < matched.length; i++) {
+                await DB.setInventoryAtLocationWithSync(matched[i].loc.id, item.id, matched[i].qty);
+              }
+              locationAssignments += matched.length;
+            }
+            for (const e of unmatched) {
+              locationsOnlyOnItem++;
+              unmatchedLocationCodes.add(e.code);
+            }
+
+            // Set the true total stock, a primary location for the dropdown (first matched, else
+            // first listed), and a breakdown so the multi-location view is self-consistent.
+            const primaryCode = (matched[0] && matched[0].code) || entries[0].code;
+            await DB.updateItem(item.id, {
+              stock: totalStock,
+              location: primaryCode,
+              locationBreakdown: entries.map(e => ({ location: e.code, quantity: e.qty }))
+            });
           }
         }
         
@@ -1132,12 +1170,12 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           const more = unmatchedLocationCodes.size > 10 ? ` (+${unmatchedLocationCodes.size - 10} more)` : '';
           successMsg += `\n\n⚠️ ${locationsOnlyOnItem} item${locationsOnlyOnItem === 1 ? '' : 's'} had a location set on the item record, but the location code didn't match any existing Locations entry — so they aren't tracked in that location's inventory map.\n\nUnmatched codes: ${codes}${more}\n\nFix: either create those Locations entries in the Locations page, or correct the CSV location codes to match existing ones (e.g. W3-R3-E2).`;
         }
-        alert(successMsg);
+        toast(successMsg);
         
         loadData(); // Refresh the list
       } catch (error) {
         console.error('Import error:', error);
-        alert('Failed to import CSV: ' + error.message);
+        toast('Failed to import CSV: ' + error.message);
       } finally {
         setImporting(false);
         // Reset file input
@@ -1148,7 +1186,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     };
 
     reader.onerror = () => {
-      alert('Failed to read file');
+      toast('Failed to read file');
       setImporting(false);
     };
 
@@ -1257,10 +1295,10 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
       setHasChanges(false);
       setLockedItemIds(new Set()); // Clear locked items after saving
       loadData(); // Reload to get synced data
-      alert('Changes saved successfully!');
+      toast('Changes saved successfully!');
     } catch (error) {
       console.error('Error saving:', error);
-      alert('Error saving changes: ' + error.message);
+      toast('Error saving changes: ' + error.message);
     } finally {
       setSaving(false);
     }
@@ -1278,7 +1316,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     
     const qty = parseInt(adjustingItem.adjustQty) || 0;
     if (qty <= 0) {
-      alert('Enter a quantity greater than 0');
+      toast('Enter a quantity greater than 0');
       return;
     }
     
@@ -1306,7 +1344,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
       setAdjustingItem(null);
       await loadData();
     } catch (error) {
-      alert('Error: ' + error.message);
+      toast('Error: ' + error.message);
     }
   };
 
@@ -1349,7 +1387,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
       printWindow.document.close();
       printWindow.print();
     } catch (error) {
-      alert('Print failed: ' + error.message);
+      toast('Print failed: ' + error.message);
     }
   };
 
@@ -1370,7 +1408,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
   // Apply category to all selected items
   const applyBatchCategory = () => {
     if (selectedItems.length === 0) {
-      alert('Select items first');
+      toast('Select items first');
       return;
     }
     
@@ -1385,13 +1423,13 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     setHasChanges(true);
     setShowBatchCategory(false);
     setBatchCategory('');
-    alert(`Category "${batchCategory || '(cleared)'}" applied to ${selectedItems.length} items.\n\nDon't forget to Save Changes!`);
+    toast(`Category "${batchCategory || '(cleared)'}" applied to ${selectedItems.length} items.\n\nDon't forget to Save Changes!`);
   };
 
   // Apply location to all selected items
   const applyBatchLocation = () => {
     if (selectedItems.length === 0) {
-      alert('Select items first');
+      toast('Select items first');
       return;
     }
     
@@ -1409,19 +1447,19 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     setHasChanges(true);
     setShowBatchLocation(false);
     setBatchLocation('');
-    alert(`Location "${batchLocation || '(cleared)'}" applied to ${selectedItems.length} items.\n\n⚠️ Click the green "Save Changes" button to save to database!`);
+    toast(`Location "${batchLocation || '(cleared)'}" applied to ${selectedItems.length} items.\n\n⚠️ Click the green "Save Changes" button to save to database!`);
   };
 
   // Apply price to all selected items
   const applyBatchPrice = () => {
     if (selectedItems.length === 0) {
-      alert('Select items first');
+      toast('Select items first');
       return;
     }
     // Parse — strip $ and commas so users can paste "$25.00" or "1,299.99"
     const parsed = parseFloat(String(batchPrice).replace(/[^0-9.\-]/g, ''));
     if (!isFinite(parsed) || parsed < 0) {
-      alert('Enter a valid non-negative price (e.g. 25 or 25.00)');
+      toast('Enter a valid non-negative price (e.g. 25 or 25.00)');
       return;
     }
     // Round to 2 decimals so we never get floating-point noise like 25.000000001
@@ -1438,12 +1476,12 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     setHasChanges(true);
     setShowBatchPrice(false);
     setBatchPrice('');
-    alert(`Price $${newPrice.toFixed(2)} applied to ${selectedItems.length} items.\n\n⚠️ Click the green "Save Changes" button to save to database!`);
+    toast(`Price $${newPrice.toFixed(2)} applied to ${selectedItems.length} items.\n\n⚠️ Click the green "Save Changes" button to save to database!`);
   };
 
   const printBulkLabels = async (format) => {
     const itemsToPrint = items.filter(i => selectedItems.includes(i.id));
-    if (itemsToPrint.length === 0) return alert('Select items first');
+    if (itemsToPrint.length === 0) return toast('Select items first');
 
     const qrCodes = await Promise.all(
       itemsToPrint.map(async (item) => ({
@@ -3158,7 +3196,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                     await saveEditedItem();
                   } catch (error) {
                     console.error('Save error:', error);
-                    alert('Error saving: ' + error.message);
+                    toast('Error saving: ' + error.message);
                   }
                 }}
               >

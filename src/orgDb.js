@@ -1172,6 +1172,15 @@ export const OrgDB = {
     });
   },
 
+  async markPOUnpaid(poId) {
+    // Reverse a payment: clear payment fields and revert status back to shipped
+    await this.updatePurchaseOrder(poId, {
+      status: 'shipped',
+      paidAt: null,
+      paymentMethod: ''
+    });
+  },
+
   async markPOCancelled(poId, reason = '') {
     await this.updatePurchaseOrder(poId, {
       status: 'cancelled',

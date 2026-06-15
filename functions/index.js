@@ -399,9 +399,12 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   }
 
   // --- AA Account rates (no third-party billing) ---
-  var parcelsUPS = formatParcelsFromOrder(order, insuranceAmount, 'UPS');
+  // Carrier-agnostic insurance (no forced UPS provider) so every carrier — UPS, FedEx, USPS,
+  // DHL — can quote. Forcing UPS-provider insurance previously made non-UPS carriers decline
+  // the entire shipment.
+  var parcelsUPS = formatParcelsFromOrder(order, insuranceAmount, null);
   var shipmentAAUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsUPS, customsDeclarationId, null, carrierAccountIds);
-  var allRates = mapRates(shipmentAAUPS, 'AA', hasInsurance ? 'UPS' : 'none');
+  var allRates = mapRates(shipmentAAUPS, 'AA', hasInsurance ? 'native' : 'none');
 
   console.log('=== SHIPPO DEBUG (AA Account / UPS Insurance) ===');
   console.log('Shipment ID:', shipmentAAUPS.object_id);
@@ -411,10 +414,9 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   console.log('Parcels sent:', JSON.stringify(parcelsUPS));
   console.log('=== END DEBUG ===');
 
-  // ── ADDITIONAL CALL: no-provider insurance to give non-UPS carriers (USPS/FedEx/DHL) a chance to quote
-  // The UPS-specific insurance above causes USPS/FedEx/etc. to decline the entire shipment because
-  // they can't sell UPS insurance. By making a second call without a specific provider, those carriers
-  // can quote with their own native insurance or no insurance.
+  // ── SAFETY-NET CALL: the primary call above already uses carrier-agnostic insurance, so all
+  // carriers should quote there. This second provider-agnostic pass catches any carrier that was
+  // missed and merges in providers not already present. Usually redundant now, but harmless.
   try {
     var parcelsAgnostic = formatParcelsFromOrder(order, hasInsurance ? insuranceAmount : 0, null);
     var shipmentAgnostic = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAgnostic, customsDeclarationId, null, carrierAccountIds);
@@ -476,9 +478,9 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   // --- Customer Account rates (third-party billing) ---
   if (customerBilling) {
     try {
-      var parcelsCustUPS = formatParcelsFromOrder(order, insuranceAmount, 'UPS');
+      var parcelsCustUPS = formatParcelsFromOrder(order, insuranceAmount, null);
       var shipmentCustUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustUPS, customsDeclarationId, customerBilling, carrierAccountIds);
-      allRates = allRates.concat(mapRates(shipmentCustUPS, 'Customer', hasInsurance ? 'UPS' : 'none'));
+      allRates = allRates.concat(mapRates(shipmentCustUPS, 'Customer', hasInsurance ? 'native' : 'none'));
       console.log('=== SHIPPO DEBUG (Customer Account / UPS Insurance) ===');
       console.log('Customer account:', customerBilling.account);
       console.log('Total rates returned:', (shipmentCustUPS.rates || []).length);

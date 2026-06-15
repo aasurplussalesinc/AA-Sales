@@ -600,6 +600,17 @@ export default function PurchaseOrders() {
     setShowPaymentModal(true);
   };
 
+  const markUnpaid = async (order) => {
+    if (!window.confirm(`Reverse payment for ${order.poNumber}? This sets it back to Unpaid (status returns to Shipped) and clears the recorded payment method.`)) return;
+    try {
+      await DB.markPOUnpaid(order.id);
+      await loadData();
+      closeOrderModal();
+    } catch (err) {
+      alert('Failed to reverse payment: ' + err.message);
+    }
+  };
+
   const confirmPayment = async () => {
     if (!paymentMethod) {
       alert('Please select a payment method');
@@ -1881,6 +1892,9 @@ ${labelsHtml}
                   {canEdit && selectedOrder.status === 'shipped' && (
                     <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#1565c0', color: 'white', fontSize: 12 }}>💰 Mark Paid</button>
                   )}
+                  {canEdit && (selectedOrder.status === 'paid' || selectedOrder.paymentMethod) && (
+                    <button className="btn" onClick={() => markUnpaid(selectedOrder)} style={{ background: '#d84315', color: 'white', fontSize: 12 }}>↩️ Mark Unpaid</button>
+                  )}
                 </div>
 
                 {/* Row 3: Danger + Close */}
@@ -2142,7 +2156,7 @@ ${labelsHtml}
       {/* Orders Table */}
       <div style={{ overflowX: 'auto' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: 'var(--bg-surface)', borderRadius: 8, overflow: 'hidden' }}>
-          <thead><tr style={{ background: 'var(--bg-surface-2)' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid var(--border)' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Packing</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Date</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Actions</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Quick Action</th></tr></thead>
+          <thead><tr style={{ background: 'var(--bg-surface-2)' }}><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>PO Number</th><th style={{ padding: 12, textAlign: 'left', borderBottom: '2px solid var(--border)' }}>Customer</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Items</th><th style={{ padding: 12, textAlign: 'right', borderBottom: '2px solid var(--border)' }}>Total</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Packing</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Status</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Payment</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Dates</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Actions</th><th style={{ padding: 12, textAlign: 'center', borderBottom: '2px solid var(--border)' }}>Quick Action</th></tr></thead>
           <tbody>
             {(() => {
               // Filter orders
@@ -2213,7 +2227,7 @@ ${labelsHtml}
               const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
               if (filtered.length === 0) {
-                return <tr><td colSpan={8} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>{orders.length === 0 ? 'No purchase orders yet. Click "+ New Order" to create one.' : 'No orders match your filters.'}</td></tr>;
+                return <tr><td colSpan={10} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>{orders.length === 0 ? 'No purchase orders yet. Click "+ New Order" to create one.' : 'No orders match your filters.'}</td></tr>;
               }
               
               return paginated.map(order => (
@@ -2246,7 +2260,12 @@ ${labelsHtml}
                       <span style={{ padding: '4px 10px', borderRadius: 4, fontSize: 12, fontWeight: 600, background: '#ff9800', color: 'var(--text-on-dark)' }}>Unpaid</span>
                     )}
                   </td>
-                  <td style={{ padding: 12, textAlign: 'center', fontSize: 13 }}>{formatDate(order.createdAt)}</td>
+                  <td style={{ padding: 12, fontSize: 12, lineHeight: 1.5, whiteSpace: 'nowrap' }}>
+                    <div><span style={{ color: 'var(--text-muted)' }}>Created:</span> {formatDate(order.createdAt)}</div>
+                    {order.invoiceDate && <div><span style={{ color: 'var(--text-muted)' }}>Invoice:</span> {formatDate(order.invoiceDate)}</div>}
+                    {order.shippedAt && <div><span style={{ color: 'var(--text-muted)' }}>Shipped:</span> {formatDate(order.shippedAt)}</div>}
+                    {order.paidAt && <div><span style={{ color: 'var(--text-muted)' }}>Paid:</span> {formatDate(order.paidAt)}</div>}
+                  </td>
                   <td style={{ padding: 12, textAlign: 'center' }}><button className="btn btn-primary" onClick={() => setSelectedOrder(order)} style={{ padding: '4px 12px', fontSize: 12 }}>View</button></td>
                   <td style={{ padding: 12, textAlign: 'center' }}>
                     {order.status === 'packed' ? (

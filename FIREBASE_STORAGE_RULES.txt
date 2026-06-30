@@ -1,0 +1,25 @@
+Firebase Storage rules — REQUIRED before the catalog upload will work.
+Catalog logos/cover graphics upload to:  catalog/{orgId}/...
+
+In Firebase Console -> Storage -> Rules, make sure authenticated users can write
+to that path. Example (merge into your existing rules, don't blindly replace):
+
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Catalog branding assets (logos, cover graphics) for each org
+    match /catalog/{orgId}/{allPaths=**} {
+      allow read: if true;                  // logos/graphics are non-sensitive; needed so the flyer image loads
+      allow write: if request.auth != null; // any signed-in user; tighten to org membership if you want
+    }
+
+    // ... keep your existing rules for other paths ...
+  }
+}
+
+Notes:
+- Download URLs returned by getDownloadURL include an access token, so reads work
+  even with stricter read rules, but `allow read: if true` is simplest for public flyer images.
+- If you want to lock writes to a user's own org, replace the write rule with a check
+  against your membership data.

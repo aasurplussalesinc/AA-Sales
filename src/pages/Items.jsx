@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { toast } from '../utils/toast';
 import QRCode from 'qrcode';
 import { OrgDB as DB } from '../orgDb';
+import { printCatalog } from '../catalog';
 import { useAuth } from '../OrgAuthContext';
 
 function DropdownItem({ icon, label, color, onClick, danger }) {
@@ -683,6 +684,7 @@ export default function Items() {
           name: editingItem.name,
           grade: editingItem.grade || '',
           category: editingItem.category,
+          catalogVisibility: editingItem.catalogVisibility || 'auto',
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
           cost: parseFloat(editingItem.cost) || 0,
@@ -697,6 +699,7 @@ export default function Items() {
           name: editingItem.name,
           grade: editingItem.grade || '',
           category: editingItem.category,
+          catalogVisibility: editingItem.catalogVisibility || 'auto',
           stock: totalStock,
           price: parseFloat(editingItem.price) || 0,
           cost: parseFloat(editingItem.cost) || 0,
@@ -1396,6 +1399,88 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [labelSize, setLabelSize] = useState('medium');
 
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogBranding, setCatalogBranding] = useState({
+    companyName: '', tagline: '', title: '', accentColor: '#4a5d23',
+    logoUrl: '', coverGraphicUrl: '', addressLines: '', phone: ''
+  });
+  const [catalogOpts, setCatalogOpts] = useState({
+    categories: [], inStockOnly: false, showSku: true, showCondition: true
+  });
+
+  const openCatalog = () => {
+    const cb = organization?.catalogBranding || {};
+    const addr = Array.isArray(cb.addressLines)
+      ? cb.addressLines.join('\n')
+      : (cb.addressLines || [
+          organization?.address,
+          [organization?.city, organization?.state, organization?.zip].filter(Boolean).join(', ')
+        ].filter(Boolean).join('\n'));
+    setCatalogBranding({
+      companyName: cb.companyName || organization?.name || '',
+      tagline: cb.tagline || '',
+      title: cb.title || ('WHOLESALE LIST ' + new Date().getFullYear()),
+      accentColor: cb.accentColor || '#4a5d23',
+      logoUrl: cb.logoUrl || organization?.logoUrl || '',
+      coverGraphicUrl: cb.coverGraphicUrl || '',
+      addressLines: addr,
+      phone: cb.phone || organization?.phone || ''
+    });
+    setCatalogOpts({ categories: [], inStockOnly: false, showSku: true, showCondition: true });
+    setShowCatalog(true);
+  };
+
+  const handleCatalogUpload = async (file, kind) => {
+    if (!file) return;
+    setCatalogBusy(true);
+    try {
+      const url = await DB.uploadCatalogAsset(file, kind);
+      setCatalogBranding(b => ({ ...b, [kind === 'logo' ? 'logoUrl' : 'coverGraphicUrl']: url }));
+      toast((kind === 'logo' ? 'Logo' : 'Cover graphic') + ' uploaded');
+    } catch (e) {
+      toast('Upload failed: ' + (e.message || e));
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+
+  const resolvedBranding = () => ({
+    ...catalogBranding,
+    addressLines: String(catalogBranding.addressLines || '')
+      .split('\n').map(s => s.trim()).filter(Boolean)
+  });
+
+  const saveCatalogBranding = async () => {
+    if (!organization?.id) { toast('No organization found to save branding to'); return; }
+    setCatalogBusy(true);
+    try {
+      await DB.updateOrganization(organization.id, { catalogBranding: resolvedBranding() });
+      toast('✅ Catalog branding saved');
+    } catch (e) {
+      toast('Could not save branding: ' + (e.message || e));
+    } finally {
+      setCatalogBusy(false);
+    }
+  };
+
+  const generateCatalog = () => {
+    try {
+      printCatalog(items, resolvedBranding(), catalogOpts);
+    } catch (e) {
+      toast('Could not generate catalog: ' + (e.message || e));
+    }
+  };
+
+  const toggleCatalogCategory = (cat) => {
+    setCatalogOpts(o => ({
+      ...o,
+      categories: o.categories.includes(cat)
+        ? o.categories.filter(c => c !== cat)
+        : [...o.categories, cat]
+    }));
+  };
+
   const toggleSelectItem = (itemId) => {
     setSelectedItems(prev => 
       prev.includes(itemId) ? prev.filter(id => id !== itemId) : [...prev, itemId]
@@ -1697,7 +1782,126 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         >
           🏷️ Print Labels
         </button>
+
+        <button
+          className="btn"
+          onClick={openCatalog}
+          style={{ background: '#4a5d23', color: 'var(--text-on-dark)' }}
+        >
+          📕 Catalog
+        </button>
       </div>
+
+      {/* Catalog Generator Modal */}
+      {showCatalog && (
+        <div className="modal-overlay" style={{ zIndex: 1000 }}>
+          <div className="modal" style={{ maxWidth: 560, padding: 28, maxHeight: '88vh', overflowY: 'auto' }}>
+            <h3 style={{ marginBottom: 6 }}>📕 Generate Catalog</h3>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 0, marginBottom: 18 }}>
+              Branded price list from live inventory, grouped by category.
+            </p>
+
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Cover branding</div>
+            <div className="form-group">
+              <label>Company name</label>
+              <input className="form-input" type="text" value={catalogBranding.companyName}
+                onChange={e => setCatalogBranding({ ...catalogBranding, companyName: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Tagline</label>
+              <input className="form-input" type="text" value={catalogBranding.tagline}
+                placeholder="e.g. GENUINE U.S. MILITARY GOODS"
+                onChange={e => setCatalogBranding({ ...catalogBranding, tagline: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Title / date</label>
+              <input className="form-input" type="text" value={catalogBranding.title}
+                onChange={e => setCatalogBranding({ ...catalogBranding, title: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Address (one line per row)</label>
+              <textarea className="form-input" rows={2} value={catalogBranding.addressLines}
+                onChange={e => setCatalogBranding({ ...catalogBranding, addressLines: e.target.value })} />
+            </div>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 14 }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>Phone</label>
+                <input className="form-input" type="text" value={catalogBranding.phone} style={{ width: 150 }}
+                  onChange={e => setCatalogBranding({ ...catalogBranding, phone: e.target.value })} />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 13, marginBottom: 4 }}>Accent</label>
+                <input type="color" value={catalogBranding.accentColor}
+                  onChange={e => setCatalogBranding({ ...catalogBranding, accentColor: e.target.value })}
+                  style={{ width: 48, height: 36, padding: 0, border: '1px solid #ddd', borderRadius: 6, cursor: 'pointer' }} />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
+              <label className="btn btn-sm" style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)', cursor: 'pointer' }}>
+                {catalogBranding.logoUrl ? '✅ Logo' : '⬆️ Cover logo'}
+                <input type="file" accept="image/*" hidden disabled={catalogBusy}
+                  onChange={e => handleCatalogUpload(e.target.files?.[0], 'logo')} />
+              </label>
+              <label className="btn btn-sm" style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)', cursor: 'pointer' }}>
+                {catalogBranding.coverGraphicUrl ? '✅ Cover graphic' : '⬆️ Cover graphic'}
+                <input type="file" accept="image/*" hidden disabled={catalogBusy}
+                  onChange={e => handleCatalogUpload(e.target.files?.[0], 'cover')} />
+              </label>
+              {catalogBusy && <span style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>uploading…</span>}
+            </div>
+
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Options</div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 14, fontSize: 13 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={catalogOpts.showSku}
+                  onChange={e => setCatalogOpts({ ...catalogOpts, showSku: e.target.checked })} /> SKU column
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={catalogOpts.showCondition}
+                  onChange={e => setCatalogOpts({ ...catalogOpts, showCondition: e.target.checked })} /> Condition column
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={catalogOpts.inStockOnly}
+                  onChange={e => setCatalogOpts({ ...catalogOpts, inStockOnly: e.target.checked })} /> In-stock only
+              </label>
+            </div>
+
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
+              Categories <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(none selected = all)</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 20 }}>
+              {categories.map(cat => {
+                const on = catalogOpts.categories.includes(cat);
+                return (
+                  <button key={cat} onClick={() => toggleCatalogCategory(cat)}
+                    style={{
+                      fontSize: 12, padding: '4px 10px', borderRadius: 14, cursor: 'pointer',
+                      border: on ? '1px solid #4a5d23' : '1px solid #ddd',
+                      background: on ? '#e8efe0' : 'white',
+                      color: on ? '#33421a' : 'var(--text-muted)'
+                    }}>
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', borderTop: '1px solid var(--border, #eee)', paddingTop: 16 }}>
+              <button className="btn btn-sm" onClick={() => setShowCatalog(false)}
+                style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
+                Close
+              </button>
+              <button className="btn btn-sm" onClick={saveCatalogBranding} disabled={catalogBusy}>
+                💾 Save branding
+              </button>
+              <button className="btn btn-primary btn-sm" onClick={generateCatalog} disabled={catalogBusy}>
+                📕 Generate
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Batch Category Modal */}
       {showBatchCategory && (
@@ -2963,6 +3167,18 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                   onChange={e => setEditingItem({ ...editingItem, grade: e.target.value })}
                   placeholder="e.g. A, B, New, Refurb..."
                 />
+              </div>
+              <div className="form-group">
+                <label>Show in catalog</label>
+                <select
+                  className="form-input"
+                  value={editingItem.catalogVisibility || 'auto'}
+                  onChange={e => setEditingItem({ ...editingItem, catalogVisibility: e.target.value })}
+                >
+                  <option value="auto">Auto — follow in-stock setting</option>
+                  <option value="always">Always show — we restock this</option>
+                  <option value="never">Hide — out of stock / low</option>
+                </select>
               </div>
               <div className="form-group">
                 <label>Category</label>

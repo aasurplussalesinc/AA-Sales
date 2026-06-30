@@ -1,5 +1,6 @@
 import { collection, addDoc, getDocs, getDoc, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc, setDoc } from 'firebase/firestore';
-import { db, auth } from './firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, auth, storage } from './firebase';
 
 // Your company's org ID - gets free access forever
 export const OWNER_ORG_ID = 'aa-surplus-sales';
@@ -128,6 +129,20 @@ export const OrgDB = {
       updatedAt: Date.now()
     });
   },
+
+  // Upload a catalog branding asset (logo or cover graphic) to Firebase Storage.
+  // kind is a short label like 'logo' or 'cover'. Returns the public download URL.
+  async uploadCatalogAsset(file, kind = 'asset') {
+    if (!currentOrgId) throw new Error('No organization selected');
+    if (!file) throw new Error('No file provided');
+    const safeKind = String(kind).replace(/[^a-z0-9_-]/gi, '') || 'asset';
+    const ext = (file.name && file.name.includes('.')) ? file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : 'png';
+    const path = `catalog/${currentOrgId}/${safeKind}-${Date.now()}.${ext}`;
+    const fileRef = storageRef(storage, path);
+    await uploadBytes(fileRef, file);
+    return await getDownloadURL(fileRef);
+  },
+
   
   // ==================== USER-ORGANIZATION LINKING ====================
   

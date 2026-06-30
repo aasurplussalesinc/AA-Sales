@@ -1406,7 +1406,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     logoUrl: '', coverGraphicUrl: '', addressLines: '', phone: ''
   });
   const [catalogOpts, setCatalogOpts] = useState({
-    categories: [], inStockOnly: false, showSku: true, showCondition: true
+    categories: [], inStockOnly: false, showSku: true, showCondition: true, showStock: true
   });
 
   const openCatalog = () => {
@@ -1427,7 +1427,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
       addressLines: addr,
       phone: cb.phone || organization?.phone || ''
     });
-    setCatalogOpts({ categories: [], inStockOnly: false, showSku: true, showCondition: true });
+    setCatalogOpts({ categories: [], inStockOnly: false, showSku: true, showCondition: true, showStock: true });
     setShowCatalog(true);
   };
 
@@ -1808,12 +1808,6 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                 onChange={e => setCatalogBranding({ ...catalogBranding, companyName: e.target.value })} />
             </div>
             <div className="form-group">
-              <label>Tagline</label>
-              <input className="form-input" type="text" value={catalogBranding.tagline}
-                placeholder="e.g. GENUINE U.S. MILITARY GOODS"
-                onChange={e => setCatalogBranding({ ...catalogBranding, tagline: e.target.value })} />
-            </div>
-            <div className="form-group">
               <label>Title / date</label>
               <input className="form-input" type="text" value={catalogBranding.title}
                 onChange={e => setCatalogBranding({ ...catalogBranding, title: e.target.value })} />
@@ -1839,15 +1833,17 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
 
             <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
               <label className="btn btn-sm" style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)', cursor: 'pointer' }}>
-                {catalogBranding.logoUrl ? '✅ Logo' : '⬆️ Cover logo'}
-                <input type="file" accept="image/*" hidden disabled={catalogBusy}
-                  onChange={e => handleCatalogUpload(e.target.files?.[0], 'logo')} />
-              </label>
-              <label className="btn btn-sm" style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)', cursor: 'pointer' }}>
                 {catalogBranding.coverGraphicUrl ? '✅ Cover graphic' : '⬆️ Cover graphic'}
                 <input type="file" accept="image/*" hidden disabled={catalogBusy}
                   onChange={e => handleCatalogUpload(e.target.files?.[0], 'cover')} />
               </label>
+              {catalogBranding.coverGraphicUrl && (
+                <button className="btn btn-sm" type="button"
+                  onClick={() => setCatalogBranding({ ...catalogBranding, coverGraphicUrl: '' })}
+                  style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
+                  ✕ Remove graphic
+                </button>
+              )}
               {catalogBusy && <span style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>uploading…</span>}
             </div>
 
@@ -1860,6 +1856,10 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                 <input type="checkbox" checked={catalogOpts.showCondition}
                   onChange={e => setCatalogOpts({ ...catalogOpts, showCondition: e.target.checked })} /> Condition column
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={catalogOpts.showStock}
+                  onChange={e => setCatalogOpts({ ...catalogOpts, showStock: e.target.checked })} /> Inventory column
               </label>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
                 <input type="checkbox" checked={catalogOpts.inStockOnly}

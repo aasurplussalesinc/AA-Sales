@@ -1140,7 +1140,7 @@ export const OrgDB = {
       name: `PO: ${po.poNumber} - ${po.customerName}`,
       notes: `Auto-generated from Purchase Order ${po.poNumber}`,
       purchaseOrderId: poId,
-      items: po.items.map(item => ({
+      items: po.items.filter(item => item.source !== 'manual').map(item => ({
         itemId: item.itemId || '',
         itemName: item.itemName || '',
         partNumber: item.partNumber || '',

@@ -126,6 +126,22 @@ export default function PurchaseOrders() {
     setSearchItem('');
   };
 
+  // Add a free-text charge/service line (e.g. Shipping, Handling, Fee). Not tied to
+  // inventory: creates no item record and requires no picking. source: 'manual' means
+  // orderNothingToPick() treats a charge-only order as ready to mark paid directly.
+  const addManualLine = () => {
+    const lineId = `line_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const newItem = {
+      lineId,
+      itemId: '', itemName: '', partNumber: '', location: '', grade: '',
+      quantity: 1, qtyShipped: 1, unitPrice: 0, estTotal: 0, lineTotal: 0,
+      source: 'manual', contractId: '', contractNumber: '', costPerLb: 0,
+      weightPerItem: '', itemCost: 0, notes: ''
+    };
+    const updatedItems = [...newPO.items, newItem];
+    updatePOTotals(updatedItems);
+  };
+
   const updatePOItem = (index, field, value) => {
     setNewPO(prevPO => {
       const updatedItems = prevPO.items.map((item, idx) => {
@@ -140,6 +156,7 @@ export default function PurchaseOrders() {
             else { updated.contractNumber = ''; updated.costPerLb = 0; }
           }
           if (field === 'quantity' || field === 'qtyShipped' || field === 'unitPrice') {
+            if (updated.source === 'manual' && field === 'quantity') updated.qtyShipped = value;
             const qtyOrdered = parseFloat(updated.quantity) || 0;
             const qtyShipped = parseFloat(updated.qtyShipped) || 0;
             const price = parseFloat(updated.unitPrice) || 0;
@@ -1593,14 +1610,25 @@ ${labelsHtml}
               <div style={{ marginBottom: 20 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
                   <label style={{ fontWeight: 600 }}>Add Items</label>
-                  <button
-                    type="button"
-                    onClick={() => setShowOneOffModal(true)}
-                    className="btn btn-sm"
-                    style={{ background: '#ff9800', color: 'var(--text-on-dark)', fontSize: 12 }}
-                  >
-                    + One-Off Item
-                  </button>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      type="button"
+                      onClick={addManualLine}
+                      className="btn btn-sm"
+                      style={{ background: '#607d8b', color: 'var(--text-on-dark)', fontSize: 12 }}
+                      title="Add a free-text charge (Shipping, Handling, Fee) — no inventory, no picking"
+                    >
+                      + Charge / Service
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowOneOffModal(true)}
+                      className="btn btn-sm"
+                      style={{ background: '#ff9800', color: 'var(--text-on-dark)', fontSize: 12 }}
+                    >
+                      + One-Off Item
+                    </button>
+                  </div>
                 </div>
                 <input type="text" placeholder="Search items..." value={searchItem} onChange={e => setSearchItem(e.target.value)}
                   style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
@@ -1637,16 +1665,28 @@ ${labelsHtml}
                       {newPO.items.map((item, index) => (
                         <tr key={index} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: 8 }}>
-                            <strong>{item.itemName}</strong>
-                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.partNumber}</div>
+                            {item.source === 'manual' ? (
+                              <input type="text" value={item.itemName || ''} placeholder="Description (e.g. Shipping)"
+                                onChange={e => updatePOItem(index, 'itemName', e.target.value)}
+                                style={{ width: '100%', padding: 4 }} />
+                            ) : (
+                              <>
+                                <strong>{item.itemName}</strong>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.partNumber}</div>
+                              </>
+                            )}
                           </td>
                           <td style={{ padding: 8 }}>
+                            {item.source === 'manual' ? (
+                              <span style={{ fontSize: 11, color: 'var(--text-muted)', fontStyle: 'italic' }}>Charge / service</span>
+                            ) : (
                             <select value={item.source || 'inventory'} onChange={e => updatePOItem(index, 'source', e.target.value)}
                               style={{ width: '100%', padding: 4, fontSize: 11 }}>
                               <option value="inventory">From Inventory</option>
                               <option value="inventory_contract">Inventory (Contract)</option>
                               <option value="direct_contract">Direct from Contract</option>
                             </select>
+                            )}
                             {(item.source === 'inventory_contract' || item.source === 'direct_contract') && (
                               <>
                                 <select value={item.contractId || ''} onChange={e => updatePOItem(index, 'contractId', e.target.value)}

@@ -556,6 +556,13 @@ export default function PurchaseOrders() {
     setShowPackOrder(false); setPackingOrder(null); loadData(); alert('Packing saved! Shipped quantities updated.');
   };
 
+  // A charge-only order (e.g. a shipping charge) has nothing to pick when none of
+  // its line items come from inventory. Such orders can skip the pick/pack flow.
+  const orderNothingToPick = (order) =>
+    !((order && order.items) || []).some(
+      it => it.source === 'inventory' || it.source === 'inventory_contract'
+    );
+
   const markShipped = async (order) => {
     for (const item of order.items || []) {
       const qtyShipped = parseInt(item.qtyShipped) || 0;
@@ -595,6 +602,11 @@ export default function PurchaseOrders() {
   };
 
   const markPaid = async (order) => { 
+    // Charge-only orders (nothing to pick) may still be in draft. Stamp them
+    // shipped first so status and timestamps stay consistent, then collect payment.
+    if (order.status !== 'shipped' && order.status !== 'paid' && orderNothingToPick(order)) {
+      try { await DB.markPOShipped(order.id); } catch (e) { /* fall through to payment */ }
+    }
     setPaymentOrder(order);
     setPaymentMethod('');
     setShowPaymentModal(true);
@@ -1875,8 +1887,11 @@ ${labelsHtml}
                   {canEdit && (
                     <button className="btn" onClick={() => openEditOrder(selectedOrder)} style={{ background: '#ff9800', color: 'white', fontSize: 12 }}>✏️ Edit</button>
                   )}
-                  {canEdit && (!selectedOrder.status || selectedOrder.status === 'draft') && (
+                  {canEdit && (!selectedOrder.status || selectedOrder.status === 'draft') && !orderNothingToPick(selectedOrder) && (
                     <button className="btn" onClick={() => confirmAndCreatePickList(selectedOrder)} style={{ background: 'var(--btn-primary-bg)', color: 'var(--btn-primary-color)', fontSize: 12 }}>✓ Confirm & Pick</button>
+                  )}
+                  {canEdit && (!selectedOrder.status || selectedOrder.status === 'draft') && orderNothingToPick(selectedOrder) && !selectedOrder.paymentMethod && (
+                    <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#1565c0', color: 'white', fontSize: 12 }} title="Charge-only order — no items to pick">💰 Mark Paid</button>
                   )}
                   {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.status === 'packing') && (
                     <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white', fontSize: 12 }}>
@@ -2286,6 +2301,18 @@ ${labelsHtml}
                       <button
                         onClick={() => markPaid(order)}
                         title="Mark as Paid"
+                        style={{
+                          padding: '5px 12px', background: '#1976d2',
+                          color: 'var(--text-on-dark)', border: 'none', borderRadius: 6,
+                          cursor: 'pointer', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
+                        }}
+                      >
+                        💰 Paid
+                      </button>
+                    ) : (!order.paymentMethod && order.status !== 'paid' && orderNothingToPick(order)) ? (
+                      <button
+                        onClick={() => markPaid(order)}
+                        title="Charge-only order — mark as Paid (no items to pick)"
                         style={{
                           padding: '5px 12px', background: '#1976d2',
                           color: 'var(--text-on-dark)', border: 'none', borderRadius: 6,

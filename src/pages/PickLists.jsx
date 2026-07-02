@@ -213,6 +213,28 @@ export default function PickLists() {
     }));
   };
 
+  // Locations that actually hold this item, with the on-hand qty at each.
+  // Drives the pick-from dropdown; length > 1 means the picker must choose.
+  const getItemLocationOptions = (itemId) => {
+    if (!itemId) return [];
+    return locations
+      .map(loc => {
+        const code = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+        const qty = (loc.inventory && loc.inventory[itemId] != null) ? loc.inventory[itemId] : null;
+        return qty != null ? { code, qty } : null;
+      })
+      .filter(Boolean);
+  };
+
+  // Persist the picker's chosen source location for a line.
+  const updatePickLocation = async (list, lineKey, code) => {
+    const updatedItems = list.items.map(i =>
+      getLineKey(i) === lineKey ? { ...i, pickLocation: code } : i
+    );
+    await DB.updatePickList(list.id, { items: updatedItems });
+    setSelectedList(prev => ({ ...prev, items: updatedItems }));
+  };
+
   // Handle local input change (no database call)
   const handleLocalQtyChange = (lineKey, value) => {
     setLocalPickedQty(prev => ({
@@ -239,19 +261,37 @@ export default function PickLists() {
       return;
     }
 
+    // Require a source location for any multi-location item that was picked.
+    const missingLoc = [];
+    for (const item of list.items) {
+      if ((parseInt(item.pickedQty) || 0) > 0) {
+        const opts = getItemLocationOptions(item.itemId);
+        if (opts.length > 1 && !item.pickLocation) missingLoc.push(item.itemName || item.partNumber || item.itemId);
+      }
+    }
+    if (missingLoc.length > 0) {
+      alert('Choose a pick location for these items before completing:\n\n• ' + missingLoc.join('\n• '));
+      return;
+    }
+
     // Process each picked item — wrap each operation so one failure doesn't block modal close
     const errors = [];
     for (const item of list.items) {
       if (item.pickedQty > 0) {
         const dbItem = items.find(i => i.id === item.itemId);
         if (dbItem) {
+          // Resolve the location actually picked from: the picker's choice, else the
+          // single known location, else the item's primary location field.
+          const opts = getItemLocationOptions(item.itemId);
+          const pickedFrom = item.pickLocation || (opts.length === 1 ? opts[0].code : item.location) || '';
+
           try {
             await DB.logMovement({
               itemId: item.itemId,
               itemName: item.itemName,
               quantity: item.pickedQty,
               type: 'PICK',
-              fromLocation: item.location || 'Unknown',
+              fromLocation: pickedFrom || 'Unknown',
               timestamp: Date.now()
             });
           } catch (e) {
@@ -264,6 +304,17 @@ export default function PickLists() {
           } catch (e) {
             console.warn('updateItemStock failed for', item.itemName, e.message);
             errors.push(`Stock update: ${item.itemName}`);
+          }
+
+          // Draw the picked quantity down from the specific location it came from,
+          // so per-location counts stay consistent (not just the item total).
+          if (pickedFrom) {
+            try {
+              await DB.decrementLocationInventory(pickedFrom, item.itemId, item.pickedQty);
+            } catch (e) {
+              console.warn('decrementLocationInventory failed for', item.itemName, e.message);
+              errors.push(`Location update: ${item.itemName}`);
+            }
           }
         }
       }
@@ -1701,12 +1752,38 @@ export default function PickLists() {
               <tbody>
                 {selectedList.items?.map(item => {
                   const lineKey = getLineKey(item);
+                  const locOptions = getItemLocationOptions(item.itemId);
+                  const multiLoc = locOptions.length > 1;
+                  const pickedNow = localPickedQty[lineKey] ?? item.pickedQty ?? 0;
+                  const needsLoc = multiLoc && pickedNow > 0 && !item.pickLocation;
                   return (
                   <tr key={lineKey} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: 10 }}>
                       <strong>{item.itemName}</strong>
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.partNumber}</div>
-                      {item.location && <div style={{ fontSize: 11, color: 'var(--accent)' }}>📍 {item.location}</div>}
+                      {!multiLoc && item.location && <div style={{ fontSize: 11, color: 'var(--accent)' }}>📍 {item.location}</div>}
+                      {multiLoc && selectedList.status !== 'completed' && (
+                        <div style={{ marginTop: 4 }}>
+                          <select
+                            value={item.pickLocation || ''}
+                            onChange={e => updatePickLocation(selectedList, lineKey, e.target.value)}
+                            style={{
+                              fontSize: 11, padding: '3px 6px', borderRadius: 4,
+                              border: needsLoc ? '1px solid #d32f2f' : '1px solid var(--border)',
+                              background: 'var(--bg-input)', color: 'var(--text-primary)'
+                            }}
+                          >
+                            <option value="">📍 Pick from… (required)</option>
+                            {locOptions.map(o => (
+                              <option key={o.code} value={o.code}>{o.code} — {o.qty} on hand</option>
+                            ))}
+                          </select>
+                          {needsLoc && <div style={{ fontSize: 10, color: '#d32f2f', marginTop: 2 }}>Choose a location</div>}
+                        </div>
+                      )}
+                      {multiLoc && selectedList.status === 'completed' && item.pickLocation && (
+                        <div style={{ fontSize: 11, color: 'var(--accent)' }}>📍 Picked from {item.pickLocation}</div>
+                      )}
                       {item.unitPrice > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>@ ${parseFloat(item.unitPrice).toFixed(2)}</div>}
                     </td>
                     <td style={{ padding: 10, textAlign: 'center' }}>{item.requestedQty}</td>

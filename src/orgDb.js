@@ -915,9 +915,32 @@ export const OrgDB = {
     });
   },
 
+  // Subtract a picked quantity from ONE specific location's inventory map, without
+  // touching any other location or the item's primary location field. Used at pick
+  // completion so multi-location counts stay accurate. Returns the new per-location qty.
+  async decrementLocationInventory(locationCode, itemId, qty) {
+    if (!currentOrgId || !locationCode || !itemId) return null;
+    const normalizedCode = this.normalizeLocationCode(locationCode);
+    const locations = await this.getLocations();
+    const targetLoc = locations.find(loc => {
+      const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
+      return locCode === normalizedCode;
+    });
+    if (!targetLoc) {
+      console.warn('decrementLocationInventory: location not found:', normalizedCode);
+      return null;
+    }
+    const currentInventory = { ...(targetLoc.inventory || {}) };
+    const current = parseInt(currentInventory[itemId]) || 0;
+    const newQty = Math.max(0, current - (parseInt(qty) || 0));
+    currentInventory[itemId] = newQty;
+    const ref = doc(db, 'locations', targetLoc.id);
+    await updateDoc(ref, { inventory: currentInventory, updatedAt: Date.now() });
+    return newQty;
+  },
+
   // Update item with location sync
-  async updateItemWithSync(itemId, updates) {
-    const ref = doc(db, 'items', itemId);
+  async updateItemWithSync(itemId, updates) {    const ref = doc(db, 'items', itemId);
     
     // Get current item to know the stock
     const itemSnap = await getDoc(ref);

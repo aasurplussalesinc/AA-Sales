@@ -11,6 +11,7 @@ export default function Shipping() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState({});
   const [filterStatus, setFilterStatus] = useState('packed');
+  const [boardDate, setBoardDate] = useState('today'); // today | yesterday | 7days | all
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [customers, setCustomers] = useState([]);
@@ -418,8 +419,34 @@ export default function Shipping() {
   };
 
   // Filter orders
-  const triwallCount = orders.filter(o => o.packingMode === 'triwalls').length;
-  const filteredOrders = orders.filter(order => {
+  // ── Daily board scope: keep every order in the DB, just show the selected day. ──
+  const dayBounds = (offsetDays = 0) => {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - offsetDays).getTime();
+    return { start, end: start + 24 * 60 * 60 * 1000 };
+  };
+  const orderActivityDate = (o) => {
+    const label = o.shippingLabel;
+    return o.shippedAt || (label && label.purchasedAt) || o.packedAt || o.updatedAt || o.createdAt || 0;
+  };
+  const inBoardScope = (o) => {
+    if (boardDate === 'all') return true;
+    const t = orderActivityDate(o);
+    if (boardDate === 'today') { const { start, end } = dayBounds(0); return t >= start && t < end; }
+    if (boardDate === 'yesterday') { const { start, end } = dayBounds(1); return t >= start && t < end; }
+    if (boardDate === '7days') { const { start } = dayBounds(6); return t >= start; }
+    return true;
+  };
+  // Orders in the selected day, used for the summary tiles and the table.
+  const scopedOrders = orders.filter(inBoardScope);
+  // Older, still-open orders hidden by a "today"/"yesterday" view (not shipped yet) —
+  // surfaced as a hint so unfinished work is never silently lost.
+  const olderOpenCount = (boardDate === 'today' || boardDate === 'yesterday')
+    ? orders.filter(o => o.status !== 'shipped' && !inBoardScope(o)).length
+    : 0;
+
+  const triwallCount = scopedOrders.filter(o => o.packingMode === 'triwalls').length;
+  const filteredOrders = scopedOrders.filter(order => {
     if (hideTriwalls && order.packingMode === 'triwalls') return false;
     if (filterStatus === 'all') return ['packed', 'shipped'].includes(order.status);
     if (filterStatus === 'packed') return order.status === 'packed';
@@ -869,14 +896,50 @@ export default function Shipping() {
         </div>
       )}
 
+      {/* Daily view selector — the board defaults to today; history stays one click away */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Showing:</span>
+        {[
+          { value: 'today', label: 'Today' },
+          { value: 'yesterday', label: 'Yesterday' },
+          { value: '7days', label: 'Last 7 days' },
+          { value: 'all', label: 'All time' },
+        ].map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => setBoardDate(opt.value)}
+            style={{
+              padding: '5px 12px', borderRadius: 16, cursor: 'pointer', fontSize: 12,
+              border: boardDate === opt.value ? '1px solid #4a5d23' : '1px solid var(--border)',
+              background: boardDate === opt.value ? '#4a5d23' : 'transparent',
+              color: boardDate === opt.value ? '#fff' : 'var(--text-secondary)'
+            }}
+          >
+            {opt.label}
+          </button>
+        ))}
+        {olderOpenCount > 0 && (
+          <button
+            onClick={() => setBoardDate('all')}
+            title="Older orders that are packed/labeled but not yet shipped"
+            style={{
+              padding: '5px 12px', borderRadius: 16, cursor: 'pointer', fontSize: 12,
+              border: '1px solid #ff9800', background: 'rgba(255,152,0,0.12)', color: '#b45309'
+            }}
+          >
+            ⚠️ {olderOpenCount} older open order{olderOpenCount === 1 ? '' : 's'} — show all
+          </button>
+        )}
+      </div>
+
       {/* Stats Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Packed / Awaiting', count: orders.filter(o => o.status === 'packed' && !o.shippingLabel).length, color: '#ff9800', icon: '📦' },
-          { label: 'Labels Ready', count: orders.filter(o => o.shippingLabel?.labelStatus === 'purchased').length, color: 'var(--text-success)', icon: '✅' },
-          { label: 'Rates Pending', count: orders.filter(o => o.shippingLabel?.labelStatus === 'rates_ready').length, color: '#2196F3', icon: '💰' },
-          { label: 'Errors', count: orders.filter(o => o.shippingLabel?.labelStatus === 'error' || o.shippingLabel?.labelStatus === 'failed').length, color: 'var(--text-error)', icon: '❌' },
-          { label: 'Shipped', count: orders.filter(o => o.status === 'shipped').length, color: 'var(--text-badge-purple)', icon: '🚚' },
+          { label: 'Packed / Awaiting', count: scopedOrders.filter(o => o.status === 'packed' && !o.shippingLabel).length, color: '#ff9800', icon: '📦' },
+          { label: 'Labels Ready', count: scopedOrders.filter(o => o.shippingLabel?.labelStatus === 'purchased').length, color: 'var(--text-success)', icon: '✅' },
+          { label: 'Rates Pending', count: scopedOrders.filter(o => o.shippingLabel?.labelStatus === 'rates_ready').length, color: '#2196F3', icon: '💰' },
+          { label: 'Errors', count: scopedOrders.filter(o => o.shippingLabel?.labelStatus === 'error' || o.shippingLabel?.labelStatus === 'failed').length, color: 'var(--text-error)', icon: '❌' },
+          { label: 'Shipped', count: scopedOrders.filter(o => o.status === 'shipped').length, color: 'var(--text-badge-purple)', icon: '🚚' },
         ].map(card => (
           <div key={card.label} style={{
             background: 'var(--bg-surface)', borderRadius: 10, padding: 16, border: `2px solid ${card.color}20`,

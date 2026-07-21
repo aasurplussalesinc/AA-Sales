@@ -50,17 +50,40 @@ function locationCodeOf(loc) {
 }
 
 // Parse a spoken command into { qty, locationCode, itemQuery }
-function parseCommand(raw, locations) {
+function parseCommand(raw, locations, items) {
   const text = String(raw || '').toLowerCase().trim();
+  const tokens = text.replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean);
 
-  // 1) Quantity — prefer a number right after add/qty/receive, or "<n> of"
-  let qty = null;
-  let m = text.match(/(?:add|quantity|qty|receive|received)\s+(\d{1,5})/);
-  if (m) qty = parseInt(m[1]);
-  if (qty === null) { m = text.match(/(\d{1,5})\s+of\b/); if (m) qty = parseInt(m[1]); }
-  if (qty === null) { m = text.match(/\b(\d{1,5})\b/); if (m) qty = parseInt(m[1]); }
+  // SKU lookup from the live catalog
+  const skuMap = {};
+  (items || []).forEach(it => { if (it.partNumber) skuMap[String(it.partNumber).toLowerCase()] = it; });
+  const numberTokens = tokens.filter(t => /^\d{1,6}$/.test(t));
+
+  // 1) Quantity FIRST, anchored to add/quantity/qty — this claims that number so it
+  //    can't be mistaken for a SKU (handles "add 24 of 2454": 24 is qty, 2454 is SKU).
+  let qty = null, qtyToken = null, m;
+  m = text.match(/(?:add|quantity|qty|receive|received)\s+(\d{1,6})/);
+  if (m) { qty = parseInt(m[1]); qtyToken = m[1]; }
+
+  // 2) SKU — prefer a number after sku/item/number/part/of; else any leftover number
+  //    (not the qty) that matches a known part number. Also try number+letter joins.
+  let skuItem = null, skuToken = null;
+  const sm = text.match(/(?:sku|item|number|part|of)\s+([a-z0-9]{1,8})/);
+  if (sm && sm[1] !== qtyToken && skuMap[sm[1]]) { skuItem = skuMap[sm[1]]; skuToken = sm[1]; }
+  if (!skuItem) {
+    for (const tk of tokens) { if (tk !== qtyToken && skuMap[tk]) { skuItem = skuMap[tk]; skuToken = tk; break; } }
+  }
+  if (!skuItem) {
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const joined = tokens[i] + tokens[i + 1];
+      if (joined !== qtyToken && skuMap[joined]) { skuItem = skuMap[joined]; skuToken = joined; break; }
+    }
+  }
+
+  // 3) Quantity fallbacks (never reuse the SKU number)
+  if (qty === null) { m = text.match(/(\d{1,6})\s+of\b/); if (m && m[1] !== skuToken) qty = parseInt(m[1]); }
+  if (qty === null) { const o = numberTokens.find(n => n !== skuToken); if (o) qty = parseInt(o); }
   if (qty === null) {
-    // number-word fallback, only right after "add"/"qty"
     const after = text.match(/(?:add|quantity|qty)\s+([a-z\s]+?)(?:\s+of\b|$)/);
     if (after) qty = wordsToNum(after[1].split(/\s+/));
   }
@@ -78,20 +101,17 @@ function parseCommand(raw, locations) {
     }
   }
 
-  // 3) Item query — strip qty + location + filler words
-  let itemWords = text
-    .replace(/[.,]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
+  // 3) Item query — words minus filler, numbers, the SKU token, and location tokens
+  let itemWords = tokens
     .filter(w => !/^\d+$/.test(w))
+    .filter(w => w !== skuToken)
     .filter(w => !FILLER.has(w));
-  // remove tokens that belong to the matched location code
   if (matchedLocNorm) {
     itemWords = itemWords.filter(w => !matchedLocNorm.includes(normCode(w)) || normCode(w).length < 2);
   }
   const itemQuery = itemWords.join(' ').trim();
 
-  return { qty, locationCode, itemQuery };
+  return { qty, locationCode, itemQuery, skuItem };
 }
 
 // Rank items against a free-text query
@@ -136,16 +156,20 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
   const handleTranscript = (text) => {
     setTranscript(text);
     setResult(null);
-    const { qty, locationCode, itemQuery } = parseCommand(text, locations);
-    const candidates = matchItems(itemQuery, items);
+    const { qty, locationCode, itemQuery, skuItem } = parseCommand(text, locations, items);
+    // A recognized SKU is a confident, exact match — put it first and preselect it.
+    const nameMatches = matchItems(itemQuery, items);
+    const candidates = skuItem
+      ? [skuItem, ...nameMatches.filter(i => i.id !== skuItem.id)]
+      : nameMatches;
     setPending({
       candidates,
-      selectedItemId: candidates[0]?.id || '',
+      selectedItemId: skuItem?.id || candidates[0]?.id || '',
       locationCode: locationCode || '',
       qty: qty && qty > 0 ? qty : 1,
       itemQuery
     });
-    if (!candidates.length) setError('No item matched "' + itemQuery + '". Pick it manually below.');
+    if (!skuItem && !candidates.length) setError('No item matched "' + itemQuery + '". Pick it manually below, or say the SKU number.');
     else setError('');
   };
 
@@ -238,7 +262,7 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
           {listening ? 'Listening… tap to stop' : 'Voice Receiving'}
         </button>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          e.g. “W1 R1 A1, add 24, duffle bag two strap”
+          e.g. “W1 R1 A1, add 24, duffle bag” or “add 24, SKU 2454”
         </span>
       </div>
 

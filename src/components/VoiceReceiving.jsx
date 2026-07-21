@@ -144,18 +144,43 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
   const [result, setResult] = useState(null); // { message } after apply
   // confirmation state
   const [pending, setPending] = useState(null); // { candidates, selectedItemId, locationCode, qty }
+  const [catFilter, setCatFilter] = useState(''); // confirm-card category narrow
   const recognitionRef = useRef(null);
 
   const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
 
+  // Locations, sorted in natural order (W1, W2, W10 — not W1, W10, W2)
   const locOptions = useMemo(
-    () => locations.map(l => ({ code: locationCodeOf(l), id: l.id })).filter(o => o.code),
+    () => locations
+      .map(l => ({ code: locationCodeOf(l), id: l.id }))
+      .filter(o => o.code)
+      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true, sensitivity: 'base' })),
     [locations]
   );
+
+  // Distinct categories, alphabetical
+  const categories = useMemo(
+    () => [...new Set((items || []).map(i => i.category).filter(Boolean))]
+      .sort((a, b) => String(a).localeCompare(String(b), undefined, { sensitivity: 'base' })),
+    [items]
+  );
+
+  // Items shown in the confirm dropdown: narrowed by the chosen category (alphabetical),
+  // otherwise the voice candidates first, then everything else alphabetical.
+  const itemDropdownList = useMemo(() => {
+    const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' });
+    if (catFilter) {
+      return (items || []).filter(i => i.category === catFilter).sort(byName);
+    }
+    const cands = (pending && pending.candidates) || [];
+    const rest = (items || []).filter(i => !cands.some(c => c.id === i.id)).sort(byName);
+    return [...cands, ...rest];
+  }, [items, catFilter, pending]);
 
   const handleTranscript = (text) => {
     setTranscript(text);
     setResult(null);
+    setCatFilter('');
     const { qty, locationCode, itemQuery, skuItem } = parseCommand(text, locations, items);
     // A recognized SKU is a confident, exact match — put it first and preselect it.
     const nameMatches = matchItems(itemQuery, items);
@@ -283,30 +308,31 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
           <div style={{ fontWeight: 700, marginBottom: 12 }}>Confirm before adding</div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
-            {/* Item */}
-            <label style={fieldLabel}>Item</label>
-            <select
-              value={pending.selectedItemId}
-              onChange={e => setPending({ ...pending, selectedItemId: e.target.value })}
-              style={input}
-            >
-              <option value="">— choose item —</option>
-              {(pending.candidates.length ? pending.candidates : items.slice(0, 50)).map(it => (
-                <option key={it.id} value={it.id}>
-                  {it.name}{it.partNumber ? ' · ' + it.partNumber : ''}
-                </option>
-              ))}
-              {/* allow full list fallback */}
-              {pending.candidates.length > 0 && <option disabled>──────────</option>}
-              {pending.candidates.length > 0 && items
-                .filter(it => !pending.candidates.some(c => c.id === it.id))
-                .slice(0, 100)
-                .map(it => (
-                  <option key={'all-' + it.id} value={it.id}>
-                    {it.name}{it.partNumber ? ' · ' + it.partNumber : ''}
-                  </option>
-                ))}
-            </select>
+            {/* Category filter (alphabetical) to narrow the item list */}
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div style={{ flex: '1 1 180px' }}>
+                <label style={fieldLabel}>Filter by category</label>
+                <select value={catFilter} onChange={e => setCatFilter(e.target.value)} style={input}>
+                  <option value="">All categories</option>
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div style={{ flex: '2 1 260px' }}>
+                <label style={fieldLabel}>Item</label>
+                <select
+                  value={pending.selectedItemId}
+                  onChange={e => setPending({ ...pending, selectedItemId: e.target.value })}
+                  style={input}
+                >
+                  <option value="">— choose item —</option>
+                  {itemDropdownList.map(it => (
+                    <option key={it.id} value={it.id}>
+                      {it.name}{it.partNumber ? ' · ' + it.partNumber : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
 
             {/* Location + Qty */}
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>

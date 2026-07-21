@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { OrgDB as DB } from '../orgDb';
+import { useTier } from '../useTier';
+import VoiceReceiving from '../components/VoiceReceiving';
 
 export default function Receiving() {
+  const tier = useTier();
   const [receivings, setReceivings] = useState([]);
   const [items, setItems] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -163,6 +166,9 @@ export default function Receiving() {
           + New Receiving
         </button>
       </div>
+
+      {/* Voice-assisted receiving (Business plan) */}
+      <VoiceReceiving items={items} locations={locations} canUse={tier.canUseVoice} onApplied={loadData} />
 
       {/* Create Modal */}
       {showCreate && (

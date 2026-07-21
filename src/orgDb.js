@@ -1337,6 +1337,52 @@ export const OrgDB = {
     
     await this.updateReceiving(receivingId, { status: 'completed' });
   },
+
+  // Voice/quick receive: ADD a quantity to the item's total stock AND to one specific
+  // location's inventory map, without disturbing other locations (multi-location safe).
+  // Returns { newStock, newLocQty }.
+  async receiveToLocation(locationCode, itemId, qty) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const addQty = parseInt(qty) || 0;
+    if (!itemId || addQty <= 0) throw new Error('An item and a positive quantity are required');
+
+    const itemRef = doc(db, 'items', itemId);
+    const itemSnap = await getDoc(itemRef);
+    const currentItem = itemSnap.exists() ? itemSnap.data() : {};
+    const newStock = (currentItem.stock || 0) + addQty;
+
+    // Add to the specific location's inventory map (additive)
+    let newLocQty = null;
+    const normalizedCode = this.normalizeLocationCode(locationCode);
+    if (normalizedCode) {
+      const locations = await this.getLocations();
+      const targetLoc = locations.find(loc => {
+        const code = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
+        return code === normalizedCode;
+      });
+      if (targetLoc) {
+        const inv = { ...(targetLoc.inventory || {}) };
+        newLocQty = (parseInt(inv[itemId]) || 0) + addQty;
+        inv[itemId] = newLocQty;
+        await updateDoc(doc(db, 'locations', targetLoc.id), { inventory: inv, updatedAt: Date.now() });
+      }
+    }
+
+    // Bump total stock; set primary location only if the item had none
+    const updates = { stock: newStock, updatedAt: Date.now() };
+    if (!currentItem.location && normalizedCode) updates.location = normalizedCode;
+    await updateDoc(itemRef, updates);
+
+    await this.logMovement({
+      itemId,
+      itemName: currentItem.name || '',
+      quantity: addQty,
+      type: 'RECEIVE',
+      toLocation: normalizedCode || 'Receiving'
+    });
+
+    return { newStock, newLocQty };
+  },
   
   // ==================== MOVEMENTS (ORG-SCOPED) ====================
   

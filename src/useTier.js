@@ -61,6 +61,9 @@ export function useTier() {
     canUseBatchLabels:  atLeast('business'),
     canUseAutoShipping: atLeast('business'),
 
+    // Business+: voice-assisted receiving/picking
+    canUseVoice:        atLeast('business'),
+
     // Enterprise+: 3rd party billing, dual insurance
     canUseThirdPartyBilling:   atLeast('enterprise'),
     canUseDualInsurance:       atLeast('enterprise'),
@@ -90,6 +93,7 @@ function featurePlan(feature) {
     triwall: 'Business', contracts: 'Business',
     international: 'Business', batchLabels: 'Business',
     autoShipping: 'Business',
+    voice: 'Business',
     thirdPartyBilling: 'Enterprise', dualInsurance: 'Enterprise',
   };
   return map[feature] || 'Pro';

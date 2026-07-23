@@ -531,7 +531,7 @@ export default function Shipping() {
 
     const fromAddr = organization?.settings?.shippingFromAddress;
     const acctNum = organization?.settings?.upsAccountNumber || '—';
-    const companyName = fromAddr?.company || fromAddr?.name || organization?.name || 'AA SURPLUS SALES INC';
+    const companyName = fromAddr?.company || fromAddr?.name || organization?.name || '';
     const street = fromAddr?.street1 || '';
     const cityStateZip = `${fromAddr?.city || ''} ${fromAddr?.state || ''} ${fromAddr?.zip || ''}`;
 
@@ -858,8 +858,8 @@ export default function Shipping() {
             <h4 style={{ margin: '0 0 15px' }}>📍 Ship From Address</h4>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               {[
-                { key: 'name', label: 'Name', placeholder: 'AA Surplus Sales' },
-                { key: 'company', label: 'Company', placeholder: 'AA Surplus Sales LLC' },
+                { key: 'name', label: 'Name', placeholder: 'Your Company' },
+                { key: 'company', label: 'Company', placeholder: 'Your Company LLC' },
                 { key: 'street1', label: 'Street Address', placeholder: '123 Warehouse Dr' },
                 { key: 'street2', label: 'Suite / Unit', placeholder: 'Suite 100' },
                 { key: 'city', label: 'City', placeholder: 'Your City' },
@@ -867,7 +867,7 @@ export default function Shipping() {
                 { key: 'zip', label: 'ZIP Code', placeholder: '33009' },
                 { key: 'country', label: 'Country', placeholder: 'US' },
                 { key: 'phone', label: 'Phone', placeholder: '555-123-4567' },
-                { key: 'email', label: 'Email', placeholder: 'shipping@aasurplus.com' },
+                { key: 'email', label: 'Email', placeholder: 'shipping@yourcompany.com' },
               ].map(field => (
                 <div key={field.key}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{field.label}</label>

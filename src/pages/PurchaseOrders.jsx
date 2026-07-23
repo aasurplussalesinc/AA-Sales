@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
-import { COMPANY_LOGO } from '../companyLogo';
 import { useAuth } from '../OrgAuthContext';
 
 export default function PurchaseOrders() {
@@ -999,7 +998,7 @@ export default function PurchaseOrders() {
         @media print{body{padding:10px}@page{margin:0.4in}}
       </style></head><body>
       <div class="header">
-        <div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : ''}<h1>PACKING LIST</h1><div style="color:#666;font-size:12px">${order.poNumber}</div></div>
+        <div>${DB.brandingHtml(organization).logo}<h1>PACKING LIST</h1><div style="color:#666;font-size:12px">${order.poNumber}</div></div>
         <div style="text-align:right;font-size:10px;color:#666"><strong>${organization?.name || ''}</strong><br>${organization?.address || ''}<br>${organization?.phone || ''}</div>
       </div>
       <div class="info-row">
@@ -1280,14 +1279,14 @@ export default function PurchaseOrders() {
         .footer{margin-top:20px;padding-top:10px;border-top:1px solid #e0e0e0;text-align:center;font-size:10px;color:#888}
         @media print{body{padding:15px}@page{margin:0.3in}}
       </style></head><body>
-      <div class="header"><div>${COMPANY_LOGO ? '<img src="' + COMPANY_LOGO + '" class="logo" />' : '<div style="font-size:18px;font-weight:bold;color:' + accentColor + '">' + (organization?.name || 'Company') + '</div>'}</div><div class="company-details"><strong>${organization?.name || 'AA Surplus Sales'}</strong>2153 Pond Road, Ronkonkoma NY 11779<br>${organization?.phone || '716-496-2451'}</div></div>
+      <div class="header"><div>${DB.brandingHtml(organization, { accent: accentColor }).logo}</div><div class="company-details">${DB.brandingHtml(organization, { accent: accentColor }).details}</div></div>
       <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${order.poNumber}</div>
       <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerContact ? '<p>Attn: ' + order.customerContact + '</p>' : ''}${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3>' + (order.shipToCompany ? '<p class="highlight">' + order.shipToCompany + '</p>' : '') + '<p>' + order.shipToAddress.replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${displayDate}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p>${order.customerPO ? '<p><strong>Customer PO:</strong> ' + order.customerPO + '</p>' : ''}</div></div>
       <table><thead><tr><th style="width:60px">SKU</th><th>Description</th>${isEstimate ? '<th style="text-align:center;width:50px">Qty</th>' : '<th style="text-align:center;width:50px">Ord</th><th style="text-align:center;width:50px">Ship</th>'}<th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${lineItems.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + (item.resolvedGrade ? '<div style="font-size:9px;color:' + accentColor + ';font-weight:600;margin-top:1px">Condition: ' + item.resolvedGrade + '</div>' : '') + (item.notes ? '<div style="font-size:9px;color:#666;font-style:italic">' + item.notes + '</div>' : '') + '</td>' + (isEstimate ? '<td style="text-align:center">' + (item.quantity || 0) + '</td>' : '<td style="text-align:center">' + (item.quantity || 0) + '</td><td style="text-align:center;font-weight:bold">' + (item.qtyShipped || 0) + '</td>') + '<td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
       <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : ''}${credit > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Credit</span><span>-$' + credit.toFixed(2) + '</span></div>' : ''}${discount > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Discount</span><span>-$' + discount.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
       <div style="margin-top:10px;font-size:9px;color:#666;font-style:italic;text-align:right">Payments by credit card are subject to a 3.5% processing fee</div>
       ${order.notes ? '<div class="notes"><h3>Notes</h3><p>' + order.notes + '</p></div>' : ''}
-      <div class="footer">Thank you for your business!<br>Questions? Contact us at ${organization?.email || 'aasurplussalesinc@gmail.com'}</div></body></html>`;
+      <div class="footer">Thank you for your business!${organization?.email ? '<br>Questions? Contact us at ' + organization.email : ''}</div></body></html>`;
     const printWindow = window.open('', '_blank');
     printWindow.document.write(printContent); printWindow.document.close(); printWindow.print();
   };
@@ -1295,7 +1294,7 @@ export default function PurchaseOrders() {
   const emailInvoice = (order) => {
     const total = (order.total || order.subtotal || 0).toFixed(2);
     const greeting = order.customerContact || order.customerName;
-    const subject = encodeURIComponent(`Invoice ${order.poNumber} from ${organization?.name || 'AA Surplus Sales'}`);
+    const subject = encodeURIComponent(`Invoice ${order.poNumber} from ${organization?.name || ''}`);
     const body = encodeURIComponent(
 `Hello ${greeting},
 
@@ -1313,9 +1312,9 @@ ${(order.items || []).map(item => `- ${item.itemName}: ${item.qtyShipped || item
 ${order.notes ? `Notes: ${order.notes}\n` : ''}
 Thank you for your business!
 
-${organization?.name || 'AA Surplus Sales'}
-${organization?.phone || '716-496-2451'}
-${organization?.email || 'aasurplussalesinc@gmail.com'}
+${organization?.name || ''}
+${organization?.phone || ''}
+${organization?.email || ''}
 `);
     const email = order.customerEmail || '';
     window.open(`mailto:${email}?subject=${subject}&body=${body}`, '_self');
@@ -1385,10 +1384,7 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
   <div class="from-section">
     <div class="label">FROM:</div>
     <div class="address">
-      AA SURPLUS SALES INC<br>
-      2153 POND RD<br>
-      RONKONKOMA, NY 11779<br>
-      USA
+      ${[DB.brandingFrom(organization).name, ...DB.brandingFrom(organization).addressLines].filter(Boolean).join('<br>')}
     </div>
   </div>
   
@@ -1437,10 +1433,7 @@ ${organization?.email || 'aasurplussalesinc@gmail.com'}
   <div class="from-section">
     <div class="label">FROM:</div>
     <div class="address">
-      AA SURPLUS SALES INC<br>
-      2153 POND RD<br>
-      RONKONKOMA, NY 11779<br>
-      USA
+      ${[DB.brandingFrom(organization).name, ...DB.brandingFrom(organization).addressLines].filter(Boolean).join('<br>')}
     </div>
   </div>
   

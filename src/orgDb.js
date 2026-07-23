@@ -811,7 +811,43 @@ export const OrgDB = {
 
   // ==================== LOCATION SYNC HELPERS ====================
   
-  // ── Location schema helpers ────────────────────────────────────────────
+  // ── Per-tenant document branding ───────────────────────────────────────
+  // Returns only what THIS organization has configured. Anything missing comes
+  // back empty so documents stay blank rather than borrowing another company's
+  // identity. Never falls back to a built-in logo or address.
+  brandingFrom(org) {
+    const o = org || currentOrgData || {};
+    const addressLines = [];
+    if (o.address) String(o.address).split('\n').forEach(l => { if (l.trim()) addressLines.push(l.trim()); });
+    const cityLine = [o.city, o.state, o.zip].filter(Boolean).join(', ');
+    if (cityLine) addressLines.push(cityLine);
+    return {
+      name: o.name || '',
+      logoUrl: o.logoUrl || '',
+      phone: o.phone || '',
+      email: o.email || '',
+      addressLines
+    };
+  },
+
+  // Small HTML block for document headers (empty string when nothing is set).
+  brandingHtml(org, opts) {
+    const b = this.brandingFrom(org);
+    const accent = (opts && opts.accent) || '#333';
+    const esc = s => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    const logo = b.logoUrl
+      ? '<img src="' + esc(b.logoUrl) + '" class="logo" alt="" />'
+      : (b.name ? '<div style="font-size:18px;font-weight:bold;color:' + esc(accent) + '">' + esc(b.name) + '</div>' : '');
+    const details = [];
+    if (b.name) details.push('<strong>' + esc(b.name) + '</strong>');
+    if (b.addressLines.length) details.push(b.addressLines.map(esc).join('<br>'));
+    if (b.phone) details.push(esc(b.phone));
+    return { logo, details: details.join('<br>') };
+  },
+
+
   // The default schema reproduces the classic W1-R1-A1 format exactly.
   // Each level may define `prefix` (printed before the value) and `sep`
   // (separator printed before this level; ignored on the first level).

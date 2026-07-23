@@ -932,10 +932,7 @@ export default function PickLists() {
   <div class="from-section">
     <div class="label">FROM:</div>
     <div class="address">
-      AA SURPLUS SALES INC<br>
-      2153 POND RD<br>
-      RONKONKOMA, NY 11779<br>
-      USA
+      ${[DB.brandingFrom(organization).name, ...DB.brandingFrom(organization).addressLines].filter(Boolean).join('<br>')}
     </div>
   </div>
   

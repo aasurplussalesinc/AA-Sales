@@ -1,11 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
-import { COMPANY_LOGO } from '../companyLogo';
 import { useAuth } from '../OrgAuthContext';
 
 export default function Customers() {
-  const { userRole } = useAuth();
+  const { userRole, organization } = useAuth();
   const isAdmin = userRole === 'admin';
   const isManager = userRole === 'manager';
   const canEdit = isAdmin || isManager;
@@ -460,8 +459,8 @@ export default function Customers() {
         <body>
           <div class="header">
             <div class="company-info">
-              <img src="${COMPANY_LOGO}" alt="AA Surplus Sales Inc." class="company-logo" />
-              <div class="company-location">Ronkonkoma, NY • 716-496-2451</div>
+              ${DB.brandingFrom(organization).logoUrl ? '<img src="' + DB.brandingFrom(organization).logoUrl + '" alt="" class="company-logo" />' : (DB.brandingFrom(organization).name ? '<div style="font-size:18px;font-weight:bold">' + DB.brandingFrom(organization).name + '</div>' : '')}
+              <div class="company-location">${[DB.brandingFrom(organization).addressLines.join(' '), DB.brandingFrom(organization).phone].filter(Boolean).join(' • ')}</div>
             </div>
             <div class="po-info">
               <div class="po-number">${order.poNumber}</div>
@@ -518,7 +517,7 @@ export default function Customers() {
 
           <div class="footer">
             <p>Thank you for your business!</p>
-            <p>AA Surplus Sales Inc. • Genuine U.S. Military Goods • Est. 1973</p>
+            ${DB.brandingFrom(organization).name ? '<p>' + DB.brandingFrom(organization).name + '</p>' : ''}
           </div>
         </body>
       </html>

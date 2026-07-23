@@ -62,6 +62,8 @@ export default function OrgSettings() {
     ]
   });
   const [showLocationSchema, setShowLocationSchema] = useState(false);
+  const [logoUrl, setLogoUrl] = useState('');
+  const [logoUploading, setLogoUploading] = useState(false);
   
   // Employee management state
   const [employees, setEmployees] = useState([]);
@@ -90,6 +92,7 @@ export default function OrgSettings() {
       setOrgAddress(organization.address || '');
       setSkuSeriesStart(organization.skuSeriesStart || 1000);
       if (organization.locationSchema) setLocationSchema(organization.locationSchema);
+      if (organization.logoUrl) setLogoUrl(organization.logoUrl);
       
       // Load employees (default to Alan, Nancy, Gustavo if none set)
       const empList = organization.employees || [];
@@ -138,7 +141,9 @@ export default function OrgSettings() {
         email: orgEmail,
         phone: orgPhone,
         address: orgAddress,
-        skuSeriesStart: parseInt(skuSeriesStart) || 1000
+        skuSeriesStart: parseInt(skuSeriesStart) || 1000,
+        logoUrl: logoUrl || '',
+        locationSchema: locationSchema
       });
       await refreshOrganization();
       setEditing(false);
@@ -314,6 +319,37 @@ export default function OrgSettings() {
                 New items will auto-number from this value upward. Existing SKUs are not affected.
               </p>
             </div>
+            {/* Company Logo — appears on invoices, packing lists, statements */}
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Company Logo</label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                {logoUrl
+                  ? <img src={logoUrl} alt="" style={{ maxHeight: 56, maxWidth: 180, objectFit: 'contain', border: '1px solid var(--border)', borderRadius: 6, padding: 4 }} />
+                  : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>No logo set — documents show your company name instead.</span>}
+                <label className="btn btn-sm" style={{ cursor: 'pointer' }}>
+                  {logoUploading ? 'Uploading…' : (logoUrl ? 'Replace' : 'Upload logo')}
+                  <input type="file" accept="image/*" hidden disabled={logoUploading}
+                    onChange={async e => {
+                      const file = e.target.files && e.target.files[0];
+                      if (!file) return;
+                      setLogoUploading(true);
+                      try {
+                        const url = await OrgDB.uploadCatalogAsset(file, 'logo');
+                        setLogoUrl(url);
+                      } catch (err) {
+                        alert('Logo upload failed: ' + (err.message || err));
+                      } finally { setLogoUploading(false); }
+                    }} />
+                </label>
+                {logoUrl && (
+                  <button type="button" className="btn btn-sm" onClick={() => setLogoUrl('')}>Remove</button>
+                )}
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
+                Used on invoices, packing lists and statements. Save to apply.
+              </p>
+            </div>
+
             {/* Location Schema */}
             <div style={{ marginBottom: 15 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>

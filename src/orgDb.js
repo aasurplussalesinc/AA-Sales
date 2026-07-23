@@ -811,10 +811,59 @@ export const OrgDB = {
 
   // ==================== LOCATION SYNC HELPERS ====================
   
-  // Normalize location code format (handles various formats to W1-R1-A1)
+  // ── Location schema helpers ────────────────────────────────────────────
+  // The default schema reproduces the classic W1-R1-A1 format exactly.
+  // Each level may define `prefix` (printed before the value) and `sep`
+  // (separator printed before this level; ignored on the first level).
+  DEFAULT_LOCATION_SCHEMA: {
+    levels: [
+      { name: 'Warehouse', key: 'warehouse', prefix: '',  sep: '',  options: ['W1', 'W2', 'W3', 'W4'] },
+      { name: 'Rack',      key: 'rack',      prefix: 'R', sep: '-', options: ['1', '2', '3', '4', '5'] },
+      { name: 'Bay',       key: 'letter',    prefix: '',  sep: '-', options: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('') },
+      { name: 'Shelf',     key: 'shelf',     prefix: '',  sep: '',  options: ['1', '2', '3', '4', '5'] },
+    ]
+  },
+
+  getLocationSchema() {
+    const s = currentOrgData && currentOrgData.locationSchema;
+    if (s && Array.isArray(s.levels) && s.levels.length > 0) return s;
+    return this.DEFAULT_LOCATION_SCHEMA;
+  },
+
+  // True when the org has defined its own schema (so legacy reformatting
+  // must not be applied to their codes).
+  hasCustomLocationSchema() {
+    const s = currentOrgData && currentOrgData.locationSchema;
+    return !!(s && Array.isArray(s.levels) && s.levels.length > 0);
+  },
+
+  // Build a location code from level values, e.g. { warehouse:'W1', rack:'1', ... }
+  buildLocationCode(values, schema) {
+    const sch = schema || this.getLocationSchema();
+    return sch.levels.map((lvl, idx) => {
+      const raw = values && values[lvl.key] != null ? String(values[lvl.key]) : '';
+      if (!raw) return '';
+      const sep = idx === 0 ? '' : (lvl.sep != null ? lvl.sep : '-');
+      const prefix = lvl.prefix != null ? lvl.prefix : '';
+      return sep + prefix + raw;
+    }).join('');
+  },
+
+  // Resolve a stored location record to its code (uses the stored code when
+  // present, so historical records keep the format they were created with).
+  locationCodeOf(loc) {
+    if (!loc) return '';
+    if (loc.locationCode) return loc.locationCode;
+    return this.buildLocationCode(loc);
+  },
+
+  // Normalize location code format (legacy formats -> W1-R1-A1).
+  // When the org defines its own schema, codes are left alone apart from
+  // trimming — reformatting would corrupt custom nomenclature.
   normalizeLocationCode(code) {
     if (!code) return '';
     code = code.trim();
+    if (this.hasCustomLocationSchema()) return code;
     
     // If it matches old format W1-R1-A-1 (with dash before shelf number), convert to W1-R1-A1
     const oldFormat = code.match(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i);

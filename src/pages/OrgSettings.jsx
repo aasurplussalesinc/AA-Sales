@@ -55,10 +55,10 @@ export default function OrgSettings() {
   const [skuSeriesStart, setSkuSeriesStart] = useState(1000);
   const [locationSchema, setLocationSchema] = useState({
     levels: [
-      { name: 'Warehouse', key: 'warehouse', options: ['W1', 'W2', 'W3', 'W4'] },
-      { name: 'Rack',      key: 'rack',      options: ['1', '2', '3', '4', '5'] },
-      { name: 'Bay',       key: 'letter',    options: ['A', 'B', 'C', 'D', 'E'] },
-      { name: 'Shelf',     key: 'shelf',     options: ['1', '2', '3', '4', '5'] },
+      { name: 'Warehouse', key: 'warehouse', prefix: '',  sep: '',  options: ['W1', 'W2', 'W3', 'W4'] },
+      { name: 'Rack',      key: 'rack',      prefix: 'R', sep: '-', options: ['1', '2', '3', '4', '5'] },
+      { name: 'Bay',       key: 'letter',    prefix: '',  sep: '-', options: ['A', 'B', 'C', 'D', 'E'] },
+      { name: 'Shelf',     key: 'shelf',     prefix: '',  sep: '',  options: ['1', '2', '3', '4', '5'] },
     ]
   });
   const [showLocationSchema, setShowLocationSchema] = useState(false);
@@ -354,6 +354,42 @@ export default function OrgSettings() {
                             background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 13
                           }}
                         />
+                        <input
+                          type="text"
+                          value={idx === 0 ? '' : (level.sep != null ? level.sep : '-')}
+                          disabled={idx === 0}
+                          maxLength={2}
+                          onChange={e => {
+                            const newLevels = [...locationSchema.levels];
+                            newLevels[idx] = { ...newLevels[idx], sep: e.target.value };
+                            setLocationSchema({ ...locationSchema, levels: newLevels });
+                          }}
+                          title="Separator printed before this level"
+                          placeholder="-"
+                          style={{
+                            width: 42, textAlign: 'center', padding: '6px 4px',
+                            border: '1px solid var(--border)', borderRadius: 6,
+                            background: idx === 0 ? 'var(--bg-surface-3)' : 'var(--bg-input)',
+                            color: 'var(--text-primary)', fontSize: 13
+                          }}
+                        />
+                        <input
+                          type="text"
+                          value={level.prefix || ''}
+                          maxLength={3}
+                          onChange={e => {
+                            const newLevels = [...locationSchema.levels];
+                            newLevels[idx] = { ...newLevels[idx], prefix: e.target.value };
+                            setLocationSchema({ ...locationSchema, levels: newLevels });
+                          }}
+                          title="Letter(s) printed before the value, e.g. R for R1"
+                          placeholder="pre"
+                          style={{
+                            width: 52, textAlign: 'center', padding: '6px 4px',
+                            border: '1px solid var(--border)', borderRadius: 6,
+                            background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: 13
+                          }}
+                        />
                         {locationSchema.levels.length > 2 && (
                           <button
                             type="button"
@@ -396,7 +432,7 @@ export default function OrgSettings() {
                       className="btn btn-sm"
                       onClick={() => setLocationSchema({
                         ...locationSchema,
-                        levels: [...locationSchema.levels, { name: 'New Level', key: `level${locationSchema.levels.length}`, options: ['1', '2', '3'] }]
+                        levels: [...locationSchema.levels, { name: 'New Level', key: `level${locationSchema.levels.length}`, prefix: '', sep: '-', options: ['1', '2', '3'] }]
                       })}
                       style={{ fontSize: 12, marginTop: 4 }}
                     >
@@ -407,8 +443,14 @@ export default function OrgSettings() {
                   <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--bg-surface-3)', borderRadius: 6, fontSize: 13 }}>
                     <strong>Preview: </strong>
                     <span style={{ color: 'var(--accent)', fontWeight: 600 }}>
-                      {locationSchema.levels.map(l => l.options[0] || '?').join('-')}
+                      {OrgDB.buildLocationCode(
+                        Object.fromEntries(locationSchema.levels.map(l => [l.key, (l.options && l.options[0]) || '?'])),
+                        locationSchema
+                      )}
                     </span>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>
+                      This is exactly how new location codes will be written.
+                    </div>
                   </div>
                 </div>
               )}

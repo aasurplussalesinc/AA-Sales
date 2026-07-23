@@ -2,9 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
+import { useTier } from '../useTier';
 
 export default function Locations() {
   const { userRole, organization } = useAuth();
+  const tier = useTier();
   const isAdmin = userRole === 'admin';
   const isManager = userRole === 'manager';
   const canEdit = isAdmin || isManager;
@@ -21,15 +23,8 @@ export default function Locations() {
   const [filters, setFilters] = useState({ warehouse: '', rack: '', letter: '', search: '' });
   const fileInputRef = useRef(null);
 
-  // Location schema from org settings (falls back to default)
-  const locSchema = organization?.locationSchema || {
-    levels: [
-      { name: 'Warehouse', key: 'warehouse', options: ['W1', 'W2', 'W3', 'W4'] },
-      { name: 'Rack',      key: 'rack',      options: ['1', '2', '3', '4', '5'] },
-      { name: 'Bay',       key: 'letter',    options: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('') },
-      { name: 'Shelf',     key: 'shelf',     options: ['1', '2', '3', '4', '5'] },
-    ]
-  };
+  // Location schema from org settings (falls back to the shared default)
+  const locSchema = organization?.locationSchema || DB.DEFAULT_LOCATION_SCHEMA;
 
   // Keep backward-compat aliases
   const warehouses = locSchema.levels[0]?.options || ['W1'];
@@ -40,6 +35,18 @@ export default function Locations() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Seed the add-location form from whatever schema is active, so custom
+  // level keys start with a real value instead of being undefined.
+  useEffect(() => {
+    setNewLocation(prev => {
+      const seeded = { ...prev };
+      locSchema.levels.forEach(lvl => {
+        if (!seeded[lvl.key]) seeded[lvl.key] = (lvl.options && lvl.options[0]) || '';
+      });
+      return seeded;
+    });
+  }, [organization?.locationSchema]);
 
   const loadData = async () => {
     const [locs, itms] = await Promise.all([
@@ -104,18 +111,38 @@ export default function Locations() {
     }
   });
 
-  // Format location code for display
+  // Format location code for display (uses the stored code when present, so
+  // existing locations keep the format they were created with)
   const formatLocation = (loc) => {
-    return `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+    if (loc.locationCode) return loc.locationCode;
+    return DB.buildLocationCode(loc, locSchema);
   };
 
   const addLocation = async () => {
-    if (!newLocation.warehouse || !newLocation.rack || !newLocation.letter || !newLocation.shelf) {
-      alert('Fill all fields');
+    // Every level defined by the org's schema must be filled
+    const missing = locSchema.levels.filter(l => !newLocation[l.key]);
+    if (missing.length > 0) {
+      alert('Fill all fields: ' + missing.map(l => l.name).join(', '));
       return;
     }
 
-    const locationCode = `${newLocation.warehouse}-R${newLocation.rack}-${newLocation.letter}${newLocation.shelf}`;
+    // ── Plan limits: total locations, and distinct top-level sites ──
+    const locLimit = tier.checkLimit('locations', locations.length);
+    if (!locLimit.ok) {
+      alert(`Your ${tier.plan} plan includes ${locLimit.limit} locations (you have ${locLimit.used}).\n\nUpgrade to add more.`);
+      return;
+    }
+    const topKey = locSchema.levels[0]?.key || 'warehouse';
+    const existingTop = new Set(locations.map(l => l[topKey]).filter(Boolean));
+    if (!existingTop.has(newLocation[topKey])) {
+      const whLimit = tier.checkLimit('warehouses', existingTop.size);
+      if (!whLimit.ok) {
+        alert(`Your ${tier.plan} plan includes ${whLimit.limit} ${(locSchema.levels[0]?.name || 'Warehouse')}(s).\n\nUpgrade to add another.`);
+        return;
+      }
+    }
+
+    const locationCode = DB.buildLocationCode(newLocation, locSchema);
     
     // Check for duplicate
     const exists = locations.find(loc => loc.locationCode === locationCode);

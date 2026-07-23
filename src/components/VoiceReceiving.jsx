@@ -135,6 +135,14 @@ function parseCommand(raw, locations, items, schema) {
   const text = String(raw || '').toLowerCase().trim();
   const tokens = text.replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean);
 
+  // Intent: placement verbs mean "record where this lives" (quantity untouched),
+  // receiving verbs mean "more arrived" (quantity added).
+  const PLACE_RE = /\b(put|place|move|set|locate|assign|store|belongs|goes|lives)\b/;
+  const RECEIVE_RE = /\b(add|adding|receive|received|receiving)\b/;
+  let intent = null;
+  if (PLACE_RE.test(text)) intent = 'assign';
+  else if (RECEIVE_RE.test(text)) intent = 'receive';
+
   // SKU lookup from the live catalog
   const skuMap = {};
   (items || []).forEach(it => { if (it.partNumber) skuMap[String(it.partNumber).toLowerCase()] = it; });
@@ -163,7 +171,6 @@ function parseCommand(raw, locations, items, schema) {
 
   // 3) Quantity fallbacks (never reuse the SKU number)
   if (qty === null) { m = text.match(/(\d{1,6})\s+of\b/); if (m && m[1] !== skuToken) qty = parseInt(m[1]); }
-  if (qty === null) { const o = numberTokens.find(n => n !== skuToken); if (o) qty = parseInt(o); }
   if (qty === null) {
     const after = text.match(/(?:add|quantity|qty)\s+([a-z\s]+?)(?:\s+of\b|$)/);
     if (after) qty = wordsToNum(after[1].split(/\s+/));
@@ -192,6 +199,18 @@ function parseCommand(raw, locations, items, schema) {
     }
   }
 
+  // Late quantity fallback: any leftover number that the location did NOT consume.
+  // (Runs after location so "warehouse 1 rack 1" can't be read as a quantity.)
+  if (qty === null) {
+    const leftover = tokens.find((t, i) =>
+      /^\d{1,6}$/.test(t) &&
+      t !== skuToken &&
+      !locUsedIdx.has(i) &&
+      !(matchedLocNorm && matchedLocNorm.includes(normCode(t)))
+    );
+    if (leftover) qty = parseInt(leftover);
+  }
+
   // 5) Item query — drop numbers, the SKU token, filler, level names, and any
   //    token consumed by the location, so leftovers don't pollute the match.
   const levelNames = new Set(
@@ -210,7 +229,11 @@ function parseCommand(raw, locations, items, schema) {
   }
   const itemQuery = itemWords.join(' ').trim();
 
-  return { qty, locationCode, itemQuery, skuItem };
+  // No verb spoken: a bare "item + shelf" with no quantity is a placement;
+  // anything with a quantity stays a receive (preserves existing behaviour).
+  if (!intent) intent = (qty === null) ? 'assign' : 'receive';
+
+  return { qty, locationCode, itemQuery, skuItem, intent };
 }
 
 // Rank items against a free-text query
@@ -302,7 +325,7 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
     setTranscript(text);
     setResult(null);
     setCatFilter('');
-    const { qty, locationCode, itemQuery, skuItem } = parseCommand(text, locations, items, DB.getLocationSchema());
+    const { qty, locationCode, itemQuery, skuItem, intent } = parseCommand(text, locations, items, DB.getLocationSchema());
     // A recognized SKU is a confident, exact match — put it first and preselect it.
     const nameMatches = matchItems(itemQuery, items);
     const candidates = skuItem
@@ -313,7 +336,8 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
       selectedItemId: skuItem?.id || candidates[0]?.id || '',
       locationCode: locationCode || '',
       qty: qty && qty > 0 ? qty : 1,
-      itemQuery
+      itemQuery,
+      mode: intent === 'assign' ? 'assign' : 'receive'
     });
     if (!skuItem && !candidates.length) setError('No item matched "' + itemQuery + '". Pick it manually below, or say the SKU number.');
     else setError('');
@@ -404,18 +428,46 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
     return parseInt(loc.inventory[pending.selectedItemId]) || 0;
   };
 
+  // Locations that currently hold this item — used to guard voice assignment
+  const locationsHolding = (itemId) => {
+    if (!itemId) return [];
+    return locations
+      .filter(l => l.inventory && l.inventory[itemId] != null && (parseInt(l.inventory[itemId]) || 0) > 0)
+      .map(l => locationCodeOf(l));
+  };
+
   const apply = async () => {
     if (!pending) return;
     if (!pending.selectedItemId) { setError('Choose an item first.'); return; }
     if (!pending.locationCode) { setError('Choose a location first.'); return; }
+    const isAssign = pending.mode === 'assign';
     const qty = parseInt(pending.qty) || 0;
-    if (qty <= 0) { setError('Enter a quantity greater than zero.'); return; }
+    if (!isAssign && qty <= 0) { setError('Enter a quantity greater than zero.'); return; }
+
+    const item = items.find(i => i.id === pending.selectedItemId);
+
+    // Guard: assigning is exclusive (it clears other locations), so never let
+    // voice silently collapse an item that is deliberately split across shelves.
+    if (isAssign) {
+      const holding = locationsHolding(pending.selectedItemId)
+        .filter(c => normCode(c) !== normCode(pending.locationCode));
+      if (holding.length > 1) {
+        setError(`"${item?.name || 'This item'}" is stocked in ${holding.length} locations (${holding.join(', ')}). Set its locations from the item screen so nothing is lost.`);
+        return;
+      }
+    }
+
     setBusy(true); setError('');
     try {
-      const item = items.find(i => i.id === pending.selectedItemId);
-      const res = await DB.receiveToLocation(pending.locationCode, pending.selectedItemId, qty);
-      setResult('✅ Added ' + qty + ' × ' + (item?.name || 'item') + ' to ' + pending.locationCode +
-        (res && res.newLocQty != null ? ' (now ' + res.newLocQty + ' there)' : ''));
+      if (isAssign) {
+        const keepStock = parseInt(item?.stock) || 0;
+        await DB.syncItemToLocation(pending.selectedItemId, pending.locationCode, keepStock);
+        setResult('📍 ' + (item?.name || 'Item') + ' set to ' + pending.locationCode + ' — stock unchanged at ' + keepStock);
+      } else {
+        const res = await DB.receiveToLocation(pending.locationCode, pending.selectedItemId, qty);
+        setResult('✅ Added ' + qty + ' × ' + (item?.name || 'item') + ' to ' + pending.locationCode +
+          (res && res.newLocQty != null ? ' (now ' + res.newLocQty + ' there)' : ''));
+      }
       setPending(null);
       setTranscript('');
       if (onApplied) onApplied();
@@ -462,8 +514,8 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
           {listening ? 'Listening… tap when done' : transcribing ? 'Reading it back…' : 'Tap & read the label'}
         </button>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          Say the location, the quantity, then the SKU or name —<br />
-          e.g. “W1 R1 A1, add 24, SKU 2454”
+          <strong>Add stock:</strong> “add 24 to warehouse 1 rack 1 B2, SKU 2454”<br />
+          <strong>Set location:</strong> “put SKU 2454 in warehouse 1, rack 1, B2”
         </span>
       </div>
 
@@ -481,7 +533,21 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
           marginTop: 14, padding: 16, borderRadius: 10,
           border: '1px solid var(--border)', background: 'var(--bg-surface-2, #fafafa)'
         }}>
-          <div style={{ fontWeight: 700, marginBottom: 12 }}>Confirm before adding</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <span style={{ fontWeight: 700 }}>
+              {pending.mode === 'assign' ? '📍 Set location' : '➕ Add to inventory'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPending({ ...pending, mode: pending.mode === 'assign' ? 'receive' : 'assign' })}
+              style={{
+                fontSize: 11, padding: '3px 10px', borderRadius: 12, cursor: 'pointer',
+                border: '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)'
+              }}
+            >
+              switch to {pending.mode === 'assign' ? 'adding stock' : 'setting location'}
+            </button>
+          </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
             {/* Category filter (alphabetical) to narrow the item list */}
@@ -523,23 +589,38 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
                   {locOptions.map(o => <option key={o.id} value={o.code}>{o.code}</option>)}
                 </select>
               </div>
-              <div style={{ width: 110 }}>
-                <label style={fieldLabel}>Quantity</label>
-                <input
-                  type="number" min="1"
-                  value={pending.qty}
-                  onChange={e => setPending({ ...pending, qty: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
-                  style={input}
-                />
-              </div>
+              {pending.mode !== 'assign' && (
+                <div style={{ width: 110 }}>
+                  <label style={fieldLabel}>Quantity</label>
+                  <input
+                    type="number" min="1"
+                    value={pending.qty}
+                    onChange={e => setPending({ ...pending, qty: e.target.value === '' ? '' : parseInt(e.target.value) || 0 })}
+                    style={input}
+                  />
+                </div>
+              )}
             </div>
 
             {/* On-hand preview */}
             {pending.selectedItemId && pending.locationCode && (
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                {pending.locationCode}: {currentAtLocation()} on hand → <strong>{currentAtLocation() + (parseInt(pending.qty) || 0)}</strong> after.
-                {selectedItem && <> Item total: {selectedItem.stock || 0} → <strong>{(selectedItem.stock || 0) + (parseInt(pending.qty) || 0)}</strong>.</>}
-              </div>
+              pending.mode === 'assign' ? (
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {(() => {
+                    const held = locationsHolding(pending.selectedItemId)
+                      .filter(c => normCode(c) !== normCode(pending.locationCode));
+                    return held.length === 1
+                      ? <>Currently at <strong>{held[0]}</strong> → will move to <strong>{pending.locationCode}</strong>. </>
+                      : <>Will be recorded at <strong>{pending.locationCode}</strong>. </>;
+                  })()}
+                  Stock stays <strong>{selectedItem ? (selectedItem.stock || 0) : 0}</strong> — nothing added.
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                  {pending.locationCode}: {currentAtLocation()} on hand → <strong>{currentAtLocation() + (parseInt(pending.qty) || 0)}</strong> after.
+                  {selectedItem && <> Item total: {selectedItem.stock || 0} → <strong>{(selectedItem.stock || 0) + (parseInt(pending.qty) || 0)}</strong>.</>}
+                </div>
+              )
             )}
           </div>
 
@@ -549,8 +630,8 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
               Cancel
             </button>
             <button onClick={apply} disabled={busy}
-              style={{ ...btn, background: '#4a5d23', color: '#fff' }}>
-              {busy ? 'Adding…' : '✅ Add to inventory'}
+              style={{ ...btn, background: pending.mode === 'assign' ? '#1565c0' : '#4a5d23', color: '#fff' }}>
+              {busy ? 'Saving…' : (pending.mode === 'assign' ? '📍 Assign location' : '✅ Add to inventory')}
             </button>
           </div>
         </div>

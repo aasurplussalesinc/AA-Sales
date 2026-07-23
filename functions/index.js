@@ -2224,3 +2224,109 @@ exports.adminDeleteOrganization = functions.https.onCall(async (data, context) =
 
   return stats;
 });
+
+// ════════════════════════════════════════════════════════════════════
+// GOOGLE SPEECH-TO-TEXT — voice receiving
+// Transcribes a short spoken command. Uses speech adaptation (phrase
+// hints) built from the org's own SKUs and item names, which is what
+// makes warehouse jargon (MOLLE, MARPAT, FROG, ALICE) recognizable.
+// Auth: uses the function's own service account via the metadata server,
+// so there are no API keys or service-account JSON files to manage.
+// Requires: Speech-to-Text API enabled on the Firebase/GCP project.
+// ════════════════════════════════════════════════════════════════════
+
+var _sttTokenCache = { token: null, expires: 0 };
+
+async function getGoogleAccessToken() {
+  var now = Date.now();
+  if (_sttTokenCache.token && now < _sttTokenCache.expires) return _sttTokenCache.token;
+  var res = await fetch(
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+    { headers: { 'Metadata-Flavor': 'Google' } }
+  );
+  if (!res.ok) throw new Error('Could not obtain Google access token (' + res.status + ')');
+  var json = await res.json();
+  _sttTokenCache = {
+    token: json.access_token,
+    // refresh a minute before actual expiry
+    expires: now + (Math.max(60, (json.expires_in || 3600) - 60) * 1000)
+  };
+  return json.access_token;
+}
+
+exports.transcribeVoice = functions
+  .runWith({ timeoutSeconds: 30, memory: '256MB' })
+  .https.onCall(async function (data, context) {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+    }
+    // Generous but bounded: 150 commands per user per 5 minutes
+    if (!checkRateLimit('stt_' + context.auth.uid, 150, 5 * 60 * 1000)) {
+      throw new functions.https.HttpsError('resource-exhausted', 'Too many voice requests. Please wait a moment.');
+    }
+
+    var audioBase64 = data && data.audioBase64;
+    if (!audioBase64) {
+      throw new functions.https.HttpsError('invalid-argument', 'No audio provided');
+    }
+
+    // Phrase hints: cap length/count to stay inside Speech API limits
+    var phrases = Array.isArray(data.phrases) ? data.phrases : [];
+    phrases = phrases
+      .filter(function (p) { return typeof p === 'string' && p.trim().length > 0; })
+      .map(function (p) { return p.trim().slice(0, 100); });
+    if (phrases.length > 2000) phrases = phrases.slice(0, 2000);
+
+    var config = {
+      languageCode: 'en-US',
+      // standard (cheapest) model, tuned for short commands rather than dictation
+      model: 'command_and_search',
+      maxAlternatives: 1,
+      profanityFilter: false,
+      enableAutomaticPunctuation: false,
+      encoding: data.encoding || 'WEBM_OPUS'
+    };
+    // For WEBM_OPUS the sample rate is read from the container header —
+    // sending a mismatched value causes errors, so only set it when given.
+    if (data.sampleRateHertz && config.encoding !== 'WEBM_OPUS') {
+      config.sampleRateHertz = data.sampleRateHertz;
+    }
+    if (phrases.length > 0) {
+      config.speechContexts = [{ phrases: phrases, boost: 18 }];
+    }
+
+    try {
+      var token = await getGoogleAccessToken();
+      var resp = await fetch('https://speech.googleapis.com/v1/speech:recognize', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ config: config, audio: { content: audioBase64 } })
+      });
+
+      var json = await resp.json();
+      if (!resp.ok) {
+        var msg = (json && json.error && json.error.message) || ('Speech API error ' + resp.status);
+        console.warn('transcribeVoice error:', msg);
+        throw new functions.https.HttpsError('internal', msg);
+      }
+
+      var results = json.results || [];
+      var transcript = results
+        .map(function (r) {
+          return (r.alternatives && r.alternatives[0] && r.alternatives[0].transcript) || '';
+        })
+        .join(' ')
+        .trim();
+      var confidence =
+        (results[0] && results[0].alternatives && results[0].alternatives[0] &&
+          results[0].alternatives[0].confidence) || null;
+
+      return { transcript: transcript, confidence: confidence };
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      throw new functions.https.HttpsError('internal', error.message || 'Transcription failed');
+    }
+  });

@@ -1,5 +1,8 @@
 import { useState, useRef, useMemo } from 'react';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { OrgDB as DB } from '../orgDb';
+
+const fbFunctions = getFunctions();
 
 /**
  * VoiceReceiving — hands-free "add stock to a location" using the browser's
@@ -145,9 +148,28 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
   // confirmation state
   const [pending, setPending] = useState(null); // { candidates, selectedItemId, locationCode, qty }
   const [catFilter, setCatFilter] = useState(''); // confirm-card category narrow
+  const [transcribing, setTranscribing] = useState(false);
   const recognitionRef = useRef(null);
+  const recorderRef = useRef(null);
+  const streamRef = useRef(null);
+  const chunksRef = useRef([]);
 
   const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  // An empty confirm card, so a failed transcription still lets the user pick manually
+  const emptyPending = () => ({ candidates: [], selectedItemId: '', locationCode: '', qty: 1, itemQuery: '' });
+
+  // Phrase hints sent to Google: every SKU plus item names and location codes.
+  // This is what makes warehouse jargon (MOLLE, MARPAT, FROG, ALICE) recognizable.
+  const phraseHints = useMemo(() => {
+    const out = [];
+    (items || []).forEach(i => {
+      if (i.partNumber) out.push(String(i.partNumber));
+      if (i.name) out.push(String(i.name).slice(0, 100));
+    });
+    (locations || []).forEach(l => { const c = locationCodeOf(l); if (c) out.push(c); });
+    return [...new Set(out)].slice(0, 2000);
+  }, [items, locations]);
 
   // Locations, sorted in natural order (W1, W2, W10 — not W1, W10, W2)
   const locOptions = useMemo(
@@ -198,29 +220,82 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
     else setError('');
   };
 
-  const startListening = () => {
-    if (!SR) { setError('Your browser does not support voice input. Chrome or Edge works best.'); return; }
-    setError(''); setResult(''); setTranscript('');
+  // ── Fallback: browser (Chrome) speech recognition, used if Google is unavailable ──
+  const startBrowserListening = () => {
+    if (!SR) { setError('Voice input needs Chrome or Edge on this device.'); return; }
+    setError(''); setResult(null); setTranscript('');
     const rec = new SR();
     rec.lang = 'en-US';
     rec.interimResults = false;
     rec.maxAlternatives = 1;
     rec.continuous = false;
-    rec.onresult = (e) => {
-      const text = e.results[0][0].transcript;
-      handleTranscript(text);
-    };
+    rec.onresult = (e) => handleTranscript(e.results[0][0].transcript);
     rec.onerror = (e) => { setError('Voice error: ' + (e.error || 'unknown')); setListening(false); };
     rec.onend = () => setListening(false);
     recognitionRef.current = rec;
     setListening(true);
-    setResult(null);
     try { rec.start(); } catch (err) { setError('Could not start microphone.'); setListening(false); }
   };
 
+  // ── Primary: record audio and transcribe with Google (knows your SKUs/jargon) ──
+  const startRecording = async () => {
+    setError(''); setResult(null); setTranscript('');
+    if (!navigator.mediaDevices || !window.MediaRecorder) {
+      startBrowserListening();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data && e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        try { stream.getTracks().forEach(t => t.stop()); } catch (e) {}
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        if (!blob.size) { setError('No audio captured — try again.'); return; }
+        await transcribeWithGoogle(blob);
+      };
+      recorderRef.current = mr;
+      mr.start();
+      setListening(true);
+    } catch (e) {
+      // Mic blocked or unavailable — fall back to the browser engine
+      startBrowserListening();
+    }
+  };
+
+  const transcribeWithGoogle = async (blob) => {
+    setTranscribing(true);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onloadend = () => resolve(String(r.result).split(',')[1] || '');
+        r.onerror = reject;
+        r.readAsDataURL(blob);
+      });
+      const fn = httpsCallable(fbFunctions, 'transcribeVoice');
+      const res = await fn({ audioBase64: base64, encoding: 'WEBM_OPUS', phrases: phraseHints });
+      const text = (res && res.data && res.data.transcript) || '';
+      if (!text) { setError('Didn\u2019t catch that \u2014 try again, or pick the item below.'); setPending(emptyPending()); }
+      else handleTranscript(text);
+    } catch (e) {
+      // Google unavailable (not enabled / offline) — quietly use the browser engine
+      console.warn('Google transcription failed, falling back:', e && e.message);
+      setError('');
+      startBrowserListening();
+    } finally {
+      setTranscribing(false);
+    }
+  };
+
   const stopListening = () => {
-    try { recognitionRef.current && recognitionRef.current.stop(); } catch (e) {}
     setListening(false);
+    if (recorderRef.current && recorderRef.current.state === 'recording') {
+      try { recorderRef.current.stop(); } catch (e) {}
+      return;
+    }
+    try { recognitionRef.current && recognitionRef.current.stop(); } catch (e) {}
   };
 
   const currentAtLocation = () => {
@@ -275,19 +350,21 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
     <div style={cardStyle}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button
-          onClick={listening ? stopListening : startListening}
-          disabled={busy}
+          onClick={listening ? stopListening : startRecording}
+          disabled={busy || transcribing}
           style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px',
-            borderRadius: 24, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14,
-            background: listening ? '#d32f2f' : '#4a5d23', color: '#fff'
+            display: 'flex', alignItems: 'center', gap: 10, padding: '14px 26px',
+            borderRadius: 30, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 16,
+            background: listening ? '#d32f2f' : (transcribing ? '#777' : '#4a5d23'), color: '#fff',
+            boxShadow: listening ? '0 0 0 4px rgba(211,47,47,0.25)' : 'none'
           }}
         >
-          <span style={{ fontSize: 18 }}>{listening ? '⏹️' : '🎤'}</span>
-          {listening ? 'Listening… tap to stop' : 'Voice Receiving'}
+          <span style={{ fontSize: 20 }}>{listening ? '⏹️' : transcribing ? '⏳' : '🎤'}</span>
+          {listening ? 'Listening… tap when done' : transcribing ? 'Reading it back…' : 'Tap & read the label'}
         </button>
         <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          e.g. “W1 R1 A1, add 24, duffle bag” or “add 24, SKU 2454”
+          Say the location, the quantity, then the SKU or name —<br />
+          e.g. “W1 R1 A1, add 24, SKU 2454”
         </span>
       </div>
 

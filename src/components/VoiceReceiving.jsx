@@ -53,7 +53,85 @@ function locationCodeOf(loc) {
 }
 
 // Parse a spoken command into { qty, locationCode, itemQuery }
-function parseCommand(raw, locations, items) {
+// Resolve a value the user spoke ("1" after "warehouse") to the real stored
+// value ("W1"), using both the schema's options and values actually in use.
+function resolveLevelValue(lvl, spoken, locations) {
+  const s = String(spoken || '').toLowerCase();
+  if (!s) return null;
+  const pool = [];
+  (lvl.options || []).forEach(o => pool.push(String(o)));
+  (locations || []).forEach(l => {
+    const v = l[lvl.key];
+    if (v != null && v !== '') pool.push(String(v));
+  });
+  const uniq = [...new Set(pool)];
+  let hit = uniq.find(x => x.toLowerCase() === s);
+  if (hit) return hit;
+  hit = uniq.find(x => x.toLowerCase().replace(/^[a-z]+/, '') === s); // "W1" spoken as "1"
+  if (hit) return hit;
+  hit = uniq.find(x => x.toLowerCase().endsWith(s));
+  if (hit) return hit;
+  hit = uniq.find(x => x.toLowerCase().startsWith(s));
+  return hit || null;
+}
+
+// Understand a spoken location using the org's OWN level names, so
+// "warehouse 1, rack 1 B2" resolves to W1-R1-B2 — and a company using
+// "building north, aisle 12" resolves against their own codes just as well.
+function matchLocationFromSpeech(tokens, schema, locations) {
+  const levels = (schema && schema.levels) || [];
+  if (!levels.length) return null;
+  const values = {};
+  const usedIdx = new Set();
+  let lastNamedIdx = -1;
+
+  // Pass 1: "<level name> <value>"
+  levels.forEach(lvl => {
+    const lname = String(lvl.name || '').toLowerCase();
+    if (!lname) return;
+    for (let i = 0; i < tokens.length - 1; i++) {
+      if (tokens[i] === lname) {
+        const val = resolveLevelValue(lvl, tokens[i + 1], locations);
+        if (val) {
+          values[lvl.key] = val;
+          usedIdx.add(i); usedIdx.add(i + 1);
+          if (i + 1 > lastNamedIdx) lastNamedIdx = i + 1;
+        }
+        break;
+      }
+    }
+  });
+  if (Object.keys(values).length === 0) return null;
+
+  // Pass 2: fill any levels not named aloud from compound tokens that follow,
+  // so a trailing "B2" becomes Bay B / Shelf 2.
+  const remaining = levels.filter(l => !values[l.key]);
+  if (remaining.length > 0 && lastNamedIdx >= 0) {
+    const pieces = [];
+    for (let i = lastNamedIdx + 1; i < tokens.length; i++) {
+      if (usedIdx.has(i)) continue;
+      (tokens[i].match(/[a-z]+|\d+/g) || []).forEach(p => pieces.push({ p, i }));
+    }
+    let pi = 0;
+    for (const lvl of remaining) {
+      while (pi < pieces.length) {
+        const val = resolveLevelValue(lvl, pieces[pi].p, locations);
+        if (val) { values[lvl.key] = val; usedIdx.add(pieces[pi].i); pi++; break; }
+        pi++;
+      }
+    }
+  }
+
+  // Only accept it if the assembled code is a location that actually exists
+  const built = DB.buildLocationCode(values, schema);
+  const bn = normCode(built);
+  if (!bn) return null;
+  const real = (locations || []).find(l => normCode(locationCodeOf(l)) === bn);
+  if (!real) return null;
+  return { code: locationCodeOf(real), usedIdx };
+}
+
+function parseCommand(raw, locations, items, schema) {
   const text = String(raw || '').toLowerCase().trim();
   const tokens = text.replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean);
 
@@ -91,9 +169,11 @@ function parseCommand(raw, locations, items) {
     if (after) qty = wordsToNum(after[1].split(/\s+/));
   }
 
-  // 2) Location — longest matching known code wins
+  // 4) Location — (a) terse code spoken directly ("W1 R1 B2"), then
+  //    (b) spoken level names ("warehouse 1, rack 1 B2") via the org schema.
   let locationCode = '';
   let matchedLocNorm = '';
+  const locUsedIdx = new Set();
   const tnorm = normCode(text);
   for (const loc of locations) {
     const code = locationCodeOf(loc);
@@ -103,12 +183,28 @@ function parseCommand(raw, locations, items) {
       locationCode = code;
     }
   }
+  if (!locationCode) {
+    const spoken = matchLocationFromSpeech(tokens, schema, locations);
+    if (spoken) {
+      locationCode = spoken.code;
+      matchedLocNorm = normCode(spoken.code);
+      spoken.usedIdx.forEach(i => locUsedIdx.add(i));
+    }
+  }
 
-  // 3) Item query — words minus filler, numbers, the SKU token, and location tokens
+  // 5) Item query — drop numbers, the SKU token, filler, level names, and any
+  //    token consumed by the location, so leftovers don't pollute the match.
+  const levelNames = new Set(
+    ((schema && schema.levels) || []).map(l => String(l.name || '').toLowerCase()).filter(Boolean)
+  );
   let itemWords = tokens
+    .map((w, i) => ({ w, i }))
+    .filter(({ w, i }) => !locUsedIdx.has(i))
+    .map(({ w }) => w)
     .filter(w => !/^\d+$/.test(w))
     .filter(w => w !== skuToken)
-    .filter(w => !FILLER.has(w));
+    .filter(w => !FILLER.has(w))
+    .filter(w => !levelNames.has(w));
   if (matchedLocNorm) {
     itemWords = itemWords.filter(w => !matchedLocNorm.includes(normCode(w)) || normCode(w).length < 2);
   }
@@ -121,17 +217,20 @@ function parseCommand(raw, locations, items) {
 function matchItems(query, items) {
   const q = String(query || '').toLowerCase().trim();
   if (!q) return [];
+  // "packs" should still match "PACK"
+  const stem = w => (w.length > 3 && w.endsWith('s')) ? w.slice(0, -1) : w;
   const words = q.split(/\s+/).filter(Boolean);
   const scored = items.map(it => {
     const name = String(it.name || '').toLowerCase();
     const sku = String(it.partNumber || '').toLowerCase();
     let score = 0;
     for (const w of words) {
+      const s = stem(w);
       if (name.includes(w)) score += 2;
+      else if (s !== w && name.includes(s)) score += 2;
       if (sku === w) score += 5;
       else if (sku.includes(w)) score += 1;
     }
-    // small boost if the whole query is a contiguous substring of the name
     if (name.includes(q)) score += 2;
     return { item: it, score };
   }).filter(s => s.score > 0);
@@ -203,7 +302,7 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
     setTranscript(text);
     setResult(null);
     setCatFilter('');
-    const { qty, locationCode, itemQuery, skuItem } = parseCommand(text, locations, items);
+    const { qty, locationCode, itemQuery, skuItem } = parseCommand(text, locations, items, DB.getLocationSchema());
     // A recognized SKU is a confident, exact match — put it first and preselect it.
     const nameMatches = matchItems(itemQuery, items);
     const candidates = skuItem

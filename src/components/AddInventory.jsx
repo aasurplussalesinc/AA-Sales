@@ -23,23 +23,10 @@ export default function AddInventory({ item, location, onClose, onSuccess }) {
     setLoading(true);
     
     try {
-      // Update location inventory
-      await DB.updateCount(selectedLocation, item.id, quantity);
-      
-      // Update item stock
-      const currentStock = item.stock || 0;
-      await DB.updateItemStock(item.id, currentStock + quantity);
-      
-      // Log movement
-      await DB.logMovement({
-        itemId: item.id,
-        itemName: item.name,
-        fromLocation: null,
-        toLocation: selectedLocation,
-        quantity: quantity,
-        type: 'ADD',
-        timestamp: Date.now()
-      });
+      // Additive receive into the location's inventory map + item total + movement
+      const locObj = locations.find(l => l.id === selectedLocation);
+      const code = locObj ? (locObj.locationCode || `${locObj.warehouse}-R${locObj.rack}-${locObj.letter}${locObj.shelf}`) : '';
+      await DB.receiveToLocation(code, item.id, quantity);
 
       onSuccess?.();
       onClose();

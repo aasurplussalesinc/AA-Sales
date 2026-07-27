@@ -50,29 +50,7 @@ export default function MoveLocation({ item, location, onClose, onSuccess }) {
     setLoading(true);
     
     try {
-      // Reduce from source location
-      const newFromQty = currentQty - quantity;
-      await DB.updateCount(fromLocation, item.id, newFromQty);
-      
-      // Add to destination location
-      const toInventory = await DB.getInventory(toLocation);
-      const currentToQty = toInventory[item.id] || 0;
-      await DB.updateCount(toLocation, item.id, currentToQty + quantity);
-      
-      // Log movement
-      const fromLoc = locations.find(l => l.id === fromLocation);
-      const toLoc = locations.find(l => l.id === toLocation);
-      
-      await DB.logMovement({
-        itemId: item.id,
-        itemName: item.name,
-        fromLocation: fromLoc.locationCode || `${fromLoc.warehouse}-R${fromLoc.rack}-${fromLoc.letter}${fromLoc.shelf}`,
-        toLocation: toLoc.locationCode || `${toLoc.warehouse}-R${toLoc.rack}-${toLoc.letter}${toLoc.shelf}`,
-        quantity: quantity,
-        type: 'MOVE',
-        timestamp: Date.now()
-      });
-
+      await DB.moveItemBetweenLocations(item.id, fromLocation, toLocation, quantity);
       onSuccess?.();
       onClose();
     } catch (error) {

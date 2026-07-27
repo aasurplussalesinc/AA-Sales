@@ -1541,19 +1541,81 @@ export const OrgDB = {
 
   async updateCount(locationId, itemId, count) {
     if (!currentOrgId) throw new Error('No organization selected');
-    
-    const countId = `${currentOrgId}_${locationId}_${itemId}`;
-    const ref = doc(db, 'counts', countId);
-    
-    await setDoc(ref, {
-      orgId: currentOrgId,
-      locationId,
-      itemId,
-      count,
-      updatedAt: Date.now()
-    });
+
+    // SINGLE SOURCE OF TRUTH: write to the location document's inventory map,
+    // which is what the Items tab, voice, pick lists and catalog all read.
+    const locRef = doc(db, 'locations', locationId);
+    const snap = await getDoc(locRef);
+    if (!snap.exists()) throw new Error('Location not found');
+    const inv = { ...(snap.data().inventory || {}) };
+    const qty = Math.max(0, parseInt(count) || 0);
+    if (qty === 0) delete inv[itemId]; else inv[itemId] = qty;
+    await updateDoc(locRef, { inventory: inv, updatedAt: Date.now() });
+
+    // Keep the item's own primary-location field sensible for the Items tab.
+    const code = this.locationCodeOf(snap.data());
+    const itemRef = doc(db, 'items', itemId);
+    const itemSnap = await getDoc(itemRef);
+    if (itemSnap.exists()) {
+      const cur = itemSnap.data();
+      if (qty > 0) {
+        if (!cur.location) await updateDoc(itemRef, { location: code, updatedAt: Date.now() });
+      } else if (this.normalizeLocationCode(cur.location) === this.normalizeLocationCode(code)) {
+        // Cleared this location and it was the item's primary — repoint to another
+        // location that still holds it, if any.
+        const locs = await this.getLocations();
+        const other = locs.find(l => l.id !== locationId && l.inventory && (parseInt(l.inventory[itemId]) || 0) > 0);
+        await updateDoc(itemRef, { location: other ? this.locationCodeOf(other) : '', updatedAt: Date.now() });
+      }
+    }
   },
-  
+
+  // Read one location's inventory map: { itemId: qty }
+  async getInventory(locationId) {
+    if (!currentOrgId || !locationId) return {};
+    const snap = await getDoc(doc(db, 'locations', locationId));
+    return snap.exists() ? (snap.data().inventory || {}) : {};
+  },
+
+  // Move quantity of an item from one location to another. Total item stock is
+  // unchanged (it's a relocation, not a receive/pick). Logs a MOVE movement.
+  async moveItemBetweenLocations(itemId, fromLocationId, toLocationId, qty) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const amount = parseInt(qty) || 0;
+    if (amount <= 0) throw new Error('Quantity must be greater than zero');
+    if (fromLocationId === toLocationId) throw new Error('Source and destination must differ');
+
+    const fromSnap = await getDoc(doc(db, 'locations', fromLocationId));
+    const toSnap = await getDoc(doc(db, 'locations', toLocationId));
+    if (!fromSnap.exists() || !toSnap.exists()) throw new Error('Location not found');
+
+    const fromInv = { ...(fromSnap.data().inventory || {}) };
+    const have = parseInt(fromInv[itemId]) || 0;
+    if (amount > have) throw new Error(`Only ${have} available at the source location`);
+
+    const toInv = { ...(toSnap.data().inventory || {}) };
+    const newFrom = have - amount;
+    if (newFrom === 0) delete fromInv[itemId]; else fromInv[itemId] = newFrom;
+    toInv[itemId] = (parseInt(toInv[itemId]) || 0) + amount;
+
+    await updateDoc(doc(db, 'locations', fromLocationId), { inventory: fromInv, updatedAt: Date.now() });
+    await updateDoc(doc(db, 'locations', toLocationId), { inventory: toInv, updatedAt: Date.now() });
+
+    // Stamp the item's primary location to the destination it moved into.
+    const toCode = this.locationCodeOf(toSnap.data());
+    try { await updateDoc(doc(db, 'items', itemId), { location: toCode, updatedAt: Date.now() }); } catch (e) {}
+
+    await this.logMovement({
+      itemId,
+      quantity: amount,
+      type: 'MOVE',
+      fromLocation: this.locationCodeOf(fromSnap.data()),
+      toLocation: toCode,
+      timestamp: Date.now()
+    });
+    return { newFrom, newTo: toInv[itemId] };
+  },
+
   // ==================== DASHBOARD STATS ====================
   
   async getDashboardStats() {

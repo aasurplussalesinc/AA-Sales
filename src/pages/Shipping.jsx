@@ -306,21 +306,32 @@ export default function Shipping() {
     // Build a pre-purchase review from rates already fetched, so the user sees
     // the total and any unusually expensive label BEFORE any money is spent.
     const selected = orders.filter(o => selectedOrders[o.id]);
+    const PER_BOX = 45;
+    const boxesOf = (o) => {
+      const lbl = o.shippingLabel;
+      if (lbl && lbl.parcels) return lbl.parcels;
+      if (o.triwallDetails) return Object.keys(o.triwallDetails).length || 1;
+      if (o.boxDetails) return Object.keys(o.boxDetails).length || 1;
+      return 1;
+    };
     const rated = selected.map(o => {
       const rate = o.shippingLabel && o.shippingLabel.selectedRate;
       const amt = rate ? parseFloat(rate.amount) : null;
-      return { id: o.id, po: o.poNumber, name: o.customerName, amount: amt, carrier: rate ? rate.provider : null };
+      const boxes = boxesOf(o);
+      return { id: o.id, po: o.poNumber, name: o.customerName, amount: amt, boxes, limit: PER_BOX * boxes, carrier: rate ? rate.provider : null };
     });
     const known = rated.filter(r => r.amount != null);
     const total = known.reduce((s, r) => s + r.amount, 0);
     const unrated = rated.length - known.length;
-    const HIGH = 150;
-    const pricey = known.filter(r => r.amount > HIGH);
+    const overLimit = known.filter(r => r.amount > r.limit);
 
     let msg = `Purchase labels for ${ids.length} order(s)?\n`;
     if (known.length) msg += `\nEstimated total: $${total.toFixed(2)} (from ${known.length} rated order(s))`;
     if (unrated > 0) msg += `\n${unrated} order(s) not yet rated — run “Get Rates” first for an accurate total.`;
-    if (pricey.length) msg += `\n\n⚠️ ${pricey.length} label(s) over $${HIGH}: ` + pricey.map(r => `${r.po || r.name} $${r.amount.toFixed(2)}`).join(', ');
+    if (overLimit.length) {
+      msg += `\n\n⚠️ ${overLimit.length} order(s) exceed the $${PER_BOX}/box limit and will be SKIPPED (buy manually if correct):\n` +
+        overLimit.map(r => `• ${r.po || r.name}: $${r.amount.toFixed(2)} (limit $${r.limit} for ${r.boxes} box${r.boxes === 1 ? '' : 'es'})`).join('\n');
+    }
     msg += `\n\nThis will charge your Shippo account.`;
     if (!window.confirm(msg)) return;
 
@@ -348,7 +359,13 @@ export default function Shipping() {
       setBatchResults(agg);
       const purchased = agg.success.filter(s => !s.skipped).length;
       const skipped = agg.success.filter(s => s.skipped).length;
-      setMessage(`✅ Batch purchase complete: ${purchased} purchased${skipped ? `, ${skipped} already had labels` : ''}, ${agg.failed.length} failed`);
+      const overLimitFails = agg.failed.filter(f => f.error && f.error.indexOf('/box limit') >= 0).length;
+      const otherFails = agg.failed.length - overLimitFails;
+      let done = `✅ Batch purchase complete: ${purchased} purchased`;
+      if (skipped) done += `, ${skipped} already had labels`;
+      if (overLimitFails) done += `, ${overLimitFails} over the $45/box limit (buy manually)`;
+      if (otherFails) done += `, ${otherFails} failed`;
+      setMessage(done);
       if (agg.failed.length === 0) setSelectedOrders({});
       await loadData();
     } catch (err) {

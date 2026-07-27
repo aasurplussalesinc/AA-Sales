@@ -537,6 +537,16 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   };
 
   if (orgSettings.autoPurchaseLabels && selectedRate) {
+    // Per-box spending guard: block auto-purchase if the rate exceeds
+    // $45 x (number of boxes). Catches mispriced/oversized shipments before
+    // any money is spent; the user buys these manually if they're legitimate.
+    var boxCount = parcelsUPS.length || 1;
+    var perBoxLimit = 45;
+    var maxAllowed = perBoxLimit * boxCount;
+    var rateAmount = parseFloat(selectedRate.amount) || 0;
+    if (rateAmount > maxAllowed) {
+      throw new Error('Rate $' + rateAmount.toFixed(2) + ' exceeds the $' + perBoxLimit + '/box limit ($' + maxAllowed.toFixed(2) + ' for ' + boxCount + ' box' + (boxCount === 1 ? '' : 'es') + '). Purchase this label manually if it is correct.');
+    }
     // mapRates() stores Shippo's rate id under `rateId` (not `object_id`), so read
     // that first. Falling back to object_id keeps older/raw rate shapes working.
     var rateObjectId = selectedRate.rateId || selectedRate.object_id;

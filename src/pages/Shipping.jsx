@@ -271,12 +271,24 @@ export default function Shipping() {
     if (ids.length === 0) return;
     setBatchProcessing(true);
     setError('');
+    setBatchResults(null);
+    const CHUNK = 5;
+    const agg = { success: [], failed: [], total: ids.length };
     try {
       const batchFn = httpsCallable(functions, 'batchGenerateLabels');
-      const result = await batchFn({ orderIds: ids, orgId: organization.id, autoPurchase: false });
-      setBatchResults(result.data);
-      setMessage(`✅ Batch complete: ${result.data.success.length} succeeded, ${result.data.failed.length} failed`);
-      setSelectedOrders({});
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        setMessage(`Getting rates… ${Math.min(i + slice.length, ids.length)} of ${ids.length}`);
+        try {
+          const result = await batchFn({ orderIds: slice, orgId: organization.id, autoPurchase: false });
+          agg.success.push(...(result.data.success || []));
+          agg.failed.push(...(result.data.failed || []));
+        } catch (chunkErr) {
+          slice.forEach(id => agg.failed.push({ orderId: id, error: chunkErr.message }));
+        }
+      }
+      setBatchResults(agg);
+      setMessage(`✅ Rates fetched: ${agg.success.length} succeeded, ${agg.failed.length} failed. Review totals, then Purchase.`);
       await loadData();
     } catch (err) {
       setError(`Batch failed: ${err.message}`);
@@ -284,18 +296,60 @@ export default function Shipping() {
     setBatchProcessing(false);
   };
 
+  // Buy labels in small chunks so a large batch (e.g. 30) never hits the
+  // function timeout, and a partial failure is safe to re-run (the server
+  // skips orders that already have a purchased label).
   const batchAutoPurchase = async () => {
     const ids = Object.keys(selectedOrders);
     if (ids.length === 0) return;
-    if (!window.confirm(`Purchase labels for ${ids.length} order(s) using your preferred carrier? This will charge your Shippo account.`)) return;
+
+    // Build a pre-purchase review from rates already fetched, so the user sees
+    // the total and any unusually expensive label BEFORE any money is spent.
+    const selected = orders.filter(o => selectedOrders[o.id]);
+    const rated = selected.map(o => {
+      const rate = o.shippingLabel && o.shippingLabel.selectedRate;
+      const amt = rate ? parseFloat(rate.amount) : null;
+      return { id: o.id, po: o.poNumber, name: o.customerName, amount: amt, carrier: rate ? rate.provider : null };
+    });
+    const known = rated.filter(r => r.amount != null);
+    const total = known.reduce((s, r) => s + r.amount, 0);
+    const unrated = rated.length - known.length;
+    const HIGH = 150;
+    const pricey = known.filter(r => r.amount > HIGH);
+
+    let msg = `Purchase labels for ${ids.length} order(s)?\n`;
+    if (known.length) msg += `\nEstimated total: $${total.toFixed(2)} (from ${known.length} rated order(s))`;
+    if (unrated > 0) msg += `\n${unrated} order(s) not yet rated — run “Get Rates” first for an accurate total.`;
+    if (pricey.length) msg += `\n\n⚠️ ${pricey.length} label(s) over $${HIGH}: ` + pricey.map(r => `${r.po || r.name} $${r.amount.toFixed(2)}`).join(', ');
+    msg += `\n\nThis will charge your Shippo account.`;
+    if (!window.confirm(msg)) return;
+
     setBatchProcessing(true);
     setError('');
+    setBatchResults(null);
+
+    const CHUNK = 5;
+    const agg = { success: [], failed: [], total: ids.length };
     try {
       const batchFn = httpsCallable(functions, 'batchGenerateLabels');
-      const result = await batchFn({ orderIds: ids, orgId: organization.id, autoPurchase: true });
-      setBatchResults(result.data);
-      setMessage(`✅ Batch purchase complete: ${result.data.success.length} labels purchased, ${result.data.failed.length} failed`);
-      setSelectedOrders({});
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const slice = ids.slice(i, i + CHUNK);
+        setMessage(`Purchasing labels… ${Math.min(i + slice.length, ids.length)} of ${ids.length}`);
+        try {
+          const result = await batchFn({ orderIds: slice, orgId: organization.id, autoPurchase: true });
+          agg.success.push(...(result.data.success || []));
+          agg.failed.push(...(result.data.failed || []));
+        } catch (chunkErr) {
+          // Record the whole chunk as failed but keep going; already-purchased
+          // orders are skipped on a later retry, so nothing double-charges.
+          slice.forEach(id => agg.failed.push({ orderId: id, error: chunkErr.message }));
+        }
+      }
+      setBatchResults(agg);
+      const purchased = agg.success.filter(s => !s.skipped).length;
+      const skipped = agg.success.filter(s => s.skipped).length;
+      setMessage(`✅ Batch purchase complete: ${purchased} purchased${skipped ? `, ${skipped} already had labels` : ''}, ${agg.failed.length} failed`);
+      if (agg.failed.length === 0) setSelectedOrders({});
       await loadData();
     } catch (err) {
       setError(`Batch purchase failed: ${err.message}`);

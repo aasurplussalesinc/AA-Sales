@@ -518,6 +518,12 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     if (!selectedRate) selectedRate = allRates[0];
   }
 
+  // If auto-purchase is on but rating produced nothing, fail with a clear reason
+  // instead of later sending an empty rate to Shippo ("rate: This field is required").
+  if (orgSettings.autoPurchaseLabels && !selectedRate) {
+    throw new Error('No shipping rates were returned for this order — check the from-address, package weight/dimensions, and connected carrier account.');
+  }
+
   var result = {
     shipmentId: shipmentAAUPS.object_id, international: international,
     customerBillingAccount: customerBilling ? customerBilling.account : null,
@@ -531,7 +537,13 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   };
 
   if (orgSettings.autoPurchaseLabels && selectedRate) {
-    var transaction = await purchaseLabel(apiKey, selectedRate.object_id);
+    // mapRates() stores Shippo's rate id under `rateId` (not `object_id`), so read
+    // that first. Falling back to object_id keeps older/raw rate shapes working.
+    var rateObjectId = selectedRate.rateId || selectedRate.object_id;
+    if (!rateObjectId) {
+      throw new Error('No purchasable shipping rate was returned for this order. Check the from-address, package weight, and that a carrier account is connected.');
+    }
+    var transaction = await purchaseLabel(apiKey, rateObjectId);
     if (transaction.status === 'SUCCESS') {
       result.labelUrl = transaction.label_url; result.trackingNumber = transaction.tracking_number;
       result.trackingUrl = transaction.tracking_url_provider; result.transactionId = transaction.object_id;
@@ -671,7 +683,7 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
   } catch (error) { console.error('generateShippingLabel error:', error); throw new functions.https.HttpsError('internal', error.message); }
 });
 
-exports.batchGenerateLabels = functions.https.onCall(async function(data, context) {
+exports.batchGenerateLabels = functions.runWith({ timeoutSeconds: 300, memory: '512MB' }).https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   var orderIds = data.orderIds, orgId = data.orgId, autoPurchase = data.autoPurchase;
   if (!orderIds || !orderIds.length || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderIds and orgId required');
@@ -690,6 +702,12 @@ exports.batchGenerateLabels = functions.https.onCall(async function(data, contex
         if (!oDoc.exists) { results.failed.push({ orderId: oid, error: 'Not found' }); continue; }
         var o = Object.assign({ id: oDoc.id }, oDoc.data());
         if (o.orgId !== orgId) { results.failed.push({ orderId: oid, error: 'Wrong org' }); continue; }
+        // Idempotency guard: never re-buy a label for an order that already has one.
+        // Makes a partially-failed batch safe to retry without double charges.
+        if (autoPurchase && o.shippingLabel && o.shippingLabel.labelStatus === 'purchased' && o.shippingLabel.trackingNumber) {
+          results.success.push({ orderId: oid, poNumber: o.poNumber, labelStatus: 'purchased', trackingNumber: o.shippingLabel.trackingNumber, amount: (o.shippingLabel.selectedRate && o.shippingLabel.selectedRate.amount) || null, carrier: (o.shippingLabel.selectedRate && o.shippingLabel.selectedRate.provider) || null, skipped: true });
+          continue;
+        }
         var sr = await processPackedOrder(apiKey, o, orgSettings);
         var chargeUpd_batch = (sr.labelStatus === 'purchased') ? shippingChargeUpdate(o, sr, orgData) : {};
         await db.collection('purchaseOrders').doc(oid).update(Object.assign({ shippingLabel: sr, shippingStatus: sr.labelStatus, updatedAt: Date.now() }, chargeUpd_batch));

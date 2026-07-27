@@ -399,9 +399,12 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   }
 
   // --- AA Account rates (no third-party billing) ---
-  var parcelsUPS = formatParcelsFromOrder(order, insuranceAmount, 'UPS');
+  // Carrier-agnostic insurance (no forced UPS provider) so every carrier — UPS, FedEx, USPS,
+  // DHL — can quote. Forcing UPS-provider insurance previously made non-UPS carriers decline
+  // the entire shipment.
+  var parcelsUPS = formatParcelsFromOrder(order, insuranceAmount, null);
   var shipmentAAUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsUPS, customsDeclarationId, null, carrierAccountIds);
-  var allRates = mapRates(shipmentAAUPS, 'AA', hasInsurance ? 'UPS' : 'none');
+  var allRates = mapRates(shipmentAAUPS, 'AA', hasInsurance ? 'native' : 'none');
 
   console.log('=== SHIPPO DEBUG (AA Account / UPS Insurance) ===');
   console.log('Shipment ID:', shipmentAAUPS.object_id);
@@ -411,10 +414,9 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   console.log('Parcels sent:', JSON.stringify(parcelsUPS));
   console.log('=== END DEBUG ===');
 
-  // ── ADDITIONAL CALL: no-provider insurance to give non-UPS carriers (USPS/FedEx/DHL) a chance to quote
-  // The UPS-specific insurance above causes USPS/FedEx/etc. to decline the entire shipment because
-  // they can't sell UPS insurance. By making a second call without a specific provider, those carriers
-  // can quote with their own native insurance or no insurance.
+  // ── SAFETY-NET CALL: the primary call above already uses carrier-agnostic insurance, so all
+  // carriers should quote there. This second provider-agnostic pass catches any carrier that was
+  // missed and merges in providers not already present. Usually redundant now, but harmless.
   try {
     var parcelsAgnostic = formatParcelsFromOrder(order, hasInsurance ? insuranceAmount : 0, null);
     var shipmentAgnostic = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAgnostic, customsDeclarationId, null, carrierAccountIds);
@@ -476,9 +478,9 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   // --- Customer Account rates (third-party billing) ---
   if (customerBilling) {
     try {
-      var parcelsCustUPS = formatParcelsFromOrder(order, insuranceAmount, 'UPS');
+      var parcelsCustUPS = formatParcelsFromOrder(order, insuranceAmount, null);
       var shipmentCustUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustUPS, customsDeclarationId, customerBilling, carrierAccountIds);
-      allRates = allRates.concat(mapRates(shipmentCustUPS, 'Customer', hasInsurance ? 'UPS' : 'none'));
+      allRates = allRates.concat(mapRates(shipmentCustUPS, 'Customer', hasInsurance ? 'native' : 'none'));
       console.log('=== SHIPPO DEBUG (Customer Account / UPS Insurance) ===');
       console.log('Customer account:', customerBilling.account);
       console.log('Total rates returned:', (shipmentCustUPS.rates || []).length);
@@ -516,6 +518,12 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     if (!selectedRate) selectedRate = allRates[0];
   }
 
+  // If auto-purchase is on but rating produced nothing, fail with a clear reason
+  // instead of later sending an empty rate to Shippo ("rate: This field is required").
+  if (orgSettings.autoPurchaseLabels && !selectedRate) {
+    throw new Error('No shipping rates were returned for this order — check the from-address, package weight/dimensions, and connected carrier account.');
+  }
+
   var result = {
     shipmentId: shipmentAAUPS.object_id, international: international,
     customerBillingAccount: customerBilling ? customerBilling.account : null,
@@ -529,7 +537,23 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   };
 
   if (orgSettings.autoPurchaseLabels && selectedRate) {
-    var transaction = await purchaseLabel(apiKey, selectedRate.object_id);
+    // Per-box spending guard: block auto-purchase if the rate exceeds
+    // $45 x (number of boxes). Catches mispriced/oversized shipments before
+    // any money is spent; the user buys these manually if they're legitimate.
+    var boxCount = parcelsUPS.length || 1;
+    var perBoxLimit = 45;
+    var maxAllowed = perBoxLimit * boxCount;
+    var rateAmount = parseFloat(selectedRate.amount) || 0;
+    if (rateAmount > maxAllowed) {
+      throw new Error('Rate $' + rateAmount.toFixed(2) + ' exceeds the $' + perBoxLimit + '/box limit ($' + maxAllowed.toFixed(2) + ' for ' + boxCount + ' box' + (boxCount === 1 ? '' : 'es') + '). Purchase this label manually if it is correct.');
+    }
+    // mapRates() stores Shippo's rate id under `rateId` (not `object_id`), so read
+    // that first. Falling back to object_id keeps older/raw rate shapes working.
+    var rateObjectId = selectedRate.rateId || selectedRate.object_id;
+    if (!rateObjectId) {
+      throw new Error('No purchasable shipping rate was returned for this order. Check the from-address, package weight, and that a carrier account is connected.');
+    }
+    var transaction = await purchaseLabel(apiKey, rateObjectId);
     if (transaction.status === 'SUCCESS') {
       result.labelUrl = transaction.label_url; result.trackingNumber = transaction.tracking_number;
       result.trackingUrl = transaction.tracking_url_provider; result.transactionId = transaction.object_id;
@@ -572,6 +596,37 @@ exports.checkPackedOrdersScheduled = functions.pubsub.schedule('every 1 hours').
 });
 
 // CALLABLE FUNCTIONS
+// Compute the customer-facing shipping charge from the real carrier cost plus the
+// org's markup (percent and/or flat). Returns a number rounded to cents.
+function customerShippingCharge(realCost, orgData) {
+  var cost = parseFloat(realCost) || 0;
+  var m = (orgData && orgData.shippingMarkup) || {};
+  var pct = parseFloat(m.percent) || 0;
+  var flat = parseFloat(m.flat) || 0;
+  var charge = cost * (1 + pct / 100) + flat;
+  if (m.roundUp) charge = Math.ceil(charge);
+  return Math.round(charge * 100) / 100;
+}
+
+// Given the order and the just-purchased shippingLabel, produce the fields to write
+// so the invoice's shipping line reflects cost + markup — while RESPECTING a shipping
+// amount a user typed manually (never silently overwrite it).
+function shippingChargeUpdate(order, shippingLabel, orgData) {
+  var rate = shippingLabel && shippingLabel.selectedRate;
+  var realCost = rate ? parseFloat(rate.amount) : NaN;
+  if (!isFinite(realCost) || realCost <= 0) return {};
+  var charge = customerShippingCharge(realCost, orgData);
+  var update = { shippingCost: realCost, shippingChargeAuto: charge };
+  // Respect a manual override: only auto-fill the shipping line when the user
+  // hasn't set one themselves (or when a prior auto value is being refreshed).
+  var manual = parseFloat(order.shipping);
+  var manuallySet = order.shippingManual === true;
+  var priorAuto = parseFloat(order.shippingChargeAuto);
+  var canWrite = !manuallySet && (!(manual > 0) || (isFinite(priorAuto) && Math.abs(manual - priorAuto) < 0.005));
+  if (canWrite) update.shipping = charge;
+  return update;
+}
+
 exports.generateShippingLabel = functions.https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   // Rate limit: 60 label requests per user per 10 minutes
@@ -626,17 +681,19 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
         allLabels: (transaction.allLabels && transaction.allLabels.length > 0) ? transaction.allLabels : null,
         selectedRate: newSelectedRate,
       });
-      await db.collection('purchaseOrders').doc(orderId).update({ shippingLabel: result, shippingStatus: result.labelStatus, updatedAt: Date.now() });
+      var chargeUpd_a = (result.labelStatus === 'purchased') ? shippingChargeUpdate(order, result, orgData) : {};
+      await db.collection('purchaseOrders').doc(orderId).update(Object.assign({ shippingLabel: result, shippingStatus: result.labelStatus, updatedAt: Date.now() }, chargeUpd_a));
       return result;
     }
 
     var shippingResult = await processPackedOrder(apiKey, order, orgSettings);
-    await db.collection('purchaseOrders').doc(orderId).update({ shippingLabel: shippingResult, shippingStatus: shippingResult.labelStatus, updatedAt: Date.now() });
+    var chargeUpd_b = (shippingResult.labelStatus === 'purchased') ? shippingChargeUpdate(order, shippingResult, orgData) : {};
+    await db.collection('purchaseOrders').doc(orderId).update(Object.assign({ shippingLabel: shippingResult, shippingStatus: shippingResult.labelStatus, updatedAt: Date.now() }, chargeUpd_b));
     return shippingResult;
   } catch (error) { console.error('generateShippingLabel error:', error); throw new functions.https.HttpsError('internal', error.message); }
 });
 
-exports.batchGenerateLabels = functions.https.onCall(async function(data, context) {
+exports.batchGenerateLabels = functions.runWith({ timeoutSeconds: 300, memory: '512MB' }).https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   var orderIds = data.orderIds, orgId = data.orgId, autoPurchase = data.autoPurchase;
   if (!orderIds || !orderIds.length || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderIds and orgId required');
@@ -655,8 +712,15 @@ exports.batchGenerateLabels = functions.https.onCall(async function(data, contex
         if (!oDoc.exists) { results.failed.push({ orderId: oid, error: 'Not found' }); continue; }
         var o = Object.assign({ id: oDoc.id }, oDoc.data());
         if (o.orgId !== orgId) { results.failed.push({ orderId: oid, error: 'Wrong org' }); continue; }
+        // Idempotency guard: never re-buy a label for an order that already has one.
+        // Makes a partially-failed batch safe to retry without double charges.
+        if (autoPurchase && o.shippingLabel && o.shippingLabel.labelStatus === 'purchased' && o.shippingLabel.trackingNumber) {
+          results.success.push({ orderId: oid, poNumber: o.poNumber, labelStatus: 'purchased', trackingNumber: o.shippingLabel.trackingNumber, amount: (o.shippingLabel.selectedRate && o.shippingLabel.selectedRate.amount) || null, carrier: (o.shippingLabel.selectedRate && o.shippingLabel.selectedRate.provider) || null, skipped: true });
+          continue;
+        }
         var sr = await processPackedOrder(apiKey, o, orgSettings);
-        await db.collection('purchaseOrders').doc(oid).update({ shippingLabel: sr, shippingStatus: sr.labelStatus, updatedAt: Date.now() });
+        var chargeUpd_batch = (sr.labelStatus === 'purchased') ? shippingChargeUpdate(o, sr, orgData) : {};
+        await db.collection('purchaseOrders').doc(oid).update(Object.assign({ shippingLabel: sr, shippingStatus: sr.labelStatus, updatedAt: Date.now() }, chargeUpd_batch));
         results.success.push({ orderId: oid, poNumber: o.poNumber, labelStatus: sr.labelStatus, trackingNumber: sr.trackingNumber || null, amount: (sr.selectedRate && sr.selectedRate.amount) || null, carrier: (sr.selectedRate && sr.selectedRate.provider) || null });
       } catch (oe) {
         results.failed.push({ orderId: oid, error: oe.message });
@@ -2222,3 +2286,109 @@ exports.adminDeleteOrganization = functions.https.onCall(async (data, context) =
 
   return stats;
 });
+
+// ════════════════════════════════════════════════════════════════════
+// GOOGLE SPEECH-TO-TEXT — voice receiving
+// Transcribes a short spoken command. Uses speech adaptation (phrase
+// hints) built from the org's own SKUs and item names, which is what
+// makes warehouse jargon (MOLLE, MARPAT, FROG, ALICE) recognizable.
+// Auth: uses the function's own service account via the metadata server,
+// so there are no API keys or service-account JSON files to manage.
+// Requires: Speech-to-Text API enabled on the Firebase/GCP project.
+// ════════════════════════════════════════════════════════════════════
+
+var _sttTokenCache = { token: null, expires: 0 };
+
+async function getGoogleAccessToken() {
+  var now = Date.now();
+  if (_sttTokenCache.token && now < _sttTokenCache.expires) return _sttTokenCache.token;
+  var res = await fetch(
+    'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',
+    { headers: { 'Metadata-Flavor': 'Google' } }
+  );
+  if (!res.ok) throw new Error('Could not obtain Google access token (' + res.status + ')');
+  var json = await res.json();
+  _sttTokenCache = {
+    token: json.access_token,
+    // refresh a minute before actual expiry
+    expires: now + (Math.max(60, (json.expires_in || 3600) - 60) * 1000)
+  };
+  return json.access_token;
+}
+
+exports.transcribeVoice = functions
+  .runWith({ timeoutSeconds: 30, memory: '256MB' })
+  .https.onCall(async function (data, context) {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+    }
+    // Generous but bounded: 150 commands per user per 5 minutes
+    if (!checkRateLimit('stt_' + context.auth.uid, 150, 5 * 60 * 1000)) {
+      throw new functions.https.HttpsError('resource-exhausted', 'Too many voice requests. Please wait a moment.');
+    }
+
+    var audioBase64 = data && data.audioBase64;
+    if (!audioBase64) {
+      throw new functions.https.HttpsError('invalid-argument', 'No audio provided');
+    }
+
+    // Phrase hints: cap length/count to stay inside Speech API limits
+    var phrases = Array.isArray(data.phrases) ? data.phrases : [];
+    phrases = phrases
+      .filter(function (p) { return typeof p === 'string' && p.trim().length > 0; })
+      .map(function (p) { return p.trim().slice(0, 100); });
+    if (phrases.length > 2000) phrases = phrases.slice(0, 2000);
+
+    var config = {
+      languageCode: 'en-US',
+      // standard (cheapest) model, tuned for short commands rather than dictation
+      model: 'command_and_search',
+      maxAlternatives: 1,
+      profanityFilter: false,
+      enableAutomaticPunctuation: false,
+      encoding: data.encoding || 'WEBM_OPUS'
+    };
+    // For WEBM_OPUS the sample rate is read from the container header —
+    // sending a mismatched value causes errors, so only set it when given.
+    if (data.sampleRateHertz && config.encoding !== 'WEBM_OPUS') {
+      config.sampleRateHertz = data.sampleRateHertz;
+    }
+    if (phrases.length > 0) {
+      config.speechContexts = [{ phrases: phrases, boost: 18 }];
+    }
+
+    try {
+      var token = await getGoogleAccessToken();
+      var resp = await fetch('https://speech.googleapis.com/v1/speech:recognize', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + token,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ config: config, audio: { content: audioBase64 } })
+      });
+
+      var json = await resp.json();
+      if (!resp.ok) {
+        var msg = (json && json.error && json.error.message) || ('Speech API error ' + resp.status);
+        console.warn('transcribeVoice error:', msg);
+        throw new functions.https.HttpsError('internal', msg);
+      }
+
+      var results = json.results || [];
+      var transcript = results
+        .map(function (r) {
+          return (r.alternatives && r.alternatives[0] && r.alternatives[0].transcript) || '';
+        })
+        .join(' ')
+        .trim();
+      var confidence =
+        (results[0] && results[0].alternatives && results[0].alternatives[0] &&
+          results[0].alternatives[0].confidence) || null;
+
+      return { transcript: transcript, confidence: confidence };
+    } catch (error) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      throw new functions.https.HttpsError('internal', error.message || 'Transcription failed');
+    }
+  });

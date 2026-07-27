@@ -37,6 +37,7 @@ export default function Reports() {
   const [phCustomerId, setPhCustomerId] = useState('all');
   const [phSearch, setPhSearch] = useState('');
   const [phPaidOnly, setPhPaidOnly] = useState(false);
+  const [phView, setPhView] = useState('detail'); // 'detail' = every line, 'summary' = per-item totals
 
   useEffect(() => {
     loadAllData();
@@ -273,7 +274,42 @@ export default function Reports() {
     { qty: 0, value: 0 }
   );
 
+  // Collapse the line items into one row per distinct item (SKU + name), with
+  // total qty, total spend, order count, and the most recent purchase date.
+  const purchaseSummary = (() => {
+    const map = new Map();
+    purchaseRows.forEach(r => {
+      const key = (r.sku || '') + '|' + (r.itemName || '');
+      const prev = map.get(key) || {
+        sku: r.sku, itemName: r.itemName, grade: r.grade,
+        qty: 0, value: 0, orders: new Set(), lastDate: 0
+      };
+      prev.qty += r.qty;
+      prev.value += r.lineTotal;
+      if (r.poNumber) prev.orders.add(r.poNumber);
+      if (r.date > prev.lastDate) prev.lastDate = r.date;
+      if (!prev.grade && r.grade) prev.grade = r.grade;
+      map.set(key, prev);
+    });
+    return [...map.values()]
+      .map(s => ({ ...s, orderCount: s.orders.size }))
+      .sort((a, b) => b.qty - a.qty);
+  })();
+
   const exportPurchases = () => {
+    if (phView === 'summary') {
+      exportToCSV(
+        purchaseSummary,
+        'customer-purchases-summary',
+        ['SKU', 'Item', 'Condition', 'Total Qty', 'Orders', 'Total Spent', 'Last Purchased'],
+        (s) => [
+          s.sku, s.itemName, s.grade, s.qty, s.orderCount,
+          s.value.toFixed(2),
+          s.lastDate ? new Date(s.lastDate).toLocaleDateString() : ''
+        ]
+      );
+      return;
+    }
     exportToCSV(
       purchaseRows,
       'customer-purchases',
@@ -782,12 +818,61 @@ export default function Reports() {
             </button>
           </div>
 
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {[
+              { id: 'detail', label: 'Every purchase' },
+              { id: 'summary', label: 'Totals per item' },
+            ].map(v => (
+              <button key={v.id} onClick={() => setPhView(v.id)}
+                style={{
+                  padding: '6px 14px', borderRadius: 16, cursor: 'pointer', fontSize: 13,
+                  border: phView === v.id ? '1px solid #4a5d23' : '1px solid var(--border)',
+                  background: phView === v.id ? '#4a5d23' : 'transparent',
+                  color: phView === v.id ? '#fff' : 'var(--text-secondary)'
+                }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+
           <div style={{ display: 'flex', gap: 24, marginBottom: 12, fontSize: 14 }}>
-            <div><strong>{purchaseRows.length}</strong> line items</div>
+            {phView === 'summary'
+              ? <div><strong>{purchaseSummary.length}</strong> distinct items</div>
+              : <div><strong>{purchaseRows.length}</strong> line items</div>}
             <div><strong>{purchaseTotals.qty}</strong> units</div>
             <div>Total: <strong>${purchaseTotals.value.toFixed(2)}</strong></div>
           </div>
 
+          {phView === 'summary' ? (
+            <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-surface-2)', textAlign: 'left' }}>
+                    {['SKU', 'Item', 'Cond', 'Total Qty', 'Orders', 'Total Spent', 'Last Purchased'].map(h => (
+                      <th key={h} style={{ padding: '8px 10px', whiteSpace: 'nowrap', borderBottom: '2px solid var(--border)' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {purchaseSummary.length === 0 ? (
+                    <tr><td colSpan={7} style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
+                      No purchases found{phCustomerId !== 'all' ? ' for this customer' : ''}.
+                    </td></tr>
+                  ) : purchaseSummary.map((s, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                      <td style={{ padding: '6px 10px', color: 'var(--text-muted)' }}>{s.sku}</td>
+                      <td style={{ padding: '6px 10px' }}>{s.itemName}</td>
+                      <td style={{ padding: '6px 10px' }}>{s.grade}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600 }}>{s.qty}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right' }}>{s.orderCount}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'right' }}>${s.value.toFixed(2)}</td>
+                      <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{s.lastDate ? new Date(s.lastDate).toLocaleDateString() : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
           <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
@@ -819,6 +904,7 @@ export default function Reports() {
               </tbody>
             </table>
           </div>
+          )}
         </div>
       )}
 

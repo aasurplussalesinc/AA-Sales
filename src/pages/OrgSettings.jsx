@@ -63,6 +63,9 @@ export default function OrgSettings() {
   });
   const [showLocationSchema, setShowLocationSchema] = useState(false);
   const [logoUrl, setLogoUrl] = useState('');
+  const [shipPercent, setShipPercent] = useState('');
+  const [shipFlat, setShipFlat] = useState('');
+  const [shipRoundUp, setShipRoundUp] = useState(false);
   const [logoUploading, setLogoUploading] = useState(false);
   
   // Employee management state
@@ -93,6 +96,10 @@ export default function OrgSettings() {
       setSkuSeriesStart(organization.skuSeriesStart || 1000);
       if (organization.locationSchema) setLocationSchema(organization.locationSchema);
       if (organization.logoUrl) setLogoUrl(organization.logoUrl);
+      const sm = organization.shippingMarkup || {};
+      setShipPercent(sm.percent != null ? String(sm.percent) : '');
+      setShipFlat(sm.flat != null ? String(sm.flat) : '');
+      setShipRoundUp(!!sm.roundUp);
       
       // Load employees (default to Alan, Nancy, Gustavo if none set)
       const empList = organization.employees || [];
@@ -143,7 +150,12 @@ export default function OrgSettings() {
         address: orgAddress,
         skuSeriesStart: parseInt(skuSeriesStart) || 1000,
         logoUrl: logoUrl || '',
-        locationSchema: locationSchema
+        locationSchema: locationSchema,
+        shippingMarkup: {
+          percent: parseFloat(shipPercent) || 0,
+          flat: parseFloat(shipFlat) || 0,
+          roundUp: !!shipRoundUp
+        }
       });
       await refreshOrganization();
       setEditing(false);
@@ -347,6 +359,43 @@ export default function OrgSettings() {
               </div>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
                 Used on invoices, packing lists and statements. Save to apply.
+              </p>
+            </div>
+
+            {/* Shipping Markup — auto-fills the invoice shipping line when a label is bought */}
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>Shipping Markup</label>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 8 }}>
+                When a label is purchased, the invoice shipping line auto-fills with the real
+                carrier cost plus this markup. A shipping amount you typed by hand is never overwritten.
+              </p>
+              <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Percent markup</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <input type="number" value={shipPercent} min="0" step="1" placeholder="0"
+                      onChange={e => setShipPercent(e.target.value)}
+                      style={{ width: 80, padding: 8, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+                    <span style={{ color: 'var(--text-muted)' }}>%</span>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Flat handling fee</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ color: 'var(--text-muted)' }}>$</span>
+                    <input type="number" value={shipFlat} min="0" step="0.01" placeholder="0.00"
+                      onChange={e => setShipFlat(e.target.value)}
+                      style={{ width: 90, padding: 8, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+                  </div>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={shipRoundUp} onChange={e => setShipRoundUp(e.target.checked)} />
+                  Round up to the dollar
+                </label>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 8 }}>
+                Example: a $52.00 label with {shipPercent || 0}% + ${shipFlat || 0}
+                {' '}bills the customer <strong>${(() => { const c = 52 * (1 + (parseFloat(shipPercent)||0)/100) + (parseFloat(shipFlat)||0); const v = shipRoundUp ? Math.ceil(c) : Math.round(c*100)/100; return v.toFixed(2); })()}</strong>.
               </p>
             </div>
 

@@ -252,7 +252,10 @@ export default function PurchaseOrders() {
       const shipping = field === 'shipping' ? val : (parseFloat(prevPO.shipping) || 0);
       const credit = field === 'credit' ? val : (parseFloat(prevPO.credit) || 0);
       const discount = field === 'discount' ? val : (parseFloat(prevPO.discount) || 0);
-      return { ...prevPO, [field]: val, estTotal: estSubtotal + tax + shipping - credit - discount, total: shipSubtotal + tax + shipping - credit - discount };
+      // Editing the shipping field marks it as a manual override so an auto label
+      // charge won't overwrite it later.
+      const manualFlag = field === 'shipping' ? { shippingManual: val > 0 } : {};
+      return { ...prevPO, [field]: val, ...manualFlag, estTotal: estSubtotal + tax + shipping - credit - discount, total: shipSubtotal + tax + shipping - credit - discount };
     });
   };
 

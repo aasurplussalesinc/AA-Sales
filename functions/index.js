@@ -574,6 +574,37 @@ exports.checkPackedOrdersScheduled = functions.pubsub.schedule('every 1 hours').
 });
 
 // CALLABLE FUNCTIONS
+// Compute the customer-facing shipping charge from the real carrier cost plus the
+// org's markup (percent and/or flat). Returns a number rounded to cents.
+function customerShippingCharge(realCost, orgData) {
+  var cost = parseFloat(realCost) || 0;
+  var m = (orgData && orgData.shippingMarkup) || {};
+  var pct = parseFloat(m.percent) || 0;
+  var flat = parseFloat(m.flat) || 0;
+  var charge = cost * (1 + pct / 100) + flat;
+  if (m.roundUp) charge = Math.ceil(charge);
+  return Math.round(charge * 100) / 100;
+}
+
+// Given the order and the just-purchased shippingLabel, produce the fields to write
+// so the invoice's shipping line reflects cost + markup — while RESPECTING a shipping
+// amount a user typed manually (never silently overwrite it).
+function shippingChargeUpdate(order, shippingLabel, orgData) {
+  var rate = shippingLabel && shippingLabel.selectedRate;
+  var realCost = rate ? parseFloat(rate.amount) : NaN;
+  if (!isFinite(realCost) || realCost <= 0) return {};
+  var charge = customerShippingCharge(realCost, orgData);
+  var update = { shippingCost: realCost, shippingChargeAuto: charge };
+  // Respect a manual override: only auto-fill the shipping line when the user
+  // hasn't set one themselves (or when a prior auto value is being refreshed).
+  var manual = parseFloat(order.shipping);
+  var manuallySet = order.shippingManual === true;
+  var priorAuto = parseFloat(order.shippingChargeAuto);
+  var canWrite = !manuallySet && (!(manual > 0) || (isFinite(priorAuto) && Math.abs(manual - priorAuto) < 0.005));
+  if (canWrite) update.shipping = charge;
+  return update;
+}
+
 exports.generateShippingLabel = functions.https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   // Rate limit: 60 label requests per user per 10 minutes
@@ -628,12 +659,14 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
         allLabels: (transaction.allLabels && transaction.allLabels.length > 0) ? transaction.allLabels : null,
         selectedRate: newSelectedRate,
       });
-      await db.collection('purchaseOrders').doc(orderId).update({ shippingLabel: result, shippingStatus: result.labelStatus, updatedAt: Date.now() });
+      var chargeUpd_a = (result.labelStatus === 'purchased') ? shippingChargeUpdate(order, result, orgData) : {};
+      await db.collection('purchaseOrders').doc(orderId).update(Object.assign({ shippingLabel: result, shippingStatus: result.labelStatus, updatedAt: Date.now() }, chargeUpd_a));
       return result;
     }
 
     var shippingResult = await processPackedOrder(apiKey, order, orgSettings);
-    await db.collection('purchaseOrders').doc(orderId).update({ shippingLabel: shippingResult, shippingStatus: shippingResult.labelStatus, updatedAt: Date.now() });
+    var chargeUpd_b = (shippingResult.labelStatus === 'purchased') ? shippingChargeUpdate(order, shippingResult, orgData) : {};
+    await db.collection('purchaseOrders').doc(orderId).update(Object.assign({ shippingLabel: shippingResult, shippingStatus: shippingResult.labelStatus, updatedAt: Date.now() }, chargeUpd_b));
     return shippingResult;
   } catch (error) { console.error('generateShippingLabel error:', error); throw new functions.https.HttpsError('internal', error.message); }
 });
@@ -658,7 +691,8 @@ exports.batchGenerateLabels = functions.https.onCall(async function(data, contex
         var o = Object.assign({ id: oDoc.id }, oDoc.data());
         if (o.orgId !== orgId) { results.failed.push({ orderId: oid, error: 'Wrong org' }); continue; }
         var sr = await processPackedOrder(apiKey, o, orgSettings);
-        await db.collection('purchaseOrders').doc(oid).update({ shippingLabel: sr, shippingStatus: sr.labelStatus, updatedAt: Date.now() });
+        var chargeUpd_batch = (sr.labelStatus === 'purchased') ? shippingChargeUpdate(o, sr, orgData) : {};
+        await db.collection('purchaseOrders').doc(oid).update(Object.assign({ shippingLabel: sr, shippingStatus: sr.labelStatus, updatedAt: Date.now() }, chargeUpd_batch));
         results.success.push({ orderId: oid, poNumber: o.poNumber, labelStatus: sr.labelStatus, trackingNumber: sr.trackingNumber || null, amount: (sr.selectedRate && sr.selectedRate.amount) || null, carrier: (sr.selectedRate && sr.selectedRate.provider) || null });
       } catch (oe) {
         results.failed.push({ orderId: oid, error: oe.message });

@@ -1351,6 +1351,7 @@ export default function PickLists() {
           { value: 'pending',     label: 'Pending',     statuses: ['pending'],     icon: '⏳',  color: 'var(--text-badge-orange)', bg: '#fff3e0' },
           { value: 'in_progress', label: 'In Progress', statuses: ['in_progress'], icon: '⚡',  color: 'var(--text-link)', bg: '#e3f2fd' },
           { value: 'completed',   label: 'Completed',   statuses: ['completed'],   icon: '✅',  color: 'var(--text-badge-green)', bg: '#e8f5e9' },
+          { value: 'packed',      label: 'Awaiting Shipping', statuses: ['packed'], icon: '📬',  color: '#00838f', bg: '#e0f7fa' },
           { value: 'packing',     label: 'Packing',     statuses: ['packing'],     icon: '📦',  color: 'var(--text-badge-purple)', bg: '#f3e5f5' },
           { value: 'shipped',     label: 'Shipped',     statuses: ['shipped'],     icon: '🚚',  color: 'var(--text-badge-green)', bg: '#c8e6c9' },
         ].map(tab => {

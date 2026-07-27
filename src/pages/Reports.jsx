@@ -32,6 +32,11 @@ export default function Reports() {
   });
   const [customData, setCustomData] = useState([]);
   const [movements, setMovements] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [phCustomerId, setPhCustomerId] = useState('all');
+  const [phSearch, setPhSearch] = useState('');
+  const [phPaidOnly, setPhPaidOnly] = useState(false);
 
   useEffect(() => {
     loadAllData();
@@ -39,14 +44,18 @@ export default function Reports() {
 
   const loadAllData = async () => {
     setLoading(true);
-    const [itemsData, locsData, movementsData] = await Promise.all([
+    const [itemsData, locsData, movementsData, ordersData, customersData] = await Promise.all([
       DB.getItems(),
       DB.getLocations(),
-      DB.getMovements()
+      DB.getMovements(),
+      DB.getPurchaseOrders(),
+      DB.getCustomers()
     ]);
     setItems(itemsData);
     setLocations(locsData);
     setMovements(movementsData);
+    setOrders(ordersData || []);
+    setCustomers(customersData || []);
     setLoading(false);
   };
 
@@ -216,8 +225,67 @@ export default function Reports() {
     { id: 'lowstock', label: '⚠️ Low Stock' },
     { id: 'deadstock', label: '💀 Dead Stock' },
     { id: 'turnover', label: '📈 Turnover' },
+    { id: 'purchases', label: '🧾 Customer Purchases' },
     { id: 'custom', label: '📋 Custom' }
   ];
+
+  // ── Customer purchase history: flatten every order line into one row ──
+  // Only orders that represent a real sale (invoiced/shipped/paid), never drafts.
+  const SOLD_STATUSES = new Set(['invoiced', 'shipped', 'paid', 'packed', 'completed']);
+  const purchaseRows = (() => {
+    const rows = [];
+    (orders || []).forEach(o => {
+      if (!SOLD_STATUSES.has(o.status)) return;
+      if (phCustomerId !== 'all' && o.customerId !== phCustomerId) return;
+      if (phPaidOnly && !o.paymentMethod && o.status !== 'paid') return;
+      const when = o.paidAt || o.shippedAt || o.invoiceDate || o.createdAt || 0;
+      (o.items || []).forEach(li => {
+        const qty = parseInt(li.qtyShipped) || parseInt(li.quantity) || 0;
+        const price = parseFloat(li.unitPrice) || 0;
+        rows.push({
+          date: when,
+          customerName: o.customerName || '',
+          poNumber: o.poNumber || '',
+          status: o.status || '',
+          sku: li.partNumber || '',
+          itemName: li.itemName || '',
+          grade: li.grade || '',
+          qty,
+          unitPrice: price,
+          lineTotal: qty * price,
+          paymentMethod: o.paymentMethod || '',
+          customerPO: o.customerPO || ''
+        });
+      });
+    });
+    const q = phSearch.trim().toLowerCase();
+    const filtered = q
+      ? rows.filter(r =>
+          r.itemName.toLowerCase().includes(q) ||
+          r.sku.toLowerCase().includes(q) ||
+          r.customerName.toLowerCase().includes(q))
+      : rows;
+    return filtered.sort((a, b) => b.date - a.date);
+  })();
+
+  const purchaseTotals = purchaseRows.reduce(
+    (acc, r) => { acc.qty += r.qty; acc.value += r.lineTotal; return acc; },
+    { qty: 0, value: 0 }
+  );
+
+  const exportPurchases = () => {
+    exportToCSV(
+      purchaseRows,
+      'customer-purchases',
+      ['Date', 'Customer', 'Order #', 'Customer PO', 'Status', 'SKU', 'Item', 'Condition', 'Qty', 'Unit Price', 'Line Total', 'Payment'],
+      (r) => [
+        r.date ? new Date(r.date).toLocaleDateString() : '',
+        r.customerName, r.poNumber, r.customerPO, r.status,
+        r.sku, r.itemName, r.grade, r.qty,
+        r.unitPrice.toFixed(2), r.lineTotal.toFixed(2), r.paymentMethod
+      ]
+    );
+  };
 
   // Staff cannot access reports
   if (!canViewReports) {
@@ -680,6 +748,77 @@ export default function Reports() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Customer Purchases Tab */}
+      {activeTab === 'purchases' && (
+        <div>
+          <h3 style={{ marginBottom: 15 }}>🧾 Customer Purchase History</h3>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Customer</label>
+              <select value={phCustomerId} onChange={e => setPhCustomerId(e.target.value)}
+                style={{ padding: 8, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', minWidth: 220 }}>
+                <option value="all">All customers</option>
+                {[...customers].sort((a, b) =>
+                  String(a.company || a.customerName || '').localeCompare(String(b.company || b.customerName || ''))
+                ).map(c => (
+                  <option key={c.id} value={c.id}>{c.company || c.customerName || '(unnamed)'}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Search item / SKU</label>
+              <input type="text" value={phSearch} onChange={e => setPhSearch(e.target.value)} placeholder="e.g. duffle, 2454"
+                style={{ padding: 8, borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox" checked={phPaidOnly} onChange={e => setPhPaidOnly(e.target.checked)} /> Paid orders only
+            </label>
+            <button className="btn" onClick={exportPurchases} disabled={!purchaseRows.length}
+              style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}>
+              ⬇️ Export CSV
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 24, marginBottom: 12, fontSize: 14 }}>
+            <div><strong>{purchaseRows.length}</strong> line items</div>
+            <div><strong>{purchaseTotals.qty}</strong> units</div>
+            <div>Total: <strong>${purchaseTotals.value.toFixed(2)}</strong></div>
+          </div>
+
+          <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-surface-2)', textAlign: 'left' }}>
+                  {['Date', 'Customer', 'Order #', 'SKU', 'Item', 'Cond', 'Qty', 'Unit', 'Total', 'Payment'].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', whiteSpace: 'nowrap', borderBottom: '2px solid var(--border)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {purchaseRows.length === 0 ? (
+                  <tr><td colSpan={10} style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No purchases found{phCustomerId !== 'all' ? ' for this customer' : ''}.
+                  </td></tr>
+                ) : purchaseRows.map((r, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{r.date ? new Date(r.date).toLocaleDateString() : '—'}</td>
+                    <td style={{ padding: '6px 10px' }}>{r.customerName}</td>
+                    <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{r.poNumber}</td>
+                    <td style={{ padding: '6px 10px', color: 'var(--text-muted)' }}>{r.sku}</td>
+                    <td style={{ padding: '6px 10px' }}>{r.itemName}</td>
+                    <td style={{ padding: '6px 10px' }}>{r.grade}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right' }}>{r.qty}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right' }}>${r.unitPrice.toFixed(2)}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 600 }}>${r.lineTotal.toFixed(2)}</td>
+                    <td style={{ padding: '6px 10px' }}>{r.paymentMethod}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

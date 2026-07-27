@@ -986,6 +986,17 @@ export const OrgDB = {
         console.log('Target location not found:', normalizedCode);
       }
     }
+
+    // Also stamp the item's own location field so it shows on the Items tab
+    // (the map above drives per-location counts; this drives the item row).
+    try {
+      await updateDoc(doc(db, 'items', itemId), {
+        location: normalizedCode || '',
+        updatedAt: Date.now()
+      });
+    } catch (e) {
+      console.warn('Could not update item.location:', e.message);
+    }
   },
 
   // Sync location inventory to item's location field

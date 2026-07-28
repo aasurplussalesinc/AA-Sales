@@ -715,7 +715,7 @@ export const OrgDB = {
       });
     });
 
-    let fixed = 0, skipped = 0;
+    let fixed = 0, skipped = 0, created = 0;
     const report = [];
     for (const item of items) {
       const primary = item.location;
@@ -728,11 +728,33 @@ export const OrgDB = {
 
       // Find the location record matching the item's primary code
       const normPrimary = this.normalizeLocationCode(primary);
-      const targetLoc = locations.find(loc => {
+      let targetLoc = locations.find(loc => {
         const code = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         return code === normPrimary;
       });
-      if (!targetLoc) { skipped++; report.push(`⚠️ ${item.name}: location "${primary}" has no matching location record — skipped`); continue; }
+
+      // If no matching location record exists, create one from the code — but
+      // only when the code is a COMPLETE shelf location (W#-R#-<bay><shelf>).
+      // Incomplete codes like "W4" (warehouse only) are reported, not invented.
+      if (!targetLoc) {
+        const parsed = normPrimary.match(/^(W\d+)-R(\d+)-([A-Z])(\d+)$/i);
+        if (!parsed) {
+          skipped++;
+          report.push(`⚠️ ${item.name}: "${primary}" isn't a complete shelf location (needs warehouse-rack-bay-shelf) — skipped`);
+          continue;
+        }
+        const newId = await this.createLocation({
+          locationCode: normPrimary,
+          warehouse: parsed[1].toUpperCase(),
+          rack: parsed[2],
+          letter: parsed[3].toUpperCase(),
+          shelf: parsed[4],
+          inventory: {}
+        });
+        targetLoc = { id: newId, locationCode: normPrimary, warehouse: parsed[1].toUpperCase(), rack: parsed[2], letter: parsed[3].toUpperCase(), shelf: parsed[4], inventory: {} };
+        locations.push(targetLoc); // so later items can reuse it
+        created++;
+      }
 
       // If this item already has a qty in THIS location's map, treat as reconciled.
       const existing = parseInt((targetLoc.inventory || {})[item.id]) || 0;
@@ -746,7 +768,7 @@ export const OrgDB = {
       fixed++;
       report.push(`✓ ${item.name}: placed ${remainder} at ${normPrimary}`);
     }
-    return { fixed, skipped, total: items.length, report };
+    return { fixed, skipped, created, total: items.length, report };
   },
 
   // ── Staging (unshelved) location ───────────────────────────────────────
@@ -1007,10 +1029,17 @@ export const OrgDB = {
       const rest = parts.slice(2).join('');
       const letterShelf = rest.match(/([A-Z])(\d+)/i);
       if (letterShelf) {
-        return `${warehouse}-R${rack}-${letterShelf[1]}${letterShelf[2]}`;
+        return `${warehouse}-R${rack}-${letterShelf[1].toUpperCase()}${letterShelf[2]}`;
       }
     }
-    
+
+    // Dashless / run-together format, e.g. W4R1M2 or W4R1B12 -> W4-R1-M2 / W4-R1-B12
+    // Pattern: <warehouse W+digits> <rack R+digits> <bay letter><shelf digits>
+    const dashless = code.match(/^(W\d+)\s*R(\d+)\s*([A-Z])(\d+)$/i);
+    if (dashless) {
+      return `${dashless[1].toUpperCase()}-R${dashless[2]}-${dashless[3].toUpperCase()}${dashless[4]}`;
+    }
+
     return code;
   },
 

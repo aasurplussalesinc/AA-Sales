@@ -832,7 +832,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
       await loadData();
       const preview = res.report.slice(0, 12).join('\n');
       const more = res.report.length > 12 ? `\n…and ${res.report.length - 12} more` : '';
-      alert(`Done.\n\nUpdated: ${res.fixed}\nAlready fine / skipped: ${res.skipped}\nTotal items: ${res.total}` +
+      alert(`Done.\n\nStock placed: ${res.fixed}\nLocations created: ${res.created}\nAlready fine / skipped: ${res.skipped}\nTotal items: ${res.total}` +
         (res.report.length ? `\n\n${preview}${more}` : ''));
     } catch (e) {
       alert('Could not reconcile: ' + (e.message || e));
@@ -932,7 +932,10 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           const category = rawCategory;
           const qty = rawStock !== '' ? (parseInt(rawStock) || 0) : 0;
           const price = rawPrice !== '' ? (parseFloat(rawPrice.replace(/[^0-9.-]/g, '')) || 0) : 0;
-          const location = columnIndices.location !== undefined ? values[columnIndices.location]?.trim() : '';
+          const rawLocation = columnIndices.location !== undefined ? values[columnIndices.location]?.trim() : '';
+          // Normalize on import so "W4R1M2" becomes "W4-R1-M2" and matches
+          // location records / the rest of the system consistently.
+          const location = rawLocation ? DB.normalizeLocationCode(rawLocation) : '';
 
           // Which fields this row actually supplied a non-blank value for.
           // Blank cells are NOT recorded, so the upsert leaves them untouched.

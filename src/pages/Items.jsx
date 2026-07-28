@@ -351,9 +351,16 @@ export default function Items() {
       if (filters.quantity === '51+' && stock < 51) return false;
     }
     
-    // Location filter
-    if (filters.location && item.location !== filters.location) {
-      return false;
+    // Location filter (with special staging / no-location buckets)
+    if (filters.location) {
+      const loc = (item.location || '').toUpperCase();
+      if (filters.location === '__STAGING__') {
+        if (loc !== 'STAGING') return false;
+      } else if (filters.location === '__NONE__') {
+        if (item.location) return false;
+      } else if (item.location !== filters.location) {
+        return false;
+      }
     }
     
     // Stock status filter (low stock, reorder, ok)
@@ -2334,6 +2341,8 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                 style={{ width: '100%' }}
               >
                 <option value="">All Locations</option>
+                <option value="__STAGING__">📋 Needs shelving (Staging)</option>
+                <option value="__NONE__">⚠️ No location at all</option>
                 {locationOptions.map(loc => (
                   <option key={loc} value={loc}>{loc}</option>
                 ))}

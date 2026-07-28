@@ -693,6 +693,36 @@ export const OrgDB = {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
+  // ── Staging (unshelved) location ───────────────────────────────────────
+  // A single reserved bucket per org for stock that's physically in the
+  // warehouse but not yet assigned a real shelf. It behaves like a normal
+  // location for inventory math (stock counts, it's pickable/sellable), but is
+  // flagged isStaging:true so it's excluded from "properly located" and shown
+  // in a "needs shelving" view. Auto-provisions on first use — no manual setup.
+  STAGING_CODE: 'STAGING',
+
+  async getOrCreateStagingLocation() {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const locations = await this.getLocations();
+    let staging = locations.find(l => l.isStaging === true) ||
+                  locations.find(l => (l.locationCode || '').toUpperCase() === this.STAGING_CODE);
+    if (staging) return staging;
+    const id = await this.createLocation({
+      locationCode: this.STAGING_CODE,
+      isStaging: true,
+      warehouse: '', rack: '', letter: '', shelf: '',
+      description: 'Unshelved / staging — items received without a specific location',
+      inventory: {}
+    });
+    const snap = await getDoc(doc(db, 'locations', id));
+    return { id, ...(snap.exists() ? snap.data() : {}) };
+  },
+
+  isStagingLocation(loc) {
+    if (!loc) return false;
+    return loc.isStaging === true || (loc.locationCode || '').toUpperCase() === this.STAGING_CODE;
+  },
+
   async createLocation(locationData) {
     if (!currentOrgId) throw new Error('No organization selected');
     
@@ -1449,13 +1479,24 @@ export const OrgDB = {
 
     // Add to the specific location's inventory map (additive)
     let newLocQty = null;
-    const normalizedCode = this.normalizeLocationCode(locationCode);
+    let normalizedCode = this.normalizeLocationCode(locationCode);
+
+    // No location specified → drop into the staging bucket so the stock is
+    // always accounted for in-warehouse and shows up as "needs shelving",
+    // rather than being received to nowhere.
+    let targetLoc = null;
+    if (!normalizedCode) {
+      targetLoc = await this.getOrCreateStagingLocation();
+      normalizedCode = targetLoc.locationCode || this.STAGING_CODE;
+    }
     if (normalizedCode) {
-      const locations = await this.getLocations();
-      const targetLoc = locations.find(loc => {
-        const code = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
-        return code === normalizedCode;
-      });
+      if (!targetLoc) {
+        const locations = await this.getLocations();
+        targetLoc = locations.find(loc => {
+          const code = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
+          return code === normalizedCode;
+        });
+      }
       if (targetLoc) {
         const inv = { ...(targetLoc.inventory || {}) };
         newLocQty = (parseInt(inv[itemId]) || 0) + addQty;

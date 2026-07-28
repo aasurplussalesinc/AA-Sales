@@ -1633,6 +1633,15 @@ ${labelsHtml}
                     {filteredItems.slice(0, 10).map(item => (
                       <div key={item.id} onClick={() => addItemToPO(item)} style={{ padding: 10, borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
                         <strong>{item.name}</strong>
+                        {item.grade && (
+                          <span style={{
+                            marginLeft: 10, padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
+                            textTransform: 'uppercase', letterSpacing: '0.03em',
+                            background: /new/i.test(item.grade) ? '#e8f5e9' : '#fff3e0',
+                            color: /new/i.test(item.grade) ? '#2e7d32' : '#e65100',
+                            border: '1px solid ' + (/new/i.test(item.grade) ? '#a5d6a7' : '#ffcc80')
+                          }}>{item.grade}</span>
+                        )}
                         <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>{item.partNumber}</span>
                         <span style={{ color: 'var(--accent)', marginLeft: 10 }}>Stock: {item.stock || 0}</span>
                       </div>

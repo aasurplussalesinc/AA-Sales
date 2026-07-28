@@ -106,27 +106,39 @@ export default function Receiving() {
     loadData();
   };
 
-  const updateReceivedQty = async (receiving, itemId, qty) => {
-    const updatedItems = receiving.items.map(i =>
-      i.itemId === itemId ? { ...i, receivedQty: parseInt(qty) || 0 } : i
-    );
-    
-    await DB.updateReceiving(receiving.id, { items: updatedItems });
-    loadData();
+  const updateReceivedQty = (receiving, itemId, qty) => {
+    // Update local state only while typing — persisting + reloading on every
+    // keystroke was remounting the modal and stealing focus (the flicker).
+    setSelectedReceiving(prev => {
+      if (!prev || prev.id !== receiving.id) return prev;
+      return {
+        ...prev,
+        items: prev.items.map(i =>
+          i.itemId === itemId ? { ...i, receivedQty: qty === '' ? '' : (parseInt(qty) || 0) } : i
+        )
+      };
+    });
   };
 
-  const updateItemLocationInReceiving = async (receiving, itemId, locationId) => {
-    const loc = locations.find(l => l.id === locationId);
-    const updatedItems = receiving.items.map(i =>
-      i.itemId === itemId ? { 
-        ...i, 
-        locationId, 
-        locationCode: loc ? (loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`) : '' 
-      } : i
-    );
-    
-    await DB.updateReceiving(receiving.id, { items: updatedItems });
-    loadData();
+  const updateItemLocationInReceiving = (receiving, itemId, locationId) => {
+    setSelectedReceiving(prev => {
+      if (!prev || prev.id !== receiving.id) return prev;
+      let locationCode = '';
+      if (locationId === '__STAGING__') {
+        locationCode = 'STAGING';
+      } else if (locationId === '__NONE__') {
+        locationCode = '';
+      } else {
+        const loc = locations.find(l => l.id === locationId);
+        locationCode = loc ? (loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`) : '';
+      }
+      return {
+        ...prev,
+        items: prev.items.map(i =>
+          i.itemId === itemId ? { ...i, locationId, locationCode } : i
+        )
+      };
+    });
   };
 
   const completeReceiving = async (receiving) => {
@@ -357,12 +369,14 @@ export default function Receiving() {
                       ) : (
                         <select
                           className="form-input"
-                          value={item.locationId || ''}
+                          value={item.locationId || (item.locationCode === 'STAGING' ? '__STAGING__' : '')}
                           onChange={e => updateItemLocationInReceiving(selectedReceiving, item.itemId, e.target.value)}
                           style={{ width: '100%', padding: 5 }}
                         >
                           <option value="">Select...</option>
-                          {locations.map(loc => (
+                          <option value="__STAGING__">📋 Staging (unshelved)</option>
+                          <option value="__NONE__">⚠️ No location</option>
+                          {locations.filter(loc => !DB.isStagingLocation?.(loc)).map(loc => (
                             <option key={loc.id} value={loc.id}>
                               {loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`}
                             </option>

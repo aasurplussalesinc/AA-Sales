@@ -996,10 +996,16 @@ export const OrgDB = {
     
     // Then add to the new location if specified (regardless of quantity - even 0 or negative)
     if (normalizedCode) {
-      const targetLoc = locations.find(loc => {
+      let targetLoc = locations.find(loc => {
         const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         return locCode === normalizedCode;
       });
+
+      // If assigning to the staging bucket and it doesn't exist yet, create it
+      // so the stock is actually placed (not just stamped on the item).
+      if (!targetLoc && normalizedCode.toUpperCase() === this.STAGING_CODE) {
+        targetLoc = await this.getOrCreateStagingLocation();
+      }
       
       if (targetLoc) {
         const ref = doc(db, 'locations', targetLoc.id);

@@ -288,11 +288,16 @@ export default function Items() {
   const categories = [...new Set(items.map(i => i.category).filter(Boolean))].sort();
 
   // Get location options - normalize to consistent format W1-R1-A1
-  const locationOptions = locations.map(loc => {
-    const code = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
-    // Normalize: convert W1-R1-A-1 to W1-R1-A1
-    return code.replace(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i, '$1-R$2-$3$4');
-  }).sort();
+  const locationOptions = (() => {
+    const opts = locations.map(loc => {
+      const code = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+      // Normalize: convert W1-R1-A-1 to W1-R1-A1
+      return code.replace(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i, '$1-R$2-$3$4');
+    });
+    // Always offer the staging bucket, even before it has been auto-created.
+    if (!opts.some(c => (c || '').toUpperCase() === 'STAGING')) opts.push('STAGING');
+    return opts.sort();
+  })();
 
   // Robust location-by-code lookup. Normalizes BOTH sides so picking the normalized
   // code "W4-R2-F2" from the dropdown still matches a stored "W4-R2-F-2" record.
@@ -2728,7 +2733,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                       >
                         <option value="">--</option>
                         {locationOptions.map(loc => (
-                          <option key={loc} value={loc}>{loc}</option>
+                          <option key={loc} value={loc}>{loc === 'STAGING' ? '📋 Staging (unshelved)' : loc}</option>
                         ))}
                       </select>
                     ) : (

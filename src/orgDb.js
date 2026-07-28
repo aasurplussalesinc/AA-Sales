@@ -693,6 +693,62 @@ export const OrgDB = {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
+  // ── One-time reconciliation for CSV-imported stock ─────────────────────
+  // CSV import stores an item's location as a STRING (item.location) but never
+  // writes it into any location's inventory map. That makes imported stock
+  // invisible to the multi-location view once the item also gains map-based
+  // stock (e.g. from a receive). This walks every item and, where its primary
+  // location isn't yet represented in a map, writes the UNACCOUNTED remainder
+  // (total stock minus what's already sitting in maps) into that location.
+  // Idempotent: running it again does nothing once everything reconciles.
+  async reconcileImportedLocations() {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const items = await this.getItems();
+    const locations = await this.getLocations();
+
+    // Pre-index how much of each item already lives across all location maps.
+    const inMaps = {}; // itemId -> total qty already in maps
+    locations.forEach(loc => {
+      const inv = loc.inventory || {};
+      Object.keys(inv).forEach(itemId => {
+        inMaps[itemId] = (inMaps[itemId] || 0) + (parseInt(inv[itemId]) || 0);
+      });
+    });
+
+    let fixed = 0, skipped = 0;
+    const report = [];
+    for (const item of items) {
+      const primary = item.location;
+      const stock = parseInt(item.stock) || 0;
+      if (!primary || stock <= 0) { skipped++; continue; }
+
+      const already = inMaps[item.id] || 0;
+      const remainder = stock - already;
+      if (remainder <= 0) { skipped++; continue; } // fully represented already
+
+      // Find the location record matching the item's primary code
+      const normPrimary = this.normalizeLocationCode(primary);
+      const targetLoc = locations.find(loc => {
+        const code = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
+        return code === normPrimary;
+      });
+      if (!targetLoc) { skipped++; report.push(`⚠️ ${item.name}: location "${primary}" has no matching location record — skipped`); continue; }
+
+      // If this item already has a qty in THIS location's map, treat as reconciled.
+      const existing = parseInt((targetLoc.inventory || {})[item.id]) || 0;
+      if (existing > 0) { skipped++; continue; }
+
+      const inv = { ...(targetLoc.inventory || {}) };
+      inv[item.id] = remainder;
+      await updateDoc(doc(db, 'locations', targetLoc.id), { inventory: inv, updatedAt: Date.now() });
+      targetLoc.inventory = inv; // keep in-memory index correct for duplicate primaries
+      inMaps[item.id] = already + remainder;
+      fixed++;
+      report.push(`✓ ${item.name}: placed ${remainder} at ${normPrimary}`);
+    }
+    return { fixed, skipped, total: items.length, report };
+  },
+
   // ── Staging (unshelved) location ───────────────────────────────────────
   // A single reserved bucket per org for stock that's physically in the
   // warehouse but not yet assigned a real shelf. It behaves like a normal

@@ -39,6 +39,7 @@ export default function Items() {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [saving, setSaving] = useState(false);
   const [adjustingItem, setAdjustingItem] = useState(null);
@@ -817,6 +818,27 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     link.click();
     document.body.removeChild(link);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  // Place CSV-imported stock (stored only as item.location string) into the
+  // matching location's inventory map, so imported items appear in the
+  // multi-location view alongside received/moved stock. Safe + idempotent.
+  const reconcileLocations = async () => {
+    if (reconciling) return;
+    if (!window.confirm('Place imported stock into its location on the map?\n\nThis makes CSV-imported items show up properly in the multi-location view. It does not change any quantities or delete anything, and is safe to run more than once.')) return;
+    setReconciling(true);
+    try {
+      const res = await DB.reconcileImportedLocations();
+      await loadData();
+      const preview = res.report.slice(0, 12).join('\n');
+      const more = res.report.length > 12 ? `\n…and ${res.report.length - 12} more` : '';
+      alert(`Done.\n\nUpdated: ${res.fixed}\nAlready fine / skipped: ${res.skipped}\nTotal items: ${res.total}` +
+        (res.report.length ? `\n\n${preview}${more}` : ''));
+    } catch (e) {
+      alert('Could not reconcile: ' + (e.message || e));
+    } finally {
+      setReconciling(false);
+    }
   };
 
   // Import from CSV
@@ -1739,6 +1761,18 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
             style={{ background: '#17a2b8', color: 'var(--text-on-dark)' }}
           >
             {importing ? '⏳ Importing...' : '📤 Import CSV'}
+          </button>
+        )}
+
+        {isAdmin && (
+          <button
+            className="btn"
+            onClick={reconcileLocations}
+            disabled={reconciling}
+            title="Place CSV-imported stock into its location on the map, so imported items show up in the multi-location view. Safe to run anytime."
+            style={{ background: '#6b7f3e', color: 'var(--text-on-dark)' }}
+          >
+            {reconciling ? '⏳ Reconciling…' : '🔧 Fix imported locations'}
           </button>
         )}
         

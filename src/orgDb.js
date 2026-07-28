@@ -996,16 +996,10 @@ export const OrgDB = {
     
     // Then add to the new location if specified (regardless of quantity - even 0 or negative)
     if (normalizedCode) {
-      let targetLoc = locations.find(loc => {
+      const targetLoc = locations.find(loc => {
         const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         return locCode === normalizedCode;
       });
-
-      // If assigning to the staging bucket and it doesn't exist yet, create it
-      // so the stock is actually placed (not just stamped on the item).
-      if (!targetLoc && normalizedCode.toUpperCase() === this.STAGING_CODE) {
-        targetLoc = await this.getOrCreateStagingLocation();
-      }
       
       if (targetLoc) {
         const ref = doc(db, 'locations', targetLoc.id);
@@ -1441,32 +1435,20 @@ export const OrgDB = {
   },
 
   async completeReceiving(receivingId, items) {
-    // Update each item's stock and location with sync
+    // Receiving ADDS stock to a location without disturbing an item's other
+    // locations. receiveToLocation is additive + multi-location safe and routes
+    // a blank location into the staging bucket, so an item stocked on several
+    // shelves keeps all of them and simply gains the newly-received quantity.
     for (const item of items) {
-      if (item.receivedQty > 0) {
-        // Get current item data
-        const itemRef = doc(db, 'items', item.itemId);
-        const itemSnap = await getDoc(itemRef);
-        const currentItem = itemSnap.exists() ? itemSnap.data() : {};
-        const newStock = (currentItem.stock || 0) + item.receivedQty;
-        
-        // Update item stock and location
-        await this.updateItemWithSync(item.itemId, {
-          stock: newStock,
-          location: item.locationCode || currentItem.location || ''
-        });
-        
-        // Log movement
-        await this.logMovement({
-          itemId: item.itemId,
-          itemName: item.itemName,
-          quantity: item.receivedQty,
-          type: 'RECEIVE',
-          toLocation: item.locationCode || 'Receiving'
-        });
+      const qty = parseInt(item.receivedQty) || 0;
+      if (qty > 0) {
+        // A blank/omitted location resolves to staging inside receiveToLocation.
+        // 'STAGING' is passed through and auto-creates the bucket if needed.
+        const code = item.locationCode || '';
+        await this.receiveToLocation(code, item.itemId, qty);
       }
     }
-    
+
     await this.updateReceiving(receivingId, { status: 'completed' });
   },
 

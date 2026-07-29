@@ -591,6 +591,17 @@ export default function PurchaseOrders() {
         if (currentItem) {
           const newStock = Math.max(0, (currentItem.stock || 0) - qtyShipped);
           await DB.updateItem(item.itemId, { stock: newStock });
+          // Also pull the units out of the location's inventory map so per-location
+          // counts stay in step with total stock. The pick-list path already did this;
+          // shipping directly used to skip it, which drifted the location totals.
+          const fromLoc = item.location || currentItem.location || '';
+          if (fromLoc) {
+            try {
+              await DB.decrementLocationInventory(fromLoc, item.itemId, qtyShipped);
+            } catch (e) {
+              console.warn('decrementLocationInventory failed for', item.itemName, e.message);
+            }
+          }
         }
       }
     }
@@ -609,6 +620,17 @@ export default function PurchaseOrders() {
           if (currentItem) {
             const newStock = Math.max(0, (currentItem.stock || 0) - qtyShipped);
             await DB.updateItem(item.itemId, { stock: newStock });
+            // Also pull the units out of the location's inventory map so per-location
+            // counts stay in step with total stock. The pick-list path already did this;
+            // shipping directly used to skip it, which drifted the location totals.
+            const fromLoc = item.location || currentItem.location || '';
+            if (fromLoc) {
+              try {
+                await DB.decrementLocationInventory(fromLoc, item.itemId, qtyShipped);
+              } catch (e) {
+                console.warn('decrementLocationInventory failed for', item.itemName, e.message);
+              }
+            }
           }
         }
       }

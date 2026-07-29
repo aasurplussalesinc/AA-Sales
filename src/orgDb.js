@@ -1159,11 +1159,14 @@ export const OrgDB = {
   // completion so multi-location counts stay accurate. Returns the new per-location qty.
   async decrementLocationInventory(locationCode, itemId, qty) {
     if (!currentOrgId || !locationCode || !itemId) return null;
-    const normalizedCode = this.normalizeLocationCode(locationCode);
+    // Use the UNGUARDED canonical form on both sides so a legacy "W3-R3-E-3"
+    // still matches a normalized "W3-R3-E3" (the schema-guarded normalizer
+    // returns codes untouched for custom-schema orgs, which caused misses).
+    const normalizedCode = this.canonicalLocationCode(locationCode);
     const locations = await this.getLocations();
     const targetLoc = locations.find(loc => {
-      const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
-      return locCode === normalizedCode;
+      const raw = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+      return this.canonicalLocationCode(raw) === normalizedCode;
     });
     if (!targetLoc) {
       console.warn('decrementLocationInventory: location not found:', normalizedCode);

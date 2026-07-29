@@ -3127,11 +3127,17 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                 /* Multi-Location Mode */
                 <div className="form-group">
                   <label style={{ marginBottom: 10, display: 'block' }}>Location Breakdown</label>
-                  {newItem.locationBreakdown.map((lb, idx) => (
+                  {newItem.locationBreakdown.map((lb, idx) => {
+                    // Stored codes may be in the legacy "W3-R3-E-3" form while the
+                    // option list is normalized ("W3-R3-E3"). Normalize for display
+                    // so the saved location actually shows instead of blanking out.
+                    const normCode = String(lb.location || '').replace(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i, '$1-R$2-$3$4');
+                    const missingFromOptions = normCode && !locationOptions.includes(normCode);
+                    return (
                     <div key={idx} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'center' }}>
                       <select
                         className="form-input"
-                        value={lb.location}
+                        value={normCode}
                         onChange={e => {
                           const updated = [...newItem.locationBreakdown];
                           updated[idx].location = e.target.value;
@@ -3140,6 +3146,8 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                         style={{ flex: 2 }}
                       >
                         <option value="">-- Select Location --</option>
+                        {/* Keep an unknown/legacy code visible rather than silently blank */}
+                        {missingFromOptions && <option value={normCode}>{normCode} (not in location list)</option>}
                         {locationOptions.map(loc => (
                           <option key={loc} value={loc}>{loc}</option>
                         ))}
@@ -3177,7 +3185,8 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                         </button>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                   <button
                     type="button"
                     onClick={() => {

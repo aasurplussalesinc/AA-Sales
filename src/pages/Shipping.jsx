@@ -183,6 +183,57 @@ export default function Shipping() {
   };
 
   // Get rates for an order
+  // Re-pull the customer's current profile into this order (fixing stale/bad
+  // snapshot data like a truncated phone), then clear old rates and re-fetch.
+  // Respects "ship to a different address" — the alternate ship-to is left as-is.
+  const resyncAndGetRates = async (order) => {
+    const orderId = order.id;
+    setProcessing(prev => ({ ...prev, [orderId]: true }));
+    setError('');
+    try {
+      if (!order.customerId) {
+        setError('This order has no linked customer to re-sync from. Edit the order to set the customer, then try again.');
+        setProcessing(prev => ({ ...prev, [orderId]: false }));
+        return;
+      }
+      const customers = await DB.getCustomers();
+      const customer = customers.find(c => c.id === order.customerId);
+      if (!customer) {
+        setError('Could not find the linked customer profile. It may have been deleted.');
+        setProcessing(prev => ({ ...prev, [orderId]: false }));
+        return;
+      }
+
+      // Rebuild the order's customer snapshot exactly as order creation does.
+      const updates = {
+        customerName: customer.company || customer.customerName || '',
+        customerContact: customer.company ? (customer.customerName || '') : '',
+        customerEmail: customer.email || '',
+        customerPhone: customer.phone || '',
+        customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', ')
+      };
+      // Respect "ship to a different address": only refresh the ship-to from the
+      // customer when the order is NOT using an alternate address.
+      // (order.shipToAddress present = intentional override → leave untouched.)
+
+      await DB.updatePurchaseOrder(orderId, updates);
+
+      // Clear any stale rates so the next fetch is clean, then re-rate.
+      if (order.shippingLabel && !order.shippingLabel.trackingNumber) {
+        await DB.updatePurchaseOrder(orderId, { shippingLabel: null, shippingStatus: 'pending' });
+      }
+
+      const getRatesFn = httpsCallable(functions, 'getShippingRates');
+      await getRatesFn({ orderId, orgId: organization.id });
+      await loadData();
+      setShowRates(orderId);
+      setMessage(`✅ Re-synced ${updates.customerName || 'customer'} from profile and refreshed rates.`);
+    } catch (err) {
+      setError(`Re-sync failed: ${err.message}`);
+    }
+    setProcessing(prev => ({ ...prev, [orderId]: false }));
+  };
+
   const getRates = async (orderId) => {
     setProcessing(prev => ({ ...prev, [orderId]: true }));
     setError('');
@@ -1603,6 +1654,16 @@ export default function Shipping() {
                   )}
 
                   <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      onClick={() => { resyncAndGetRates(order); setShowRates(null); }}
+                      title="Re-pull this customer's current name, address, phone and email from their profile into the order (fixes stale/bad data), update the invoice, then refresh rates. Respects a different ship-to address."
+                      style={{
+                        padding: '10px 20px', background: '#4a5d23', color: 'white',
+                        border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 700
+                      }}
+                    >
+                      🔁 Recalibrate from customer profile
+                    </button>
                     <button
                       onClick={() => { getRates(order.id); setShowRates(null); }}
                       style={{

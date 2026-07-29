@@ -357,13 +357,23 @@ export default function Items() {
       if (filters.quantity === '51+' && stock < 51) return false;
     }
     
-    // Location filter (with special staging / no-location buckets)
+    // Location filter (with special staging / no-location / incomplete buckets)
     if (filters.location) {
       const loc = (item.location || '').toUpperCase();
+      // A "complete" shelf code is warehouse-rack-bay-shelf, e.g. W4-R1-B2.
+      const isComplete = /^W\d+-R\d+-[A-Z]\d+$/i.test(item.location || '');
+      const hasLoc = !!(item.location && item.location.trim());
       if (filters.location === '__STAGING__') {
         if (loc !== 'STAGING') return false;
       } else if (filters.location === '__NONE__') {
-        if (item.location) return false;
+        if (hasLoc) return false;
+      } else if (filters.location === '__INCOMPLETE__') {
+        // has something, but it isn't a complete shelf code and isn't staging
+        if (!hasLoc || loc === 'STAGING' || isComplete) return false;
+      } else if (filters.location === '__NEEDSHOME__') {
+        // no location at all, OR an incomplete code — anything that needs placing
+        if (loc === 'STAGING') return false;
+        if (hasLoc && isComplete) return false;
       } else if (item.location !== filters.location) {
         return false;
       }
@@ -387,6 +397,17 @@ export default function Items() {
     
     return true;
   });
+
+  // Counts for the "needs a home" worklist (items with stock but no usable shelf)
+  const needsHome = items.filter(it => {
+    const loc = (it.location || '').toUpperCase();
+    if (loc === 'STAGING') return false;
+    const isComplete = /^W\d+-R\d+-[A-Z]\d+$/i.test(it.location || '');
+    return !isComplete; // blank OR incomplete
+  });
+  const needsHomeCount = needsHome.length;
+  const incompleteCount = needsHome.filter(it => (it.location || '').trim()).length;
+  const noLocationCount = needsHomeCount - incompleteCount;
 
   // Sort the filtered items
   const sortedItems = [...filteredItems].sort((a, b) => {
@@ -2309,6 +2330,37 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           marginBottom: 15,
           boxShadow: 'var(--shadow-sm)'
         }}>
+          {needsHomeCount > 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+              padding: '10px 14px', marginBottom: 15, borderRadius: 8,
+              background: '#fbeecd', border: '1px solid #e6c264'
+            }}>
+              <span style={{ fontSize: 20 }}>🏠</span>
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <strong>{needsHomeCount} item{needsHomeCount === 1 ? '' : 's'} need a home</strong>
+                <span style={{ color: 'var(--text-muted)', fontSize: 13 }}>
+                  {' '}— {noLocationCount} no location, {incompleteCount} incomplete code. Assign a shelf inline or by voice.
+                </span>
+              </div>
+              <button
+                className="btn"
+                onClick={() => setFilters({ ...filters, location: '__NEEDSHOME__' })}
+                style={{ background: '#d98a1f', color: '#fff', whiteSpace: 'nowrap' }}
+              >
+                Show worklist →
+              </button>
+              {filters.location === '__NEEDSHOME__' && (
+                <button
+                  className="btn"
+                  onClick={() => setFilters({ ...filters, location: '' })}
+                  style={{ background: 'transparent', border: '1px solid var(--border)', whiteSpace: 'nowrap' }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          )}
           <h3 style={{ marginBottom: 15, fontSize: 16 }}>Filter Items</h3>
           <div style={{ 
             display: 'grid', 
@@ -2392,8 +2444,10 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                 style={{ width: '100%' }}
               >
                 <option value="">All Locations</option>
-                <option value="__STAGING__">📋 Needs shelving (Staging)</option>
+                <option value="__NEEDSHOME__">🏠 Needs a home (unplaced)</option>
                 <option value="__NONE__">⚠️ No location at all</option>
+                <option value="__INCOMPLETE__">❓ Incomplete code (e.g. "W4")</option>
+                <option value="__STAGING__">📋 Staging (unshelved)</option>
                 {locationOptions.map(loc => (
                   <option key={loc} value={loc}>{loc}</option>
                 ))}

@@ -107,16 +107,29 @@ export default function Items() {
   const actionMenuRef = useRef(null);
 
   // Decide if the dropdown should open upward or downward based on available space
+  const [actionMenuMaxH, setActionMenuMaxH] = useState(320);
+  const [actionMenuPos, setActionMenuPos] = useState({ left: 0, top: 0, openUp: false });
+
   const handleOpenActionMenu = (itemId, event) => {
     if (openActionMenu === itemId) {
       setOpenActionMenu(null);
       return;
     }
-    // Check space below the button
     const rect = event.currentTarget.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const menuHeight = 280; // approximate height of full menu
-    setActionMenuOpenUp(spaceBelow < menuHeight);
+    const spaceBelow = window.innerHeight - rect.bottom - 12;
+    const spaceAbove = rect.top - 12;
+    const menuHeight = 300;
+    const openUp = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+    setActionMenuOpenUp(openUp);
+    setActionMenuMaxH(Math.max(160, openUp ? spaceAbove : spaceBelow));
+    // Fixed-position coordinates (right-aligned to the button) so the menu
+    // escapes the table's overflow clipping entirely and can scroll itself.
+    setActionMenuPos({
+      right: window.innerWidth - rect.right,
+      top: openUp ? undefined : rect.bottom + 4,
+      bottom: openUp ? (window.innerHeight - rect.top + 4) : undefined,
+      openUp
+    });
     setOpenActionMenu(itemId);
   };
 
@@ -128,7 +141,14 @@ export default function Items() {
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    // The menu is fixed-positioned; close it on scroll so it never floats away
+    // from its button.
+    const handleScroll = () => setOpenActionMenu(null);
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, []);
 
   // Filter states
@@ -2864,17 +2884,17 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                     {/* Dropdown menu */}
                     {openActionMenu === item.id && (
                       <div style={{
-                        position: 'absolute', right: 0,
-                        ...(actionMenuOpenUp
-                          ? { bottom: '100%', marginBottom: 4 }
-                          : { top: '100%', marginTop: 4 }
+                        position: 'fixed', right: actionMenuPos.right,
+                        ...(actionMenuPos.openUp
+                          ? { bottom: actionMenuPos.bottom }
+                          : { top: actionMenuPos.top }
                         ),
                         background: 'var(--bg-surface)',
                         border: '1px solid var(--border)',
                         borderRadius: 8,
                         boxShadow: 'var(--shadow-md)',
-                        zIndex: 999, minWidth: 160,
-                        maxHeight: '70vh', overflowY: 'auto'
+                        zIndex: 9999, minWidth: 160,
+                        maxHeight: actionMenuMaxH, overflowY: 'auto'
                       }}>
                         {canEdit && (
                           <DropdownItem

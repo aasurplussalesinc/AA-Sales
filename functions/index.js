@@ -476,16 +476,25 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   }
 
   // --- Customer Account rates (third-party billing) ---
+  // Track the outcome so the UI can tell you whether the customer's account
+  // will actually be billed, or whether it silently fell back to AA.
+  var billing = { requested: !!customerBilling, account: customerBilling ? customerBilling.account : null, customerRateCount: 0, error: null };
   if (customerBilling) {
     try {
       var parcelsCustUPS = formatParcelsFromOrder(order, insuranceAmount, null);
       var shipmentCustUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustUPS, customsDeclarationId, customerBilling, carrierAccountIds);
-      allRates = allRates.concat(mapRates(shipmentCustUPS, 'Customer', hasInsurance ? 'native' : 'none'));
+      var custRates = mapRates(shipmentCustUPS, 'Customer', hasInsurance ? 'native' : 'none');
+      billing.customerRateCount += custRates.length;
+      allRates = allRates.concat(custRates);
+      // Capture any carrier message that explains a decline (account not authorized, etc.)
+      var custMsgs = (shipmentCustUPS.messages || []).map(function(m) { return m.text || JSON.stringify(m); });
+      if (custRates.length === 0 && custMsgs.length > 0) billing.error = custMsgs.join(' | ');
       console.log('=== SHIPPO DEBUG (Customer Account / UPS Insurance) ===');
       console.log('Customer account:', customerBilling.account);
       console.log('Total rates returned:', (shipmentCustUPS.rates || []).length);
       console.log('=== END DEBUG ===');
     } catch (e) {
+      billing.error = e.message;
       console.log('Customer UPS billing shipment failed (non-critical):', e.message);
     }
 
@@ -494,15 +503,25 @@ async function processPackedOrder(apiKey, order, orgSettings) {
       try {
         var parcelsCustXCover = formatParcelsFromOrder(order, insuranceAmount, null);
         var shipmentCustXCover = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustXCover, customsDeclarationId, customerBilling, carrierAccountIds);
-        allRates = allRates.concat(mapRates(shipmentCustXCover, 'Customer', 'XCover'));
+        var custXRates = mapRates(shipmentCustXCover, 'Customer', 'XCover');
+        billing.customerRateCount += custXRates.length;
+        allRates = allRates.concat(custXRates);
         console.log('=== SHIPPO DEBUG (Customer Account / XCover Insurance) ===');
         console.log('Total rates returned:', (shipmentCustXCover.rates || []).length);
         console.log('=== END DEBUG ===');
       } catch (e) {
+        if (!billing.error) billing.error = e.message;
         console.log('Customer XCover shipment failed (non-critical):', e.message);
       }
     }
   }
+
+  // Resolve a plain-English billing status for the UI.
+  // not_requested: no customer account on file → AA is billed (normal)
+  // billed_to_customer: customer account returned rates → they can be billed
+  // declined: customer account was set but returned NO rates → would fall back to AA
+  billing.status = !billing.requested ? 'not_requested'
+    : (billing.customerRateCount > 0 ? 'billed_to_customer' : 'declined');
 
   // Sort all rates by price
   allRates.sort(function(a, b) { return parseFloat(a.amount) - parseFloat(b.amount); });
@@ -534,6 +553,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     insuranceAmount: insuranceFallbackUsed ? 0 : insuranceAmount,
     insuranceFallbackUsed: insuranceFallbackUsed,
     shippoMessages: (shipmentAAUPS.messages || []).map(function(m) { return m.text || JSON.stringify(m); }),
+    billing: billing,
   };
 
   if (orgSettings.autoPurchaseLabels && selectedRate) {

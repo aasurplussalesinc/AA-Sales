@@ -1386,14 +1386,28 @@ export default function Shipping() {
                       {(() => {
                         const cust = customers.find(c => c.id === order.customerId);
                         const custAcct = cust?.upsAccount;
-                        const billing = order.thirdPartyBilling;
+                        const billStatus = order.shippingLabel?.billing?.status;
                         if (custAcct) {
+                          // Once rates have been fetched, show whether the customer
+                          // account was actually accepted or declined.
+                          const declined = billStatus === 'declined';
+                          const confirmed = billStatus === 'billed_to_customer';
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'center' }}>
-                              <span style={{ padding: '2px 8px', borderRadius: 8, background: 'var(--bg-badge-blue)', color: 'var(--text-badge-blue)', fontSize: 11, fontWeight: 700 }}>
+                              <span style={{
+                                padding: '2px 8px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+                                background: declined ? '#fdecea' : 'var(--bg-badge-blue)',
+                                color: declined ? '#c0392b' : 'var(--text-badge-blue)'
+                              }}>
                                 🏢 {custAcct}
                               </span>
-                              <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Customer UPS</span>
+                              {declined ? (
+                                <span style={{ fontSize: 10, color: '#c0392b', fontWeight: 700 }}>⚠️ Account declined — AA billed</span>
+                              ) : confirmed ? (
+                                <span style={{ fontSize: 10, color: '#2e7d32', fontWeight: 700 }}>✓ Bills to customer</span>
+                              ) : (
+                                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Customer UPS</span>
+                              )}
                             </div>
                           );
                         }
@@ -1713,6 +1727,9 @@ export default function Shipping() {
 
             // Check if any customer-billed rates exist
             const hasCustomerRates = allRates.some(r => r.billedTo === 'Customer');
+            // Customer account was requested but produced no rates → would fall back to AA
+            const billingDeclined = order.shippingLabel?.billing?.status === 'declined';
+            const billingError = order.shippingLabel?.billing?.error;
 
             // Filter rates
             const filteredRates = allRates.filter(r => {
@@ -1768,6 +1785,19 @@ export default function Shipping() {
                     background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', padding: '0 4px'
                   }}>✕</button>
                 </div>
+
+                {/* Customer account declined notice */}
+                {billingDeclined && (
+                  <div style={{
+                    padding: '10px 14px', marginBottom: 12, borderRadius: 8,
+                    background: '#fdecea', border: '1px solid #f5b7b1', color: '#922b21', fontSize: 13
+                  }}>
+                    <strong>⚠️ Customer's UPS account was declined.</strong> No rates came back on their
+                    account{billingError ? ` (${billingError})` : ''}, so every rate shown here bills to
+                    <strong> your AA account</strong>. Fix the customer's UPS account number/zip in their
+                    profile and re-sync, or proceed knowing you'll be billed.
+                  </div>
+                )}
 
                 {/* Quick Stats */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 15, flexWrap: 'wrap' }}>

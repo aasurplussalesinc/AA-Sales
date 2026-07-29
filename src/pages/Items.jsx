@@ -935,7 +935,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           const rawLocation = columnIndices.location !== undefined ? values[columnIndices.location]?.trim() : '';
           // Normalize on import so "W4R1M2" becomes "W4-R1-M2" and matches
           // location records / the rest of the system consistently.
-          const location = rawLocation ? DB.normalizeLocationCode(rawLocation) : '';
+          const location = rawLocation ? DB.canonicalLocationCode(rawLocation) : '';
 
           // Which fields this row actually supplied a non-blank value for.
           // Blank cells are NOT recorded, so the upsert leaves them untouched.

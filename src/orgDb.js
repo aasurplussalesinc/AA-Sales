@@ -701,6 +701,32 @@ export const OrgDB = {
   // location isn't yet represented in a map, writes the UNACCOUNTED remainder
   // (total stock minus what's already sitting in maps) into that location.
   // Idempotent: running it again does nothing once everything reconciles.
+  // Canonicalize a location code to W#-R#-<BAY><SHELF>, ALWAYS — even when a
+  // custom schema is set. Used by reconciliation, where the whole point is to
+  // clean up messy imported strings (dashless, mixed case) so they match.
+  canonicalLocationCode(code) {
+    if (!code) return '';
+    code = String(code).trim();
+    // already canonical
+    let m = code.match(/^(W\d+)-R(\d+)-([A-Z])(\d+)$/i);
+    if (m) return `${m[1].toUpperCase()}-R${m[2]}-${m[3].toUpperCase()}${m[4]}`;
+    // old format W1-R1-A-1
+    m = code.match(/^(W\d+)-R(\d+)-([A-Z])-(\d+)$/i);
+    if (m) return `${m[1].toUpperCase()}-R${m[2]}-${m[3].toUpperCase()}${m[4]}`;
+    // dash-separated but odd spacing/case
+    const parts = code.split('-').filter(p => p);
+    if (parts.length >= 3) {
+      const w = parts[0].toUpperCase();
+      const r = parts[1].replace(/^R/i, '');
+      const ls = parts.slice(2).join('').match(/([A-Z])(\d+)/i);
+      if (ls && /^W\d+$/i.test(w) && /^\d+$/.test(r)) return `${w}-R${r}-${ls[1].toUpperCase()}${ls[2]}`;
+    }
+    // dashless run-together: W4R1M2
+    m = code.match(/^(W\d+)\s*R(\d+)\s*([A-Z])(\d+)$/i);
+    if (m) return `${m[1].toUpperCase()}-R${m[2]}-${m[3].toUpperCase()}${m[4]}`;
+    return code; // not a parseable shelf code (e.g. "W4" alone)
+  },
+
   async reconcileImportedLocations() {
     if (!currentOrgId) throw new Error('No organization selected');
     const items = await this.getItems();
@@ -727,9 +753,9 @@ export const OrgDB = {
       if (remainder <= 0) { skipped++; continue; } // fully represented already
 
       // Find the location record matching the item's primary code
-      const normPrimary = this.normalizeLocationCode(primary);
+      const normPrimary = this.canonicalLocationCode(primary);
       let targetLoc = locations.find(loc => {
-        const code = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
+        const code = this.canonicalLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         return code === normPrimary;
       });
 

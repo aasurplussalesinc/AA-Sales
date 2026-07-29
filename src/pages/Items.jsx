@@ -326,10 +326,16 @@ export default function Items() {
   // from the dropdown format.
   const findLocationByCode = (code) => {
     if (!code) return null;
-    const target = DB.normalizeLocationCode(code);
+    // Use the UNGUARDED canonical form: the schema-guarded normalizer returns
+    // codes untouched for custom-schema orgs, so a normalized "W3-R3-E3" would
+    // fail to match a legacy stored "W3-R3-E-3" and the save would silently skip.
+    const target = DB.canonicalLocationCode(code);
+    const legacy = DB.normalizeLocationCode(code);
     return locations.find(l => {
       const raw = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
-      return raw === code || DB.normalizeLocationCode(raw) === target;
+      return raw === code
+        || DB.canonicalLocationCode(raw) === target
+        || DB.normalizeLocationCode(raw) === legacy;
     }) || null;
   };
 
@@ -3429,11 +3435,16 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                 /* Multi-Location Mode */
                 <div className="form-group">
                   <label style={{ marginBottom: 10, display: 'block' }}>Location Breakdown</label>
-                  {editLocationBreakdown.map((lb, idx) => (
+                  {editLocationBreakdown.map((lb, idx) => {
+                    // Stored codes may be legacy "W3-R3-E-3" while options are
+                    // normalized "W3-R3-E3" — normalize so the saved location shows.
+                    const normCode = String(lb.location || '').replace(/^(\w+)-R(\d+)-([A-Z])-(\d+)$/i, '$1-R$2-$3$4');
+                    const missingFromOptions = normCode && !locationOptions.includes(normCode);
+                    return (
                     <div key={idx} style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'center' }}>
                       <select
                         className="form-input"
-                        value={lb.location}
+                        value={normCode}
                         onChange={e => {
                           const updated = [...editLocationBreakdown];
                           updated[idx].location = e.target.value;
@@ -3442,6 +3453,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                         style={{ flex: 2 }}
                       >
                         <option value="">-- Select Location --</option>
+                        {missingFromOptions && <option value={normCode}>{normCode} (not in location list)</option>}
                         {locationOptions.map(loc => (
                           <option key={loc} value={loc}>{loc}</option>
                         ))}
@@ -3479,7 +3491,8 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                         </button>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                   <button
                     type="button"
                     onClick={() => {

@@ -832,8 +832,17 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
       await loadData();
       const preview = res.report.slice(0, 12).join('\n');
       const more = res.report.length > 12 ? `\n…and ${res.report.length - 12} more` : '';
-      alert(`Done.\n\nStock placed: ${res.fixed}\nLocations created: ${res.created}\nAlready fine / skipped: ${res.skipped}\nTotal items: ${res.total}` +
-        (res.report.length ? `\n\n${preview}${more}` : ''));
+      alert(
+        `Done.\n\n` +
+        `✅ Stock placed: ${res.fixed}\n` +
+        `📍 Locations created: ${res.created}\n\n` +
+        `Skipped (${res.skipped}):\n` +
+        `  • Already placed: ${res.skip.alreadyPlaced}\n` +
+        `  • No location — leave for manual/voice: ${res.skip.noLocation}\n` +
+        `  • Incomplete code (e.g. "W4"): ${res.skip.incomplete}\n\n` +
+        `Total items: ${res.total}` +
+        (res.report.length ? `\n\n${preview}${more}` : '')
+      );
     } catch (e) {
       alert('Could not reconcile: ' + (e.message || e));
     } finally {

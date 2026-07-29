@@ -741,16 +741,18 @@ export const OrgDB = {
       });
     });
 
-    let fixed = 0, skipped = 0, created = 0;
+    let fixed = 0, created = 0;
+    // Break the skip bucket into meaningful categories instead of one number.
+    const skip = { noLocation: 0, alreadyPlaced: 0, incomplete: 0 };
     const report = [];
     for (const item of items) {
       const primary = item.location;
       const stock = parseInt(item.stock) || 0;
-      if (!primary || stock <= 0) { skipped++; continue; }
+      if (!primary || stock <= 0) { skip.noLocation++; continue; }
 
       const already = inMaps[item.id] || 0;
       const remainder = stock - already;
-      if (remainder <= 0) { skipped++; continue; } // fully represented already
+      if (remainder <= 0) { skip.alreadyPlaced++; continue; } // already in maps
 
       // Find the location record matching the item's primary code
       const normPrimary = this.canonicalLocationCode(primary);
@@ -765,7 +767,7 @@ export const OrgDB = {
       if (!targetLoc) {
         const parsed = normPrimary.match(/^(W\d+)-R(\d+)-([A-Z])(\d+)$/i);
         if (!parsed) {
-          skipped++;
+          skip.incomplete++;
           report.push(`⚠️ ${item.name}: "${primary}" isn't a complete shelf location (needs warehouse-rack-bay-shelf) — skipped`);
           continue;
         }
@@ -784,7 +786,7 @@ export const OrgDB = {
 
       // If this item already has a qty in THIS location's map, treat as reconciled.
       const existing = parseInt((targetLoc.inventory || {})[item.id]) || 0;
-      if (existing > 0) { skipped++; continue; }
+      if (existing > 0) { skip.alreadyPlaced++; continue; }
 
       const inv = { ...(targetLoc.inventory || {}) };
       inv[item.id] = remainder;
@@ -794,7 +796,7 @@ export const OrgDB = {
       fixed++;
       report.push(`✓ ${item.name}: placed ${remainder} at ${normPrimary}`);
     }
-    return { fixed, skipped, created, total: items.length, report };
+    return { fixed, created, skip, skipped: skip.noLocation + skip.alreadyPlaced + skip.incomplete, total: items.length, report };
   },
 
   // ── Staging (unshelved) location ───────────────────────────────────────

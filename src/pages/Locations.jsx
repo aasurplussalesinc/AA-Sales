@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import QRCode from 'qrcode';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
@@ -20,6 +20,11 @@ export default function Locations() {
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
   const [selectedLocations, setSelectedLocations] = useState([]);
+  // O(1) membership test — .includes() per row was scanning the whole array
+  // for every one of the 400+ rows on each click, which caused a visible stall.
+  const selectedSet = useMemo(() => new Set(selectedLocations), [selectedLocations]);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(50);
   const [sortBy, setSortBy] = useState('warehouse'); // warehouse, rack, letter, shelf
   const [filters, setFilters] = useState({ warehouse: '', rack: '', letter: '', search: '' });
   const fileInputRef = useRef(null);
@@ -111,6 +116,15 @@ export default function Locations() {
         return aShelf.localeCompare(bShelf);
     }
   });
+
+  // ---- Pagination: render a page at a time instead of all 400+ rows ----
+  const totalPages = Math.max(1, Math.ceil(sortedLocations.length / perPage));
+  const safePage = Math.min(page, totalPages);
+  const pagedLocations = sortedLocations.slice((safePage - 1) * perPage, safePage * perPage);
+
+  // If filters/sort shrink the list, don't strand the user on an empty page.
+  useEffect(() => { setPage(1); }, [filters, sortBy, perPage]);
+
 
   // Format location code for display (uses the stored code when present, so
   // existing locations keep the format they were created with)
@@ -310,7 +324,8 @@ export default function Locations() {
   };
 
   const selectAllLocations = () => {
-    setSelectedLocations(sortedLocations.map(loc => loc.id));
+    // Scope to the page you're looking at — selecting 400 invisible rows is a trap
+    setSelectedLocations(pagedLocations.map(loc => loc.id));
   };
 
   const clearSelection = () => {
@@ -891,7 +906,8 @@ W2,2,C,3`;
             </select>
           </div>
           
-          {/* Bulk actions */}
+          {/* Bulk actions — space is reserved so selecting doesn't jump the page */}
+          <div style={{ minHeight: 34, display: 'flex', alignItems: 'center' }}>
           {selectedLocations.length > 0 && (
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <span style={{ color: 'var(--text-muted)' }}>{selectedLocations.length} selected</span>
@@ -912,8 +928,30 @@ W2,2,C,3`;
               </button>
             </div>
           )}
+          </div>
         </div>
         
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' }}>
+          <span style={{ fontSize:13, color:'var(--text-muted)' }}>
+            Showing {sortedLocations.length === 0 ? 0 : (safePage - 1) * perPage + 1}
+            –{Math.min(safePage * perPage, sortedLocations.length)} of {sortedLocations.length}
+          </span>
+          <select value={perPage} onChange={e => setPerPage(parseInt(e.target.value))}
+            style={{ padding:'5px 8px', borderRadius:6, border:'1px solid var(--border)' }}>
+            <option value={25}>25 per page</option>
+            <option value={50}>50 per page</option>
+            <option value={100}>100 per page</option>
+            <option value={250}>250 per page</option>
+          </select>
+          <div style={{ display:'flex', gap:4, marginLeft:'auto', alignItems:'center' }}>
+            <button className="btn btn-sm" disabled={safePage <= 1} onClick={() => setPage(1)}>«</button>
+            <button className="btn btn-sm" disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>‹ Prev</button>
+            <span style={{ fontSize:13, fontWeight:700, padding:'0 8px' }}>{safePage} / {totalPages}</span>
+            <button className="btn btn-sm" disabled={safePage >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next ›</button>
+            <button className="btn btn-sm" disabled={safePage >= totalPages} onClick={() => setPage(totalPages)}>»</button>
+          </div>
+        </div>
+
         <div className="data-table">
           <table>
             <thead>
@@ -921,7 +959,7 @@ W2,2,C,3`;
                 <th style={{ width: 40 }}>
                   <input
                     type="checkbox"
-                    checked={selectedLocations.length === sortedLocations.length && sortedLocations.length > 0}
+                    checked={pagedLocations.length > 0 && pagedLocations.every(l => selectedSet.has(l.id))}
                     onChange={(e) => e.target.checked ? selectAllLocations() : clearSelection()}
                   />
                 </th>
@@ -935,19 +973,19 @@ W2,2,C,3`;
               </tr>
             </thead>
             <tbody>
-              {sortedLocations.map(loc => (
+              {pagedLocations.map(loc => (
                 <tr 
                   key={loc.id} 
                   style={{ 
                     cursor: 'pointer',
-                    background: selectedLocations.includes(loc.id) ? '#e3f2fd' : 'transparent'
+                    background: selectedSet.has(loc.id) ? '#e3f2fd' : 'transparent'
                   }}
                   title="Click to view items"
                 >
                   <td onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
-                      checked={selectedLocations.includes(loc.id)}
+                      checked={selectedSet.has(loc.id)}
                       onChange={() => toggleSelectLocation(loc.id)}
                     />
                   </td>

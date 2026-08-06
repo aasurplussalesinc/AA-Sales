@@ -527,6 +527,20 @@ export default function WarehouseMap() {
             </div>
             {searchNote && <span className="snote">{searchNote}</span>}
             <div className="spacer" />
+
+            <div className="wtabs">
+              <button className={showingAll ? 'on' : ''} onClick={() => setActiveTab('ALL')}
+                title="Overview of every warehouse">
+                🗂️ All{warehouses.length ? ` ${warehouses.length}` : ''}
+              </button>
+              {warehouses.map(w => (
+                <button key={w} className={activeTab === w ? 'on' : ''} onClick={() => setActiveTab(w)}
+                  title={`${racks.filter(r => r.wh === w).length} rack(s) in ${w}`}>
+                  {w}<span className="cnt">{racks.filter(r => r.wh === w).length}</span>
+                </button>
+              ))}
+            </div>
+
             {unknownCount > 0 && canBuild && (
               <span className="warn" title="These cells don't match a Locations record">
                 ⚠️ {unknownCount} cell(s) not in Locations
@@ -616,19 +630,6 @@ export default function WarehouseMap() {
             </div>
           </div>
 
-          <div className="wtabs">
-            <button className={showingAll ? 'on' : ''} onClick={() => setActiveTab('ALL')}>
-              🗂️ All{warehouses.length ? ` (${warehouses.length})` : ''}
-            </button>
-            {warehouses.map(w => (
-              <button key={w} className={activeTab === w ? 'on' : ''} onClick={() => setActiveTab(w)}>
-                {w}<span className="cnt">{racks.filter(r => r.wh === w).length}</span>
-              </button>
-            ))}
-            {showingAll && warehouses.length > 0 && (
-              <span className="tabnote">Overview — pick a warehouse tab to edit</span>
-            )}
-          </div>
         </div>
       </div>
 
@@ -744,7 +745,8 @@ function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locat
 const CSS = `
 .wmap { --army:#4a5d23; --army-dark:#38471b; --army-light:#6b7f3e; --sandm:#f5f3ec;
   --linem:#d8d6c8; --mutedm:#7c8168; --hitm:#d94a3d; --amberm:#d98a1f; }
-.wmap-shell { display:flex; height:calc(100vh - 150px); min-height:520px; border:1px solid var(--linem); border-radius:10px; overflow:hidden; background:#fff; }
+.wmap-shell { display:flex; height:calc(100vh - 240px); min-height:380px; max-height:calc(100vh - 120px);
+  border:1px solid var(--linem); border-radius:10px; overflow:hidden; background:#fff; }
 .wmap-panel { width:310px; flex-shrink:0; border-right:1px solid var(--linem); overflow-y:auto; padding:16px; background:#fff; }
 .wmap-panel h1 { font-size:15px; margin:0 0 2px; text-transform:uppercase; color:var(--army); letter-spacing:.02em; }
 .wmap-panel .sub { font-size:12px; color:var(--mutedm); margin-bottom:16px; }
@@ -785,15 +787,16 @@ const CSS = `
 .wmap .rrow .go:hover { background:var(--army); color:#fff; }
 .wmap .rrow .ed { color:#1565c0; } .wmap .rrow .ed:hover { background:#1565c0; color:#fff; }
 .wmap .rrow .rm { color:var(--hitm); } .wmap .rrow .rm:hover { background:var(--hitm); color:#fff; }
-.wmap-main { flex:1; display:flex; flex-direction:column; overflow:hidden; }
-.wmap-bar { height:52px; flex-shrink:0; border-bottom:1px solid var(--linem); display:flex; align-items:center; gap:10px; padding:0 14px; }
-.wmap .srch { flex:0 1 380px; }
+.wmap-main { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.wmap-bar { min-height:52px; flex-shrink:0; border-bottom:1px solid var(--linem); display:flex;
+  align-items:center; gap:10px; padding:8px 14px; flex-wrap:wrap; }
+.wmap .srch { flex:0 1 320px; min-width:200px; }
 .wmap .srch input { width:100%; padding:7px 10px; border:1px solid var(--linem); border-radius:6px; font-size:13px; }
 .wmap .snote { font-size:12px; color:var(--army); font-weight:600; }
 .wmap .spacer { flex:1; }
 .wmap .warn { font-size:11px; color:#a8791a; background:#fbeecd; padding:3px 8px; border-radius:10px; font-weight:700; }
 .wmap .viewnote { padding:8px 14px; background:#fbeecd; border-bottom:1px solid var(--linem); font-size:12px; color:#7a5a12; }
-.wmap-stage { flex:1; overflow:auto; padding:30px;
+.wmap-stage { flex:1 1 auto; min-height:0; overflow:auto; padding:30px;
   background:linear-gradient(var(--linem) 1px, transparent 1px) 0 0/26px 26px,
              linear-gradient(90deg, var(--linem) 1px, transparent 1px) 0 0/26px 26px, var(--sandm); }
 .wmap-canvas { position:relative; min-width:2200px; min-height:1400px; }
@@ -836,15 +839,15 @@ const CSS = `
 .wmap .compass:hover .cbtns { opacity:1; }
 .wmap .cbtns button { font-size:10px; padding:2px 7px; border:1px solid var(--linem); background:#fff;
   border-radius:4px; cursor:pointer; font-weight:700; color:var(--army); }
-.wmap .wtabs { flex-shrink:0; display:flex; align-items:center; gap:4px; padding:6px 10px;
-  border-top:1px solid var(--linem); background:#fff; overflow-x:auto; }
-.wmap .wtabs button { border:1px solid var(--linem); border-bottom:none; background:var(--sandm);
-  color:var(--mutedm); border-radius:6px 6px 0 0; padding:6px 14px; cursor:pointer;
-  font-size:12px; font-weight:700; white-space:nowrap; display:flex; align-items:center; gap:6px; }
-.wmap .wtabs button:hover { background:#eceadf; }
-.wmap .wtabs button.on { background:var(--army); color:#fff; border-color:var(--army); }
-.wmap .wtabs .cnt { background:rgba(0,0,0,.15); border-radius:8px; padding:0 6px; font-size:10px; }
-.wmap .wtabs button.on .cnt { background:rgba(255,255,255,.25); }
+.wmap .wtabs { display:flex; align-items:center; gap:3px; padding:2px; background:var(--sandm);
+  border:1px solid var(--linem); border-radius:8px; flex-shrink:0; }
+.wmap .wtabs button { border:none; background:transparent; color:var(--mutedm);
+  border-radius:6px; padding:5px 11px; cursor:pointer; font-size:12px; font-weight:700;
+  white-space:nowrap; display:flex; align-items:center; gap:5px; line-height:1.2; }
+.wmap .wtabs button:hover { background:#e6e3d6; color:var(--army); }
+.wmap .wtabs button.on { background:var(--army); color:#fff; box-shadow:0 1px 2px rgba(0,0,0,.15); }
+.wmap .wtabs .cnt { background:rgba(0,0,0,.12); border-radius:8px; padding:0 5px; font-size:10px; font-weight:700; }
+.wmap .wtabs button.on .cnt { background:rgba(255,255,255,.28); }
 .wmap .tabnote { font-size:11px; color:var(--mutedm); margin-left:8px; }
 .wmap .tabhint { padding:7px 14px; background:#e8f0fb; border-bottom:1px solid var(--linem);
   font-size:12px; color:#1d4e89; display:flex; align-items:center; gap:8px; }

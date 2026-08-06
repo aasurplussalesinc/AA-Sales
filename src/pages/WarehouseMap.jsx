@@ -37,7 +37,10 @@ export default function WarehouseMap() {
   const canBuild = isAdmin || mapEditors.includes(user?.email);
 
   const [racks, setRacks] = useState([]);
-  const [compass, setCompass] = useState({ x: 40, y: 40, rot: 0, show: true });
+  // One compass per warehouse — buildings can face different directions.
+  const [compasses, setCompasses] = useState({});
+  const [activeTab, setActiveTab] = useState('ALL');
+  const [tabHint, setTabHint] = useState('');
   const [locations, setLocations] = useState([]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +74,15 @@ export default function WarehouseMap() {
       const saved = organization?.warehouseMap;
       if (saved && Array.isArray(saved.racks)) {
         setRacks(saved.racks);
-        if (saved.compass) setCompass(saved.compass);
+        if (saved.compasses) {
+          setCompasses(saved.compasses);
+        } else if (saved.compass) {
+          // migrate the old single compass onto every warehouse it covered
+          const whs = [...new Set(saved.racks.map(r => r.wh))];
+          const seed = {};
+          whs.forEach(w => { seed[w] = { ...saved.compass }; });
+          setCompasses(seed);
+        }
       }
     } catch (e) {
       console.error('WarehouseMap load failed', e);
@@ -174,6 +185,79 @@ export default function WarehouseMap() {
     return { hitCodes: s2, hitMode: 'item', searchNote: label };
   }, [search, locationCodeSet, items, itemLocationIndex]);
 
+  // ---- warehouses / tabs ----
+  const warehouses = useMemo(
+    () => [...new Set(racks.map(r => r.wh).filter(Boolean))].sort(),
+    [racks]
+  );
+
+  // On the "All" tab each warehouse gets its own quadrant so buildings don't
+  // overlap. Offsets are computed from each warehouse's own bounding box.
+  const QUAD_GAP = 160;
+  const quadrantOffsets = useMemo(() => {
+    const offs = {};
+    let colW = 0, rowH = 0;
+    const sizes = {};
+    warehouses.forEach(w => {
+      const rs = racks.filter(r => r.wh === w);
+      const maxX = Math.max(0, ...rs.map(r => (r.x || 0) + 420));
+      const maxY = Math.max(0, ...rs.map(r => (r.y || 0) + 340));
+      sizes[w] = { w: maxX, h: maxY };
+      colW = Math.max(colW, maxX);
+      rowH = Math.max(rowH, maxY);
+    });
+    warehouses.forEach((w, i) => {
+      const col = i % 2, row = Math.floor(i / 2);
+      offs[w] = { x: col * (colW + QUAD_GAP), y: row * (rowH + QUAD_GAP) };
+    });
+    return offs;
+  }, [warehouses, racks]);
+
+  const showingAll = activeTab === 'ALL';
+  const visibleRacks = useMemo(() => {
+    if (showingAll) {
+      return racks.map((r, i) => ({
+        cfg: r, idx: i,
+        offX: quadrantOffsets[r.wh]?.x || 0,
+        offY: quadrantOffsets[r.wh]?.y || 0
+      }));
+    }
+    return racks.map((r, i) => ({ cfg: r, idx: i, offX: 0, offY: 0 }))
+                .filter(e => e.cfg.wh === activeTab);
+  }, [racks, activeTab, showingAll, quadrantOffsets]);
+
+  // Which warehouses contain the current search hits (so we can point the user
+  // at the right tab instead of showing an empty canvas).
+  const hitWarehouses = useMemo(() => {
+    if (!hitCodes.size) return [];
+    const set = new Set();
+    racks.forEach(cfg => {
+      const tallest = Math.max(...cfg.colShelves);
+      for (let r = 0; r < tallest; r++) {
+        const shelf = tallest - r;
+        for (let c = 0; c < cfg.colShelves.length; c++) {
+          if (shelf > cfg.colShelves[c]) continue;
+          const code = buildCode(cfg.pattern, cfg.wh, cfg.rack,
+            labelFor(cfg.rowMode, cfg.rowStart, shelf - 1),
+            labelFor(cfg.colMode, cfg.colStart, c));
+          if (hitCodes.has(canon(code))) set.add(cfg.wh);
+        }
+      }
+    });
+    return [...set];
+  }, [hitCodes, racks]);
+
+  // If the hit isn't on the tab you're looking at, say so.
+  useEffect(() => {
+    if (!hitWarehouses.length) { setTabHint(''); return; }
+    if (showingAll || hitWarehouses.includes(activeTab)) { setTabHint(''); return; }
+    setTabHint(hitWarehouses.join(', '));
+  }, [hitWarehouses, activeTab, showingAll]);
+
+  const compassFor = (w) => compasses[w] || { x: 40, y: 40, rot: 0, show: true };
+  const setCompassFor = (w, patch) =>
+    setCompasses(prev => ({ ...prev, [w]: { ...compassFor(w), ...patch } }));
+
   // ---- rack helpers ----
   const currentConfig = () => ({
     wh: wh.trim() || 'W1', rack: rackName.trim() || 'R1',
@@ -242,7 +326,7 @@ export default function WarehouseMap() {
     setSaving(true);
     try {
       await DB.updateOrganization(organization.id, {
-        warehouseMap: { racks, compass, updatedAt: Date.now() }
+        warehouseMap: { racks, compasses, updatedAt: Date.now() }
       });
       if (refreshOrganization) await refreshOrganization();
       setDirty(false);
@@ -306,11 +390,12 @@ export default function WarehouseMap() {
     setDirty(true);
   };
 
-  const dragCompass = (e) => {
-    if (!canBuild) return;
+  const dragCompass = (e, w) => {
+    if (!canBuild || showingAll) return;
     e.preventDefault();
-    const sx = e.clientX, sy = e.clientY, ox = compass.x, oy = compass.y;
-    const move = ev => setCompass(c => ({ ...c, x: Math.max(0, ox + (ev.clientX - sx)), y: Math.max(0, oy + (ev.clientY - sy)) }));
+    const cp = compassFor(w);
+    const sx = e.clientX, sy = e.clientY, ox = cp.x, oy = cp.y;
+    const move = ev => setCompassFor(w, { x: Math.max(0, ox + (ev.clientX - sx)), y: Math.max(0, oy + (ev.clientY - sy)) });
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
@@ -447,7 +532,12 @@ export default function WarehouseMap() {
                 ⚠️ {unknownCount} cell(s) not in Locations
               </span>
             )}
-            <button className="btn tiny ghost" onClick={() => setCompass(c => ({ ...c, show: !c.show }))}>✦ Compass</button>
+            {!showingAll && activeTab && (
+              <button className="btn tiny ghost"
+                onClick={() => { setCompassFor(activeTab, { show: !compassFor(activeTab).show }); setDirty(true); }}>
+                ✦ Compass
+              </button>
+            )}
             {canBuild && (
               <button className="btn tiny primary" onClick={saveMap} disabled={saving || !dirty}>
                 {saving ? 'Saving…' : dirty ? '💾 Save map' : 'Saved'}
@@ -459,6 +549,13 @@ export default function WarehouseMap() {
             <div className="viewnote">👁 Viewer — search to locate an item or shelf. Editing the map is limited to admins and anyone they grant access to.</div>
           )}
 
+          {tabHint && (
+            <div className="tabhint">
+              🔎 Match is in <strong>{tabHint}</strong> —
+              <button onClick={() => setActiveTab(tabHint.split(', ')[0])}>switch to {tabHint.split(', ')[0]}</button>
+            </div>
+          )}
+
           <div className="wmap-stage" ref={stageRef}>
             <div className="wmap-canvas">
               {racks.length === 0 && (
@@ -468,37 +565,69 @@ export default function WarehouseMap() {
                 </div>
               )}
 
-              {racks.map((cfg, idx) => (
-                <Rack key={idx} cfg={cfg} idx={idx} canBuild={canBuild}
+              {visibleRacks.map(({ cfg, idx, offX, offY }) => (
+                <Rack key={idx} cfg={cfg} idx={idx}
+                  canBuild={canBuild && !showingAll}
+                  offX={offX} offY={offY}
                   hitCodes={hitCodes} hitMode={hitMode} locationCodeSet={locationCodeSet}
                   onDrag={dragRack} onResize={resizeRack} onRotate={rotateRack}
                   onDelete={removeRack} />
               ))}
 
-              {compass.show && (
-                <div className="compass" style={{ left: compass.x, top: compass.y }}
-                  onPointerDown={dragCompass}>
-                  <svg width="104" height="104" viewBox="0 0 104 104" style={{ transform: `rotate(${compass.rot}deg)` }}>
-                    <circle cx="52" cy="52" r="49" fill="#fff" stroke="#d8d6c8" strokeWidth="2" />
-                    <polygon points="52,6 60,44 52,52 44,44" fill="#4a5d23" />
-                    <polygon points="52,98 60,60 52,52 44,60" fill="#b8b8a8" />
-                    <polygon points="98,52 60,60 52,52 60,44" fill="#b8b8a8" />
-                    <polygon points="6,52 44,60 52,52 44,44" fill="#b8b8a8" />
-                    <text x="52" y="22" textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">N</text>
-                    <text x="52" y="94" textAnchor="middle" fontSize="10" fontWeight="700" fill="#7c8168">S</text>
-                    <text x="90" y="56" textAnchor="middle" fontSize="10" fontWeight="700" fill="#7c8168">E</text>
-                    <text x="14" y="56" textAnchor="middle" fontSize="10" fontWeight="700" fill="#7c8168">W</text>
-                  </svg>
-                  {canBuild && (
-                    <div className="cbtns">
-                      <button onPointerDown={e => { e.stopPropagation(); setCompass(c => ({ ...c, rot: (c.rot + 345) % 360 })); setDirty(true); }}>↺</button>
-                      <button onPointerDown={e => { e.stopPropagation(); setCompass(c => ({ ...c, rot: (c.rot + 15) % 360 })); setDirty(true); }}>↻</button>
-                      <button onPointerDown={e => { e.stopPropagation(); setCompass(c => ({ ...c, show: false })); setDirty(true); }}>×</button>
-                    </div>
-                  )}
+              {/* Quadrant labels on the All tab */}
+              {showingAll && warehouses.map(w => (
+                <div key={'lbl' + w} className="quadlbl"
+                  style={{ left: (quadrantOffsets[w]?.x || 0), top: Math.max(0, (quadrantOffsets[w]?.y || 0) - 30) }}>
+                  {w}
                 </div>
-              )}
+              ))}
+
+              {(showingAll ? warehouses : [activeTab]).filter(Boolean).map(w => {
+                const cp = compassFor(w);
+                if (!cp.show) return null;
+                const ox = showingAll ? (quadrantOffsets[w]?.x || 0) : 0;
+                const oy = showingAll ? (quadrantOffsets[w]?.y || 0) : 0;
+                return (
+                  <div key={'cmp' + w} className="compass"
+                    style={{ left: cp.x + ox, top: cp.y + oy }}
+                    onPointerDown={(e) => dragCompass(e, w)}>
+                    <svg width="104" height="104" viewBox="0 0 104 104" style={{ transform: `rotate(${cp.rot}deg)` }}>
+                      <circle cx="52" cy="52" r="49" fill="#fff" stroke="#d8d6c8" strokeWidth="2" />
+                      <polygon points="52,6 60,44 52,52 44,44" fill="#4a5d23" />
+                      <polygon points="52,98 60,60 52,52 44,60" fill="#b8b8a8" />
+                      <polygon points="98,52 60,60 52,52 60,44" fill="#b8b8a8" />
+                      <polygon points="6,52 44,60 52,52 44,44" fill="#b8b8a8" />
+                      <text x="52" y="22" textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">N</text>
+                      <text x="52" y="94" textAnchor="middle" fontSize="10" fontWeight="700" fill="#7c8168">S</text>
+                      <text x="90" y="56" textAnchor="middle" fontSize="10" fontWeight="700" fill="#7c8168">E</text>
+                      <text x="14" y="56" textAnchor="middle" fontSize="10" fontWeight="700" fill="#7c8168">W</text>
+                    </svg>
+                    <div className="cwh">{w}</div>
+                    {canBuild && !showingAll && (
+                      <div className="cbtns">
+                        <button onPointerDown={e => { e.stopPropagation(); setCompassFor(w, { rot: (cp.rot + 345) % 360 }); setDirty(true); }}>↺</button>
+                        <button onPointerDown={e => { e.stopPropagation(); setCompassFor(w, { rot: (cp.rot + 15) % 360 }); setDirty(true); }}>↻</button>
+                        <button onPointerDown={e => { e.stopPropagation(); setCompassFor(w, { show: false }); setDirty(true); }}>×</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+          </div>
+
+          <div className="wtabs">
+            <button className={showingAll ? 'on' : ''} onClick={() => setActiveTab('ALL')}>
+              🗂️ All{warehouses.length ? ` (${warehouses.length})` : ''}
+            </button>
+            {warehouses.map(w => (
+              <button key={w} className={activeTab === w ? 'on' : ''} onClick={() => setActiveTab(w)}>
+                {w}<span className="cnt">{racks.filter(r => r.wh === w).length}</span>
+              </button>
+            ))}
+            {showingAll && warehouses.length > 0 && (
+              <span className="tabnote">Overview — pick a warehouse tab to edit</span>
+            )}
           </div>
         </div>
       </div>
@@ -524,7 +653,7 @@ function Stepper({ value, min, max, onChange }) {
   );
 }
 
-function Rack({ cfg, idx, canBuild, hitCodes, hitMode, locationCodeSet, onDrag, onResize, onRotate, onDelete }) {
+function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locationCodeSet, onDrag, onResize, onRotate, onDelete }) {
   const boxRef = useRef(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
 
@@ -557,7 +686,7 @@ function Rack({ cfg, idx, canBuild, hitCodes, hitMode, locationCodeSet, onDrag, 
 
   return (
     <div className="rack" style={{
-      left: cfg.x || 0, top: cfg.y || 0,
+      left: (cfg.x || 0) + offX, top: (cfg.y || 0) + offY,
       width: (swapped ? dims.h * sy : dims.w * sx) || undefined,
       height: (swapped ? dims.w * sx : dims.h * sy) || undefined
     }}>
@@ -707,6 +836,24 @@ const CSS = `
 .wmap .compass:hover .cbtns { opacity:1; }
 .wmap .cbtns button { font-size:10px; padding:2px 7px; border:1px solid var(--linem); background:#fff;
   border-radius:4px; cursor:pointer; font-weight:700; color:var(--army); }
+.wmap .wtabs { flex-shrink:0; display:flex; align-items:center; gap:4px; padding:6px 10px;
+  border-top:1px solid var(--linem); background:#fff; overflow-x:auto; }
+.wmap .wtabs button { border:1px solid var(--linem); border-bottom:none; background:var(--sandm);
+  color:var(--mutedm); border-radius:6px 6px 0 0; padding:6px 14px; cursor:pointer;
+  font-size:12px; font-weight:700; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+.wmap .wtabs button:hover { background:#eceadf; }
+.wmap .wtabs button.on { background:var(--army); color:#fff; border-color:var(--army); }
+.wmap .wtabs .cnt { background:rgba(0,0,0,.15); border-radius:8px; padding:0 6px; font-size:10px; }
+.wmap .wtabs button.on .cnt { background:rgba(255,255,255,.25); }
+.wmap .tabnote { font-size:11px; color:var(--mutedm); margin-left:8px; }
+.wmap .tabhint { padding:7px 14px; background:#e8f0fb; border-bottom:1px solid var(--linem);
+  font-size:12px; color:#1d4e89; display:flex; align-items:center; gap:8px; }
+.wmap .tabhint button { background:#1565c0; color:#fff; border:none; border-radius:5px;
+  padding:3px 10px; cursor:pointer; font-weight:700; font-size:11px; }
+.wmap .quadlbl { position:absolute; font-size:15px; font-weight:800; color:var(--army);
+  letter-spacing:.08em; background:#fff; border:1px solid var(--linem); border-radius:6px;
+  padding:3px 12px; z-index:5; }
+.wmap .cwh { font-size:10px; font-weight:800; color:var(--army); letter-spacing:.06em; margin-top:1px; }
 .wmap .undobar { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#26281f;
   color:#fff; padding:10px 14px; border-radius:8px; display:flex; align-items:center; gap:14px;
   font-size:13px; z-index:9999; box-shadow:0 4px 14px rgba(0,0,0,.3); }

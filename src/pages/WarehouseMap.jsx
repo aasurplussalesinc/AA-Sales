@@ -50,6 +50,8 @@ export default function WarehouseMap() {
   const [editingIdx, setEditingIdx] = useState(null);
   const [undo, setUndo] = useState(null);
   const stageRef = useRef(null);
+  const shellRef = useRef(null);
+  const [shellH, setShellH] = useState(null);
 
   // ---- builder panel fields ----
   const [wh, setWh] = useState('W1');
@@ -64,6 +66,21 @@ export default function WarehouseMap() {
   const [pattern, setPattern] = useState(DEFAULT_PATTERN);
 
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [organization?.id]);
+
+  // Size the map to whatever space is actually left below the page chrome.
+  // Hard-coded vh maths guessed wrong either way — too tall clipped the
+  // toolbar, too short left dead white space underneath.
+  useEffect(() => {
+    const fit = () => {
+      if (!shellRef.current) return;
+      const top = shellRef.current.getBoundingClientRect().top;
+      setShellH(Math.max(380, window.innerHeight - top - 24));
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    const t = setTimeout(fit, 120); // re-measure once fonts/layout settle
+    return () => { window.removeEventListener('resize', fit); clearTimeout(t); };
+  }, [loading]);
 
   const load = async () => {
     setLoading(true);
@@ -254,6 +271,16 @@ export default function WarehouseMap() {
     setTabHint(hitWarehouses.join(', '));
   }, [hitWarehouses, activeTab, showingAll]);
 
+  // Canvas grows with the racks rather than always reserving a huge fixed area.
+  const canvasSize = useMemo(() => {
+    let maxX = 0, maxY = 0;
+    visibleRacks.forEach(({ cfg, offX, offY }) => {
+      maxX = Math.max(maxX, (cfg.x || 0) + offX + 480);
+      maxY = Math.max(maxY, (cfg.y || 0) + offY + 380);
+    });
+    return { w: Math.max(900, maxX + 120), h: Math.max(500, maxY + 120) };
+  }, [visibleRacks]);
+
   const compassFor = (w) => compasses[w] || { x: 40, y: 40, rot: 0, show: true };
   const setCompassFor = (w, patch) =>
     setCompasses(prev => ({ ...prev, [w]: { ...compassFor(w), ...patch } }));
@@ -430,7 +457,7 @@ export default function WarehouseMap() {
     <div className="wmap">
       <style>{CSS}</style>
 
-      <div className="wmap-shell">
+      <div className="wmap-shell" ref={shellRef} style={shellH ? { height: shellH } : undefined}>
         {canBuild && (
           <div className="wmap-panel">
             <h1>Warehouse Map</h1>
@@ -571,7 +598,7 @@ export default function WarehouseMap() {
           )}
 
           <div className="wmap-stage" ref={stageRef}>
-            <div className="wmap-canvas">
+            <div className="wmap-canvas" style={{ minWidth: canvasSize.w, minHeight: canvasSize.h }}>
               {racks.length === 0 && (
                 <div className="empty">
                   {canBuild ? <>Build a rack on the left, then <strong>Add rack to map</strong>.</>
@@ -745,7 +772,7 @@ function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locat
 const CSS = `
 .wmap { --army:#4a5d23; --army-dark:#38471b; --army-light:#6b7f3e; --sandm:#f5f3ec;
   --linem:#d8d6c8; --mutedm:#7c8168; --hitm:#d94a3d; --amberm:#d98a1f; }
-.wmap-shell { display:flex; height:calc(100vh - 240px); min-height:380px; max-height:calc(100vh - 120px);
+.wmap-shell { display:flex; height:calc(100vh - 200px); min-height:380px;
   border:1px solid var(--linem); border-radius:10px; overflow:hidden; background:#fff; }
 .wmap-panel { width:310px; flex-shrink:0; border-right:1px solid var(--linem); overflow-y:auto; padding:16px; background:#fff; }
 .wmap-panel h1 { font-size:15px; margin:0 0 2px; text-transform:uppercase; color:var(--army); letter-spacing:.02em; }
@@ -799,7 +826,7 @@ const CSS = `
 .wmap-stage { flex:1 1 auto; min-height:0; overflow:auto; padding:30px;
   background:linear-gradient(var(--linem) 1px, transparent 1px) 0 0/26px 26px,
              linear-gradient(90deg, var(--linem) 1px, transparent 1px) 0 0/26px 26px, var(--sandm); }
-.wmap-canvas { position:relative; min-width:2200px; min-height:1400px; }
+.wmap-canvas { position:relative; }
 .wmap .empty { color:var(--mutedm); text-align:center; margin-top:60px; }
 .wmap .rack { position:absolute; }
 .wmap .rbox { position:absolute; left:50%; top:50%; transform-origin:center center; }

@@ -233,13 +233,10 @@ export default function PickLists() {
   // Drives the pick-from dropdown; length > 1 means the picker must choose.
   const getItemLocationOptions = (itemId) => {
     if (!itemId) return [];
-    return locations
-      .map(loc => {
-        const code = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
-        const qty = (loc.inventory && loc.inventory[itemId] != null) ? loc.inventory[itemId] : null;
-        return qty != null ? { code, qty } : null;
-      })
-      .filter(Boolean);
+    // SINGLE SOURCE OF TRUTH: read the item's own location breakdown.
+    const item = (items || []).find(i => i.id === itemId);
+    if (!item) return [];
+    return DB.itemLocations(item).map(e => ({ code: e.code, qty: e.qty }));
   };
 
   // Persist the picker's chosen source location for a line.

@@ -521,47 +521,18 @@ export default function Items() {
   const hasActiveFilters = Object.entries(filters).some(([k, v]) => k !== 'sortBy' && v !== '');
 
   // Get all locations where an item is stored
+  // SINGLE SOURCE OF TRUTH: quantities live on the item itself.
   const getItemLocations = (itemId) => {
-    const itemLocations = [];
     const item = items.find(i => i.id === itemId);
-    
-    // Check location inventory (from movements/assignments)
-    for (const loc of locations) {
-      if (loc.inventory && loc.inventory[itemId] && loc.inventory[itemId] > 0) {
-        itemLocations.push({
-          location: loc,
-          locationCode: loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`,
-          quantity: loc.inventory[itemId]
-        });
-      }
-    }
-    
-    // Also check item's direct location field (from import/manual entry)
-    if (item && item.location && itemLocations.length === 0) {
-      // Find matching location by code
-      const matchingLoc = locations.find(loc => {
-        const locCode = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
-        return locCode === item.location;
-      });
-      
-      if (matchingLoc) {
-        itemLocations.push({
-          location: matchingLoc,
-          locationCode: item.location,
-          quantity: item.stock || 0
-        });
-      } else {
-        // Location string exists but no matching location record
-        itemLocations.push({
-          location: null,
-          locationCode: item.location,
-          quantity: item.stock || 0,
-          isUnmapped: true
-        });
-      }
-    }
-    
-    return itemLocations;
+    if (!item) return [];
+    return DB.itemLocations(item).map(e => ({
+      locationId: (locations.find(l =>
+        DB.canonicalLocationCode(l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`) === e.code
+      ) || {}).id || null,
+      location: e.code,
+      locationCode: e.code,
+      quantity: e.qty
+    }));
   };
 
   // Get total quantity across all locations for an item
@@ -614,19 +585,14 @@ export default function Items() {
 
     // Sync location(s)
     if (useMultiLocation && itemId) {
-      // Multi-location: update each location's inventory
+      // SINGLE SOURCE OF TRUTH: write the breakdown onto the new item.
       const validLocations = newItem.locationBreakdown.filter(lb => lb.location && lb.quantity > 0);
       const unmatchedLocs = [];
-      for (const lb of validLocations) {
-        const loc = findLocationByCode(lb.location);
-        if (loc) {
-          await DB.setInventoryAtLocationWithSync(loc.id, itemId, parseInt(lb.quantity) || 0);
-        } else {
-          unmatchedLocs.push(lb.location);
-        }
-      }
+      await DB.setItemLocations(itemId, validLocations.map(lb => ({
+        code: lb.location, qty: parseInt(lb.quantity) || 0
+      })));
       if (unmatchedLocs.length > 0) {
-        toast(`⚠️ Couldn't match these location codes to existing Locations records — they were NOT saved:\n\n${unmatchedLocs.join(', ')}\n\nCheck the Locations page to confirm those entries exist.`);
+        toast(`⚠️ Couldn't match these location codes:\n\n${unmatchedLocs.join(', ')}`);
       }
     } else if (newItem.location && itemId) {
       // Single location: sync to location inventory
@@ -785,29 +751,19 @@ export default function Items() {
         });
       }
 
-      // Update location inventories if multi-location
+      // SINGLE SOURCE OF TRUTH: write the breakdown straight onto the item.
+      // No location documents are touched — they're metadata only now.
       if (editUseMultiLocation) {
-        // First clear existing location inventories for this item
-        for (const loc of locations) {
-          if (loc.inventory && loc.inventory[editingItem.id]) {
-            await DB.setInventoryAtLocation(loc.id, editingItem.id, 0);
-          }
-        }
-        
-        // Set new location inventories (with sync)
-        const validLocations = editLocationBreakdown.filter(lb => lb.location && lb.quantity > 0);
-        const unmatchedLocs = [];
-        for (const lb of validLocations) {
-          const loc = findLocationByCode(lb.location);
-          if (loc) {
-            await DB.setInventoryAtLocationWithSync(loc.id, editingItem.id, parseInt(lb.quantity) || 0);
-          } else {
-            unmatchedLocs.push(lb.location);
-          }
-        }
-        if (unmatchedLocs.length > 0) {
-          toast(`⚠️ Couldn't match these location codes to existing Locations records — they were NOT saved:\n\n${unmatchedLocs.join(', ')}\n\nCheck the Locations page to confirm those entries exist.`);
-        }
+        const entries = editLocationBreakdown
+          .filter(lb => lb.location && parseInt(lb.quantity) > 0)
+          .map(lb => ({ code: lb.location, qty: parseInt(lb.quantity) || 0 }));
+        await DB.setItemLocations(editingItem.id, entries);
+      } else if (editingItem.location) {
+        // Single-location edit: the whole quantity sits at one shelf.
+        await DB.setItemLocations(editingItem.id, [{
+          code: editingItem.location,
+          qty: parseInt(editingItem.stock) || 0
+        }]);
       }
 
       setShowEditItem(false);
@@ -1250,10 +1206,8 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
             if (matched.length > 0) {
               // First matched location clears any stale assignments (authoritative, like the
               // single-location path); the rest are added additively without removing each other.
-              await DB.syncItemToLocation(item.id, matched[0].code, matched[0].qty);
-              for (let i = 1; i < matched.length; i++) {
-                await DB.setInventoryAtLocationWithSync(matched[i].loc.id, item.id, matched[i].qty);
-              }
+              // Write every matched shelf onto the item in one go.
+              await DB.setItemLocations(item.id, matched.map(m => ({ code: m.code, qty: m.qty })));
               locationAssignments += matched.length;
             }
             for (const e of unmatched) {

@@ -783,6 +783,75 @@ export const OrgDB = {
     return out;
   },
 
+  // ── Repair ONLY the safe bucket: items whose location field names a shelf
+  // but whose stock isn't recorded in ANY location map. Writing it to the
+  // named shelf cannot double-count, because nothing else holds it.
+  // Items whose stock sits on a DIFFERENT shelf are deliberately left alone —
+  // that needs a human decision, not a guess.
+  async placeOrphanStock(dryRun) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const items = await this.getItems();
+    const locations = await this.getLocations();
+
+    const heldAnywhere = {};
+    locations.forEach(l => {
+      const inv = l.inventory || {};
+      Object.keys(inv).forEach(id => {
+        if ((parseInt(inv[id]) || 0) > 0) heldAnywhere[id] = true;
+      });
+    });
+
+    const byCode = {};
+    locations.forEach(l => {
+      const code = this.canonicalLocationCode(l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`);
+      if (code) byCode[code] = l;
+    });
+
+    let placed = 0, units = 0, created = 0, skipped = 0;
+    const report = [];
+    const pending = {}; // locId -> inventory patch, so one write per location
+
+    for (const it of items) {
+      const stock = parseInt(it.stock) || 0;
+      if (!it.location || stock <= 0) { skipped++; continue; }
+      if (heldAnywhere[it.id]) { skipped++; continue; }   // not an orphan
+
+      const code = this.canonicalLocationCode(it.location);
+      let loc = byCode[code];
+
+      if (!loc) {
+        const m = code.match(/^([A-Z]+\d+)-R(\d+)-([A-Z])(\d+)$/i);
+        if (!m) { skipped++; report.push(`⚠️ ${it.name}: "${it.location}" isn't a complete shelf — skipped`); continue; }
+        if (!dryRun) {
+          const newId = await this.createLocation({
+            locationCode: code, warehouse: m[1].toUpperCase(), rack: m[2],
+            letter: m[3].toUpperCase(), shelf: m[4], inventory: {}
+          });
+          loc = { id: newId, locationCode: code, inventory: {} };
+          byCode[code] = loc;
+        } else {
+          loc = { id: 'new:' + code, locationCode: code, inventory: {} };
+          byCode[code] = loc;
+        }
+        created++;
+      }
+
+      const patch = pending[loc.id] || (pending[loc.id] = { loc, inv: { ...(loc.inventory || {}) } });
+      patch.inv[it.id] = stock;
+      placed++; units += stock;
+      report.push(`✓ ${it.partNumber || ''} ${it.name}: ${stock} → ${code}`);
+    }
+
+    if (!dryRun) {
+      for (const key of Object.keys(pending)) {
+        const { loc, inv } = pending[key];
+        await updateDoc(doc(db, 'locations', loc.id), { inventory: inv, updatedAt: Date.now() });
+      }
+    }
+
+    return { placed, units, created, skipped, report, dryRun: !!dryRun };
+  },
+
   async repairLocationCodes(dryRun) {
     if (!currentOrgId) throw new Error('No organization selected');
     const locations = await this.getLocations();
@@ -921,6 +990,185 @@ export const OrgDB = {
       report.push(`✓ ${item.name}: placed ${remainder} at ${normPrimary}`);
     }
     return { fixed, created, skip, skipped: skip.noLocation + skip.alreadyPlaced + skip.incomplete, total: items.length, report };
+  },
+
+  // ══════════════════════════════════════════════════════════════════════
+  // SINGLE SOURCE OF TRUTH: the ITEM owns its inventory.
+  //   item.locations = [{ code, qty }]   ← the only place quantities live
+  //   item.stock     = sum of that array (derived, never set by hand)
+  //   item.location  = the shelf holding the most (derived)
+  // Location documents are metadata only. Locations tab and the Map DERIVE
+  // their quantities from items, so there is no second list to drift.
+  // ══════════════════════════════════════════════════════════════════════
+
+  // Normalise whatever an item currently has into a clean [{code, qty}] array.
+  itemLocations(item) {
+    if (!item) return [];
+    if (Array.isArray(item.locations)) {
+      return item.locations
+        .map(e => ({ code: this.canonicalLocationCode(e.code || e.location || ''), qty: parseInt(e.qty ?? e.quantity) || 0 }))
+        .filter(e => e.code && e.qty > 0);
+    }
+    // legacy shape: single location string + total stock
+    const stock = parseInt(item.stock) || 0;
+    const code = this.canonicalLocationCode(item.location || '');
+    return (code && stock > 0) ? [{ code, qty: stock }] : [];
+  },
+
+  // Write the array back, recomputing the derived fields in one go.
+  async setItemLocations(itemId, entries) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const clean = [];
+    (entries || []).forEach(e => {
+      const code = this.canonicalLocationCode(e.code || '');
+      const qty = parseInt(e.qty) || 0;
+      if (!code || qty <= 0) return;
+      const found = clean.find(c => c.code === code);
+      if (found) found.qty += qty; else clean.push({ code, qty });
+    });
+    const stock = clean.reduce((s, e) => s + e.qty, 0);
+    const primary = clean.slice().sort((a, b) => b.qty - a.qty)[0];
+    await updateDoc(doc(db, 'items', itemId), {
+      locations: clean,
+      stock,
+      location: primary ? primary.code : '',
+      updatedAt: Date.now()
+    });
+    return { locations: clean, stock, location: primary ? primary.code : '' };
+  },
+
+  // Add qty at a shelf (receiving). Blank code routes to staging.
+  async addStockAtLocation(itemId, code, qty) {
+    const amount = parseInt(qty) || 0;
+    if (amount <= 0) throw new Error('Quantity must be greater than zero');
+    const snap = await getDoc(doc(db, 'items', itemId));
+    if (!snap.exists()) throw new Error('Item not found');
+    const item = { id: itemId, ...snap.data() };
+    let target = this.canonicalLocationCode(code || '');
+    if (!target) { const st = await this.getOrCreateStagingLocation(); target = st.locationCode || this.STAGING_CODE; }
+    const entries = this.itemLocations(item);
+    const hit = entries.find(e => e.code === target);
+    if (hit) hit.qty += amount; else entries.push({ code: target, qty: amount });
+    const res = await this.setItemLocations(itemId, entries);
+    await this.logMovement({ itemId, itemName: item.name, quantity: amount, type: 'RECEIVE', toLocation: target });
+    return res;
+  },
+
+  // Remove qty from a shelf (picking / shipping). Falls back to the largest
+  // holding if the named shelf doesn't have it, so stock can't go untracked.
+  async removeStockAtLocation(itemId, code, qty) {
+    const amount = parseInt(qty) || 0;
+    if (amount <= 0) return null;
+    const snap = await getDoc(doc(db, 'items', itemId));
+    if (!snap.exists()) return null;
+    const item = { id: itemId, ...snap.data() };
+    const entries = this.itemLocations(item);
+    let target = this.canonicalLocationCode(code || '');
+    let hit = entries.find(e => e.code === target);
+    if (!hit) hit = entries.slice().sort((a, b) => b.qty - a.qty)[0];
+    if (!hit) return null;
+    hit.qty -= amount;
+    const res = await this.setItemLocations(itemId, entries.filter(e => e.qty > 0));
+    await this.logMovement({ itemId, itemName: item.name, quantity: amount, type: 'PICK', fromLocation: hit.code });
+    return res;
+  },
+
+  // Move qty between shelves — total stock unchanged.
+  async moveStockBetweenLocations(itemId, fromCode, toCode, qty) {
+    const amount = parseInt(qty) || 0;
+    if (amount <= 0) throw new Error('Quantity must be greater than zero');
+    const snap = await getDoc(doc(db, 'items', itemId));
+    if (!snap.exists()) throw new Error('Item not found');
+    const item = { id: itemId, ...snap.data() };
+    const from = this.canonicalLocationCode(fromCode);
+    const to = this.canonicalLocationCode(toCode);
+    if (from === to) throw new Error('Source and destination must differ');
+    const entries = this.itemLocations(item);
+    const src = entries.find(e => e.code === from);
+    if (!src || src.qty < amount) throw new Error(`Only ${src ? src.qty : 0} available at ${from}`);
+    src.qty -= amount;
+    const dst = entries.find(e => e.code === to);
+    if (dst) dst.qty += amount; else entries.push({ code: to, qty: amount });
+    const res = await this.setItemLocations(itemId, entries.filter(e => e.qty > 0));
+    await this.logMovement({ itemId, itemName: item.name, quantity: amount, type: 'MOVE', fromLocation: from, toLocation: to });
+    return res;
+  },
+
+  // DERIVED view for the Locations tab and the Map: code -> { total, items[] }
+  buildLocationTotals(items) {
+    const totals = {};
+    (items || []).forEach(it => {
+      this.itemLocations(it).forEach(e => {
+        const t = totals[e.code] || (totals[e.code] = { total: 0, items: [] });
+        t.total += e.qty;
+        t.items.push({ id: it.id, sku: it.partNumber || '', name: it.name || '', grade: it.grade || '', qty: e.qty });
+      });
+    });
+    Object.values(totals).forEach(t => t.items.sort((a, b) => b.qty - a.qty));
+    return totals;
+  },
+
+  // ── ONE-TIME migration to the item-owned model ───────────────────────────
+  // Folds every location.inventory entry onto its item, reconciles against
+  // item.stock, and parks any unaccounted units in STAGING so no quantity is
+  // invented or lost. After this, location maps are ignored entirely.
+  async migrateToItemOwnedInventory(dryRun) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const items = await this.getItems();
+    const locations = await this.getLocations();
+
+    // itemId -> [{code, qty}] gathered from the old location maps
+    const fromMaps = {};
+    locations.forEach(l => {
+      const code = this.canonicalLocationCode(l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`);
+      if (!code) return;
+      const inv = l.inventory || {};
+      Object.keys(inv).forEach(id => {
+        const q = parseInt(inv[id]) || 0;
+        if (q > 0) (fromMaps[id] = fromMaps[id] || []).push({ code, qty: q });
+      });
+    });
+
+    let converted = 0, toStaging = 0, stagedUnits = 0, unchanged = 0;
+    const report = [];
+    let stagingCode = this.STAGING_CODE;
+    if (!dryRun) { const st = await this.getOrCreateStagingLocation(); stagingCode = st.locationCode || this.STAGING_CODE; }
+
+    for (const it of items) {
+      const stock = parseInt(it.stock) || 0;
+      const entries = (fromMaps[it.id] || []).map(e => ({ ...e }));
+      const mapped = entries.reduce((sum, e) => sum + e.qty, 0);
+
+      // Nothing in maps? fall back to the item's own location string.
+      if (entries.length === 0 && stock > 0) {
+        const claim = this.canonicalLocationCode(it.location || '');
+        if (claim) {
+          entries.push({ code: claim, qty: stock });
+          report.push(`${it.partNumber || ''} ${it.name}: ${stock} → ${claim} (from item.location)`);
+        } else {
+          entries.push({ code: stagingCode, qty: stock });
+          toStaging++; stagedUnits += stock;
+          report.push(`${it.partNumber || ''} ${it.name}: ${stock} → STAGING (no shelf named)`);
+        }
+      } else if (stock > mapped) {
+        // maps account for less than the item's total — park the remainder
+        const gap = stock - mapped;
+        entries.push({ code: stagingCode, qty: gap });
+        toStaging++; stagedUnits += gap;
+        report.push(`${it.partNumber || ''} ${it.name}: ${gap} unaccounted → STAGING`);
+      }
+
+      const finalTotal = entries.reduce((sum, e) => sum + e.qty, 0);
+      if (entries.length === 0 && stock === 0) { unchanged++; continue; }
+
+      if (!dryRun) await this.setItemLocations(it.id, entries);
+      converted++;
+      if (finalTotal !== stock && stock > mapped) {
+        // stock grew to match the maps (maps held MORE than item.stock)
+      }
+    }
+
+    return { converted, toStaging, stagedUnits, unchanged, total: items.length, report, dryRun: !!dryRun };
   },
 
   // ── Staging (unshelved) location ───────────────────────────────────────
@@ -1208,65 +1456,14 @@ export const OrgDB = {
   },
 
   // Sync item's location field to location inventory
-  async syncItemToLocation(itemId, newLocationCode, quantity) {
-    if (!currentOrgId) return;
-    
-    const normalizedCode = this.canonicalLocationCode(newLocationCode);
-    const locations = await this.getLocations();
-    
-    // First, remove item from all other locations
-    for (const loc of locations) {
-      if (loc.inventory && loc.inventory[itemId] !== undefined) {
-        const locCode = this.canonicalLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
-        if (locCode !== normalizedCode) {
-          // Remove from this location
-          const currentInventory = { ...loc.inventory };
-          delete currentInventory[itemId];
-          const ref = doc(db, 'locations', loc.id);
-          await updateDoc(ref, {
-            inventory: currentInventory,
-            updatedAt: Date.now()
-          });
-        }
-      }
-    }
-    
-    // Then add to the new location if specified (regardless of quantity - even 0 or negative)
-    if (normalizedCode) {
-      const targetLoc = locations.find(loc => {
-        const locCode = this.canonicalLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
-        return locCode === normalizedCode;
-      });
-      
-      if (targetLoc) {
-        const ref = doc(db, 'locations', targetLoc.id);
-        const currentInventory = targetLoc.inventory || {};
-        await updateDoc(ref, {
-          inventory: {
-            ...currentInventory,
-            [itemId]: quantity
-          },
-          updatedAt: Date.now()
-        });
-        console.log('Synced item', itemId, 'to location', normalizedCode, 'qty:', quantity);
-      } else {
-        console.log('Target location not found:', normalizedCode);
-      }
-    }
-
-    // Also stamp the item's own location field so it shows on the Items tab
-    // (the map above drives per-location counts; this drives the item row).
-    try {
-      await updateDoc(doc(db, 'items', itemId), {
-        location: normalizedCode || '',
-        updatedAt: Date.now()
-      });
-    } catch (e) {
-      console.warn('Could not update item.location:', e.message);
-    }
+  async syncItemToLocation(itemId, locationCode, quantity) {
+    // Item-owned model: put the whole quantity at one shelf (exclusive move).
+    const code = this.canonicalLocationCode(locationCode || '');
+    const qty = parseInt(quantity) || 0;
+    if (!code) return;
+    await this.setItemLocations(itemId, qty > 0 ? [{ code, qty }] : []);
   },
 
-  // Sync location inventory to item's location field
   async syncLocationToItem(itemId, locationCode) {
     if (!currentOrgId || !itemId) return;
     
@@ -1282,30 +1479,9 @@ export const OrgDB = {
   // touching any other location or the item's primary location field. Used at pick
   // completion so multi-location counts stay accurate. Returns the new per-location qty.
   async decrementLocationInventory(locationCode, itemId, qty) {
-    if (!currentOrgId || !locationCode || !itemId) return null;
-    // Use the UNGUARDED canonical form on both sides so a legacy "W3-R3-E-3"
-    // still matches a normalized "W3-R3-E3" (the schema-guarded normalizer
-    // returns codes untouched for custom-schema orgs, which caused misses).
-    const normalizedCode = this.canonicalLocationCode(locationCode);
-    const locations = await this.getLocations();
-    const targetLoc = locations.find(loc => {
-      const raw = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
-      return this.canonicalLocationCode(raw) === normalizedCode;
-    });
-    if (!targetLoc) {
-      console.warn('decrementLocationInventory: location not found:', normalizedCode);
-      return null;
-    }
-    const currentInventory = { ...(targetLoc.inventory || {}) };
-    const current = parseInt(currentInventory[itemId]) || 0;
-    const newQty = Math.max(0, current - (parseInt(qty) || 0));
-    currentInventory[itemId] = newQty;
-    const ref = doc(db, 'locations', targetLoc.id);
-    await updateDoc(ref, { inventory: currentInventory, updatedAt: Date.now() });
-    return newQty;
+    return await this.removeStockAtLocation(itemId, locationCode, qty);
   },
 
-  // Update item with location sync
   async updateItemWithSync(itemId, updates) {    const ref = doc(db, 'items', itemId);
     
     // Get current item to know the stock
@@ -1696,61 +1872,12 @@ export const OrgDB = {
   // location's inventory map, without disturbing other locations (multi-location safe).
   // Returns { newStock, newLocQty }.
   async receiveToLocation(locationCode, itemId, qty) {
-    if (!currentOrgId) throw new Error('No organization selected');
-    const addQty = parseInt(qty) || 0;
-    if (!itemId || addQty <= 0) throw new Error('An item and a positive quantity are required');
-
-    const itemRef = doc(db, 'items', itemId);
-    const itemSnap = await getDoc(itemRef);
-    const currentItem = itemSnap.exists() ? itemSnap.data() : {};
-    const newStock = (currentItem.stock || 0) + addQty;
-
-    // Add to the specific location's inventory map (additive)
-    let newLocQty = null;
-    let normalizedCode = this.canonicalLocationCode(locationCode);
-
-    // No location specified → drop into the staging bucket so the stock is
-    // always accounted for in-warehouse and shows up as "needs shelving",
-    // rather than being received to nowhere.
-    let targetLoc = null;
-    if (!normalizedCode) {
-      targetLoc = await this.getOrCreateStagingLocation();
-      normalizedCode = targetLoc.locationCode || this.STAGING_CODE;
-    }
-    if (normalizedCode) {
-      if (!targetLoc) {
-        const locations = await this.getLocations();
-        targetLoc = locations.find(loc => {
-          const code = this.canonicalLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
-          return code === normalizedCode;
-        });
-      }
-      if (targetLoc) {
-        const inv = { ...(targetLoc.inventory || {}) };
-        newLocQty = (parseInt(inv[itemId]) || 0) + addQty;
-        inv[itemId] = newLocQty;
-        await updateDoc(doc(db, 'locations', targetLoc.id), { inventory: inv, updatedAt: Date.now() });
-      }
-    }
-
-    // Bump total stock; set primary location only if the item had none
-    const updates = { stock: newStock, updatedAt: Date.now() };
-    if (!currentItem.location && normalizedCode) updates.location = normalizedCode;
-    await updateDoc(itemRef, updates);
-
-    await this.logMovement({
-      itemId,
-      itemName: currentItem.name || '',
-      quantity: addQty,
-      type: 'RECEIVE',
-      toLocation: normalizedCode || 'Receiving'
-    });
-
-    return { newStock, newLocQty };
+    // Item-owned model: quantities live on the item, not on location docs.
+    const res = await this.addStockAtLocation(itemId, locationCode, qty);
+    const entry = res.locations.find(e => e.code === this.canonicalLocationCode(locationCode || '')) || null;
+    return { newStock: res.stock, newLocQty: entry ? entry.qty : null };
   },
-  
-  // ==================== MOVEMENTS (ORG-SCOPED) ====================
-  
+
   async logMovement(movementData) {
     if (!currentOrgId) throw new Error('No organization selected');
     
@@ -1849,44 +1976,16 @@ export const OrgDB = {
   // Move quantity of an item from one location to another. Total item stock is
   // unchanged (it's a relocation, not a receive/pick). Logs a MOVE movement.
   async moveItemBetweenLocations(itemId, fromLocationId, toLocationId, qty) {
-    if (!currentOrgId) throw new Error('No organization selected');
-    const amount = parseInt(qty) || 0;
-    if (amount <= 0) throw new Error('Quantity must be greater than zero');
-    if (fromLocationId === toLocationId) throw new Error('Source and destination must differ');
-
-    const fromSnap = await getDoc(doc(db, 'locations', fromLocationId));
-    const toSnap = await getDoc(doc(db, 'locations', toLocationId));
-    if (!fromSnap.exists() || !toSnap.exists()) throw new Error('Location not found');
-
-    const fromInv = { ...(fromSnap.data().inventory || {}) };
-    const have = parseInt(fromInv[itemId]) || 0;
-    if (amount > have) throw new Error(`Only ${have} available at the source location`);
-
-    const toInv = { ...(toSnap.data().inventory || {}) };
-    const newFrom = have - amount;
-    if (newFrom === 0) delete fromInv[itemId]; else fromInv[itemId] = newFrom;
-    toInv[itemId] = (parseInt(toInv[itemId]) || 0) + amount;
-
-    await updateDoc(doc(db, 'locations', fromLocationId), { inventory: fromInv, updatedAt: Date.now() });
-    await updateDoc(doc(db, 'locations', toLocationId), { inventory: toInv, updatedAt: Date.now() });
-
-    // Stamp the item's primary location to the destination it moved into.
-    const toCode = this.locationCodeOf(toSnap.data());
-    try { await updateDoc(doc(db, 'items', itemId), { location: toCode, updatedAt: Date.now() }); } catch (e) {}
-
-    await this.logMovement({
-      itemId,
-      quantity: amount,
-      type: 'MOVE',
-      fromLocation: this.locationCodeOf(fromSnap.data()),
-      toLocation: toCode,
-      timestamp: Date.now()
-    });
-    return { newFrom, newTo: toInv[itemId] };
+    // Accepts location ids or codes; resolves both to codes.
+    const locs = await this.getLocations();
+    const toCode = (v) => {
+      const byId = locs.find(l => l.id === v);
+      const raw = byId ? (byId.locationCode || `${byId.warehouse}-R${byId.rack}-${byId.letter}${byId.shelf}`) : v;
+      return this.canonicalLocationCode(raw);
+    };
+    return await this.moveStockBetweenLocations(itemId, toCode(fromLocationId), toCode(toLocationId), qty);
   },
 
-  // ==================== DASHBOARD STATS ====================
-  
   async getDashboardStats() {
     try {
       const [items, locations, movements] = await Promise.all([

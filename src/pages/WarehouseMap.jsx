@@ -134,26 +134,19 @@ export default function WarehouseMap() {
     return s;
   }, [locations]);
 
-  // itemId -> [canonical location codes]
+  // itemId -> [canonical location codes]  (from the item itself)
   const itemLocationIndex = useMemo(() => {
     const idx = {};
-    (locations || []).forEach(l => {
-      const raw = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
-      const c = canon(raw);
-      const inv = l.inventory || {};
-      Object.keys(inv).forEach(itemId => {
-        if ((parseInt(inv[itemId]) || 0) > 0) (idx[itemId] = idx[itemId] || []).push(c);
+    (items || []).forEach(it => {
+      DB.itemLocations(it).forEach(e => {
+        (idx[it.id] = idx[it.id] || []).push(e.code);
       });
     });
-    (items || []).forEach(it => {
-      if (it.location) {
-        const c = canon(it.location);
-        if (!idx[it.id]) idx[it.id] = [c];
-        else if (!idx[it.id].includes(c)) idx[it.id].push(c);
-      }
-    });
     return idx;
-  }, [locations, items]);
+  }, [items]);
+
+  // code -> { total, items[] } derived from items — one source of truth
+  const locationTotals = useMemo(() => DB.buildLocationTotals(items), [items]);
 
   // Which cells should light up for the current search.
   // Tokenised + order-independent: "b2 w1 r1", "w1 b2", "duffle od" all work.
@@ -303,42 +296,17 @@ export default function WarehouseMap() {
   // falling back to items whose primary location points here.
   const openCell = (code) => {
     const target = canon(code);
-    const loc = (locations || []).find(l => {
-      const raw = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
-      return canon(raw) === target;
+    const exists = locationCodeSet.has(target);
+    const entry = locationTotals[target];
+    const rows = (entry ? entry.items : []).map(r => {
+      const it = (items || []).find(i => i.id === r.id);
+      return {
+        id: r.id, name: r.name || it?.name || '(item not found)',
+        sku: r.sku || it?.partNumber || '', grade: r.grade || it?.grade || '',
+        category: it?.category || '', qty: r.qty
+      };
     });
-    const rows = [];
-    if (loc && loc.inventory) {
-      Object.keys(loc.inventory).forEach(itemId => {
-        const qty = parseInt(loc.inventory[itemId]) || 0;
-        if (qty <= 0) return;
-        const it = (items || []).find(i => i.id === itemId);
-        rows.push({
-          id: itemId,
-          name: it?.name || '(item not found)',
-          sku: it?.partNumber || '',
-          grade: it?.grade || '',
-          category: it?.category || '',
-          qty
-        });
-      });
-    }
-    // items that name this shelf as their location but aren't in the map
-    (items || []).forEach(it => {
-      if (!it.location || canon(it.location) !== target) return;
-      if (rows.some(r => r.id === it.id)) return;
-      rows.push({
-        id: it.id, name: it.name, sku: it.partNumber || '', grade: it.grade || '',
-        category: it.category || '', qty: null, unmapped: true
-      });
-    });
-    rows.sort((a, b) => (b.qty || 0) - (a.qty || 0));
-    setPeek({
-      code: loc ? (loc.locationCode || code) : code,
-      exists: !!loc,
-      rows,
-      total: rows.reduce((sum, r) => sum + (r.qty || 0), 0)
-    });
+    setPeek({ code, exists, rows, total: entry ? entry.total : 0 });
   };
 
   const compassFor = (w) => compasses[w] || { x: 40, y: 40, rot: 0, show: true };

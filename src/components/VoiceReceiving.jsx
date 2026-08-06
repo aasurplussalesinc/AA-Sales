@@ -423,17 +423,18 @@ export default function VoiceReceiving({ items = [], locations = [], canUse = fa
 
   const currentAtLocation = () => {
     if (!pending) return 0;
-    const loc = locations.find(l => locationCodeOf(l) === pending.locationCode);
-    if (!loc || !loc.inventory) return 0;
-    return parseInt(loc.inventory[pending.selectedItemId]) || 0;
+    const item = (items || []).find(i => i.id === pending.selectedItemId);
+    if (!item) return 0;
+    const target = DB.canonicalLocationCode(pending.locationCode || '');
+    const hit = DB.itemLocations(item).find(e => e.code === target);
+    return hit ? hit.qty : 0;
   };
 
   // Locations that currently hold this item — used to guard voice assignment
   const locationsHolding = (itemId) => {
     if (!itemId) return [];
-    return locations
-      .filter(l => l.inventory && l.inventory[itemId] != null && (parseInt(l.inventory[itemId]) || 0) > 0)
-      .map(l => locationCodeOf(l));
+    const item = (items || []).find(i => i.id === itemId);
+    return item ? DB.itemLocations(item).map(e => e.code) : [];
   };
 
   const apply = async () => {

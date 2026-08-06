@@ -171,6 +171,54 @@ export default function Locations() {
     setRepairing(false);
   };
 
+  const runUnify = async (dryRun) => {
+    if (repairing) return;
+    setRepairing(true);
+    try {
+      const r = await DB.migrateToItemOwnedInventory(dryRun);
+      const preview = r.report.slice(0, 12).join('\n');
+      const more = r.report.length > 12 ? `\n…and ${r.report.length - 12} more` : '';
+      alert(
+        (dryRun ? 'DRY RUN — nothing changed.\n\n' : 'Done.\n\n') +
+        'ONE SOURCE OF TRUTH — inventory now lives on the ITEM.\n\n' +
+        `Items converted: ${r.converted}\n` +
+        `Items with units parked in STAGING: ${r.toStaging}\n` +
+        `Units parked in STAGING: ${r.stagedUnits}\n` +
+        `Items with no stock (untouched): ${r.unchanged}\n` +
+        `Total items: ${r.total}` +
+        (r.report.length ? `\n\n${preview}${more}` : '')
+      );
+      if (!dryRun) loadData();
+    } catch (e) {
+      alert('Migration failed: ' + (e.message || e));
+    }
+    setRepairing(false);
+  };
+
+  const runOrphanFix = async (dryRun) => {
+    if (repairing) return;
+    setRepairing(true);
+    try {
+      const r = await DB.placeOrphanStock(dryRun);
+      const preview = r.report.slice(0, 12).join('\n');
+      const more = r.report.length > 12 ? `\n…and ${r.report.length - 12} more` : '';
+      alert(
+        (dryRun ? 'DRY RUN — nothing changed.\n\n' : 'Done.\n\n') +
+        `Items placed onto their shelf: ${r.placed}\n` +
+        `Units recorded: ${r.units}\n` +
+        `Locations created: ${r.created}\n` +
+        `Left alone (not orphans / no shelf): ${r.skipped}\n\n` +
+        'Items whose stock sits on a DIFFERENT shelf were not touched —\n' +
+        'those need a physical count.' +
+        (r.report.length ? `\n\n${preview}${more}` : '')
+      );
+      if (!dryRun) loadData();
+    } catch (e) {
+      alert('Repair failed: ' + (e.message || e));
+    }
+    setRepairing(false);
+  };
+
   const runRepair = async (dryRun) => {
     if (repairing) return;
     setRepairing(true);
@@ -256,23 +304,21 @@ export default function Locations() {
     }
   };
 
-  const getCurrentQty = (loc) => {
-    if (!loc.inventory) return 0;
-    return Object.values(loc.inventory).reduce((sum, qty) => sum + qty, 0);
-  };
+  // DERIVED from items — the item owns its quantities, locations are metadata.
+  const locationTotals = useMemo(() => DB.buildLocationTotals(items), [items]);
+  const codeOf = (loc) => DB.canonicalLocationCode(
+    loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`
+  );
+
+  const getCurrentQty = (loc) => (locationTotals[codeOf(loc)]?.total) || 0;
 
   const getLocationItems = (loc) => {
-    if (!loc.inventory) return [];
-    const locationItems = [];
-    for (const [itemId, quantity] of Object.entries(loc.inventory)) {
-      if (quantity > 0) {
-        const item = items.find(i => i.id === itemId);
-        if (item) {
-          locationItems.push({ ...item, quantity });
-        }
-      }
-    }
-    return locationItems;
+    const entry = locationTotals[codeOf(loc)];
+    if (!entry) return [];
+    return entry.items.map(r => {
+      const item = items.find(i => i.id === r.id);
+      return { ...(item || {}), id: r.id, name: r.name, partNumber: r.sku, quantity: r.qty };
+    });
   };
 
   const viewLocation = (loc) => {
@@ -759,6 +805,26 @@ W2,2,C,3`;
               title="Read-only: shows where each item's stock actually sits vs where its location field claims"
               style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
               {repairing ? '⏳ Auditing…' : '🩺 Audit item locations'}
+            </button>
+            <button className="btn" onClick={() => runUnify(true)} disabled={repairing}
+              title="Preview: fold all shelf quantities onto the items themselves"
+              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
+              {repairing ? '⏳…' : '🔍 Preview unify'}
+            </button>
+            <button className="btn" onClick={() => runUnify(false)} disabled={repairing}
+              title="Make the Items tab the single source of truth for all quantities"
+              style={{ background: '#1565c0', color: '#fff' }}>
+              {repairing ? '⏳…' : '🎯 Unify to Items'}
+            </button>
+            <button className="btn" onClick={() => runOrphanFix(true)} disabled={repairing}
+              title="Preview: place stock for items whose shelf holds no record of them"
+              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
+              {repairing ? '⏳…' : '🔍 Preview orphan fix'}
+            </button>
+            <button className="btn" onClick={() => runOrphanFix(false)} disabled={repairing}
+              title="Write orphaned stock onto the shelf its item names"
+              style={{ background: '#6b7f3e', color: 'var(--text-on-dark)' }}>
+              {repairing ? '⏳…' : '🧩 Place orphan stock'}
             </button>
             <button className="btn" onClick={() => runRepair(true)} disabled={repairing}
               title="Preview the cleanup without changing anything"

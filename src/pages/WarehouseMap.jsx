@@ -124,28 +124,54 @@ export default function WarehouseMap() {
     return idx;
   }, [locations, items]);
 
-  // Which cells should light up for the current search
+  // Which cells should light up for the current search.
+  // Tokenised + order-independent: "b2 w1 r1", "w1 b2", "duffle od" all work.
   const { hitCodes, hitMode, searchNote } = useMemo(() => {
-    const q = search.trim().toUpperCase();
-    if (!q) return { hitCodes: new Set(), hitMode: null, searchNote: '' };
-    const cq = canon(q);
-    // 1) location code
+    const raw = search.trim();
+    if (!raw) return { hitCodes: new Set(), hitMode: null, searchNote: '' };
+
+    // split on anything that isn't a letter or digit
+    const tokens = raw.toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+    if (!tokens.length) return { hitCodes: new Set(), hitMode: null, searchNote: '' };
+
+    // 1) LOCATIONS — every token must appear somewhere in the flattened code,
+    //    so order and separators don't matter.
     const codeHits = new Set();
-    locationCodeSet.forEach(c => { if (c === cq || c.includes(cq)) codeHits.add(c); });
-    if (codeHits.size) return { hitCodes: codeHits, hitMode: 'location', searchNote: `${codeHits.size} location(s)` };
-    // 2) item name / SKU
-    const matched = (items || []).filter(it =>
-      String(it.name || '').toUpperCase().includes(q) ||
-      String(it.partNumber || '').toUpperCase() === q);
-    const s = new Set();
-    matched.forEach(it => (itemLocationIndex[it.id] || []).forEach(c => s.add(c)));
-    if (matched.length && !s.size) {
-      return { hitCodes: s, hitMode: 'item', searchNote: `${matched[0].name} has no location assigned` };
+    locationCodeSet.forEach(code => {
+      const flat = code.replace(/[^A-Z0-9]/g, '');
+      if (tokens.every(t => flat.includes(t))) codeHits.add(code);
+    });
+    if (codeHits.size) {
+      return {
+        hitCodes: codeHits, hitMode: 'location',
+        searchNote: codeHits.size === 1
+          ? `${[...codeHits][0]}`
+          : `${codeHits.size} locations match`
+      };
     }
-    return {
-      hitCodes: s, hitMode: 'item',
-      searchNote: matched.length ? `${matched[0].name} → ${[...s].join(', ')}` : 'No match'
-    };
+
+    // 2) ITEMS — every token must appear in the name, or match the SKU exactly.
+    const matched = (items || []).filter(it => {
+      const name = String(it.name || '').toUpperCase();
+      const sku = String(it.partNumber || '').toUpperCase();
+      if (tokens.length === 1 && sku === tokens[0]) return true;
+      return tokens.every(t => name.includes(t) || sku === t);
+    });
+
+    const s2 = new Set();
+    matched.forEach(it => (itemLocationIndex[it.id] || []).forEach(c => s2.add(c)));
+
+    if (!matched.length) return { hitCodes: s2, hitMode: 'item', searchNote: 'No match' };
+    if (!s2.size) {
+      return {
+        hitCodes: s2, hitMode: 'item',
+        searchNote: `${matched[0].name} — no location assigned`
+      };
+    }
+    const label = matched.length === 1
+      ? `${matched[0].name} → ${[...s2].join(', ')}`
+      : `${matched.length} items → ${[...s2].length} location(s)`;
+    return { hitCodes: s2, hitMode: 'item', searchNote: label };
   }, [search, locationCodeSet, items, itemLocationIndex]);
 
   // ---- rack helpers ----
@@ -412,7 +438,7 @@ export default function WarehouseMap() {
           <div className="wmap-bar">
             <div className="srch">
               <input value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Find a location (W1-R1-B2) or an item (duffle bag, 2454)…" />
+                placeholder="Search any order — &quot;w1 b2&quot;, &quot;b2 r1 w1&quot;, &quot;duffle od&quot;, or a SKU…" />
             </div>
             {searchNote && <span className="snote">{searchNote}</span>}
             <div className="spacer" />

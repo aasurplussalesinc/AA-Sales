@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
 
@@ -722,8 +722,17 @@ function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locat
   const boxRef = useRef(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
 
-  useEffect(() => {
-    if (boxRef.current) setDims({ w: boxRef.current.offsetWidth, h: boxRef.current.offsetHeight });
+  useLayoutEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    // The box carries a pinned width/height from the last render. Clear it
+    // before measuring, otherwise we just re-read the OLD size and the grid
+    // renders at the wrong dimensions after a column change.
+    const prevW = el.style.width, prevH = el.style.height;
+    el.style.width = 'auto'; el.style.height = 'auto';
+    const w = el.offsetWidth, h = el.offsetHeight;
+    el.style.width = prevW; el.style.height = prevH;
+    setDims(d => (d.w === w && d.h === h) ? d : { w, h });
   }, [cfg.colShelves, cfg.pattern, cfg.wh, cfg.rack, cfg.rowMode, cfg.colMode, cfg.rowStart, cfg.colStart]);
 
   const sx = cfg.scaleX ?? 1, sy = cfg.scaleY ?? 1, deg = cfg.rot || 0;
@@ -876,7 +885,7 @@ const CSS = `
              linear-gradient(90deg, var(--linem) 1px, transparent 1px) 0 0/26px 26px, var(--sandm); }
 .wmap-canvas { position:relative; }
 .wmap .empty { color:var(--mutedm); text-align:center; margin-top:60px; }
-.wmap .rack { position:absolute; }
+.wmap .rack { position:absolute; z-index:2; }
 .wmap .rbox { position:absolute; left:50%; top:50%; transform-origin:center center; }
 .wmap .rhead { background:var(--army); color:#fff; font-weight:700; font-size:13px; padding:6px 10px;
   border-radius:6px 6px 0 0; display:flex; align-items:center; justify-content:center; gap:8px;
@@ -889,9 +898,10 @@ const CSS = `
   font-weight:700; padding:0; z-index:8; }
 .wmap .rdel { right:6px; } .wmap .rrot { right:28px; }
 .wmap .rdel:hover { background:var(--hitm); } .wmap .rrot:hover { background:var(--army-light); }
-.wmap .axcol { display:grid; text-align:center; font-size:10px; color:var(--mutedm); font-weight:700; margin-bottom:3px; gap:2px; padding:0 4px; }
-.wmap .axwrap { display:flex; }
-.wmap .axrow { display:grid; gap:2px; margin-right:4px; padding:2px 0; }
+.wmap .axcol { display:inline-grid; text-align:center; font-size:10px; color:var(--mutedm);
+  font-weight:700; margin-bottom:3px; gap:2px; padding:0 4px; margin-left:24px; }
+.wmap .axwrap { display:flex; align-items:stretch; }
+.wmap .axrow { display:grid; gap:2px; margin-right:4px; padding:2px 0; width:20px; flex-shrink:0; }
 .wmap .axrow div { display:flex; align-items:center; justify-content:flex-end; font-size:10px; color:var(--mutedm); font-weight:700; min-height:44px; }
 .wmap .rgrid { display:grid; border:2px solid var(--army); border-top:none; border-radius:0 0 6px 6px;
   overflow:hidden; background:var(--army); gap:2px; padding:2px; }
@@ -908,7 +918,7 @@ const CSS = `
 .wmap .rz.e { right:-6px; top:50%; transform:translateY(-50%); width:12px; height:34px; cursor:ew-resize; }
 .wmap .rz.s { bottom:-6px; left:50%; transform:translateX(-50%); width:34px; height:12px; cursor:ns-resize; }
 .wmap .rz.c { right:-7px; bottom:-7px; width:18px; height:18px; background:var(--army); cursor:nwse-resize; }
-.wmap .compass { position:absolute; z-index:40; width:104px; text-align:center; cursor:grab; user-select:none; }
+.wmap .compass { position:absolute; z-index:1; width:104px; text-align:center; cursor:grab; user-select:none; }
 .wmap .compass svg { display:block; filter:drop-shadow(0 1px 3px rgba(0,0,0,.2)); }
 .wmap .cbtns { display:flex; gap:4px; justify-content:center; margin-top:2px; opacity:0; transition:opacity .12s; }
 .wmap .compass:hover .cbtns { opacity:1; }

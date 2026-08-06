@@ -74,7 +74,9 @@ export default function WarehouseMap() {
     const fit = () => {
       if (!shellRef.current) return;
       const top = shellRef.current.getBoundingClientRect().top;
-      setShellH(Math.max(380, window.innerHeight - top - 24));
+      // Trim only the sliver needed to avoid a scrollbar; the 24px gap I used
+      // before was itself the leftover white space.
+      setShellH(Math.max(380, Math.floor(window.innerHeight - top - 6)));
     };
     fit();
     window.addEventListener('resize', fit);
@@ -690,6 +692,8 @@ function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locat
   }, [cfg.colShelves, cfg.pattern, cfg.wh, cfg.rack, cfg.rowMode, cfg.colMode, cfg.rowStart, cfg.colStart]);
 
   const sx = cfg.scaleX ?? 1, sy = cfg.scaleY ?? 1, deg = cfg.rot || 0;
+  // Counter-rotate label text so it stays upright no matter how the rack turns.
+  const upright = deg ? { transform: `rotate(${-deg}deg)`, display: 'inline-block' } : undefined;
   const swapped = deg === 90 || deg === 270;
   const shelves = cfg.colShelves;
   const tallest = Math.max(...shelves);
@@ -726,25 +730,25 @@ function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locat
         <div className="rhead" onPointerDown={canBuild ? (e) => onDrag(e, idx) : undefined}
           style={{ cursor: canBuild ? 'grab' : 'default' }}>
           {canBuild && <span className="grip">⁙</span>}
-          <span className="wh">{cfg.wh}</span> {cfg.rack}
+          <span style={upright}><span className="wh">{cfg.wh}</span> {cfg.rack}</span>
           {canBuild && (
             <>
-              <button className="rrot" title="Rotate 90°"
+              <button className="rrot" title="Rotate 90°" style={upright}
                 onPointerDown={e => { e.stopPropagation(); e.preventDefault(); onRotate(idx); }}>↻</button>
-              <button className="rdel" title="Delete rack"
+              <button className="rdel" title="Delete rack" style={upright}
                 onPointerDown={e => { e.stopPropagation(); e.preventDefault(); onDelete(idx); }}>×</button>
             </>
           )}
         </div>
 
         <div className="axcol" style={{ gridTemplateColumns: `repeat(${shelves.length}, minmax(54px,1fr))` }}>
-          {shelves.map((_, c) => <div key={c}>{labelFor(cfg.colMode, cfg.colStart, c)}</div>)}
+          {shelves.map((_, c) => <div key={c}><span style={upright}>{labelFor(cfg.colMode, cfg.colStart, c)}</span></div>)}
         </div>
 
         <div className="axwrap">
           <div className="axrow" style={{ gridTemplateRows: `repeat(${tallest},1fr)` }}>
             {Array.from({ length: tallest }, (_, r) =>
-              <div key={r}>{labelFor(cfg.rowMode, cfg.rowStart, tallest - 1 - r)}</div>)}
+              <div key={r}><span style={upright}>{labelFor(cfg.rowMode, cfg.rowStart, tallest - 1 - r)}</span></div>)}
           </div>
           <div className="rgrid" style={{ gridTemplateColumns: `repeat(${shelves.length}, minmax(54px,1fr))` }}>
             {rows.map(cell => cell.void
@@ -752,7 +756,7 @@ function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locat
               : <div key={cell.key}
                   className={'cell' + (cell.hit ? (hitMode === 'item' ? ' item-hit' : ' hit') : (anyHit ? ' dim' : '')) + (!cell.known ? ' unknown' : '')}
                   title={cell.known ? cell.code : `${cell.code} — no matching Locations record`}>
-                  {cell.label}
+                  <span style={upright}>{cell.label}</span>
                 </div>)}
           </div>
         </div>
@@ -835,7 +839,7 @@ const CSS = `
   user-select:none; position:relative; letter-spacing:.04em; }
 .wmap .rhead .wh { font-size:10px; opacity:.75; font-weight:600; text-transform:uppercase; }
 .wmap .grip { position:absolute; left:8px; opacity:.55; font-size:12px; }
-.wmap .rdel, .wmap .rrot { position:absolute; top:50%; transform:translateY(-50%); width:18px; height:18px;
+.wmap .rdel, .wmap .rrot { position:absolute; top:calc(50% - 9px); width:18px; height:18px;
   background:rgba(255,255,255,.2); color:#fff; border:1px solid rgba(255,255,255,.5); border-radius:50%;
   cursor:pointer; font-size:11px; line-height:1; display:flex; align-items:center; justify-content:center;
   font-weight:700; padding:0; z-index:8; }

@@ -128,6 +128,31 @@ export default function Locations() {
     return sameCode(raw, code);
   });
 
+  // One-time cleanup: canonicalise every location code and merge duplicates.
+  const [repairing, setRepairing] = useState(false);
+  const runRepair = async (dryRun) => {
+    if (repairing) return;
+    setRepairing(true);
+    try {
+      const r = await DB.repairLocationCodes(dryRun);
+      const preview = r.report.slice(0, 15).join('\n');
+      const more = r.report.length > 15 ? `\n…and ${r.report.length - 15} more` : '';
+      alert(
+        (dryRun ? 'DRY RUN — nothing was changed.\n\n' : 'Cleanup complete.\n\n') +
+        `Codes renamed to canonical: ${r.renamed}\n` +
+        `Duplicate records merged away: ${r.merged}\n` +
+        `Units re-homed by merging: ${r.unitsMoved}\n` +
+        `Item location fields updated: ${r.itemsRepointed}\n` +
+        `Locations scanned: ${r.totalLocations}` +
+        (r.report.length ? `\n\n${preview}${more}` : '')
+      );
+      if (!dryRun) loadData();
+    } catch (e) {
+      alert('Cleanup failed: ' + (e.message || e));
+    }
+    setRepairing(false);
+  };
+
   const formatLocation = (loc) => {
     if (loc.locationCode) return loc.locationCode;
     return DB.buildLocationCode(loc, locSchema);
@@ -686,6 +711,20 @@ W2,2,C,3`;
         >
           📋 Download Template
         </button>
+        {userRole === 'admin' && (
+          <>
+            <button className="btn" onClick={() => runRepair(true)} disabled={repairing}
+              title="Preview the cleanup without changing anything"
+              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
+              {repairing ? '⏳ Checking…' : '🔍 Preview code cleanup'}
+            </button>
+            <button className="btn" onClick={() => runRepair(false)} disabled={repairing}
+              title="Rewrite all codes to W1-R1-A1 form and merge duplicate shelves"
+              style={{ background: '#6b7f3e', color: 'var(--text-on-dark)' }}>
+              {repairing ? '⏳ Cleaning…' : '🔧 Fix codes & merge duplicates'}
+            </button>
+          </>
+        )}
       </div>
 
       {canEdit && (

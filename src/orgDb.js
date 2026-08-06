@@ -707,24 +707,99 @@ export const OrgDB = {
   canonicalLocationCode(code) {
     if (!code) return '';
     code = String(code).trim();
-    // already canonical
-    let m = code.match(/^(W\d+)-R(\d+)-([A-Z])(\d+)$/i);
+    // Warehouse token is any letters+digits (W1, W4, R1 ... "R1" is a real
+    // warehouse here, not a typo), rack is R+digits, then bay letter + shelf.
+    // Canonical output has NO dash before the shelf number: W1-R1-A1.
+    let m = code.match(/^([A-Z]+\d+)-R(\d+)-([A-Z])-?(\d+)$/i);
     if (m) return `${m[1].toUpperCase()}-R${m[2]}-${m[3].toUpperCase()}${m[4]}`;
-    // old format W1-R1-A-1
-    m = code.match(/^(W\d+)-R(\d+)-([A-Z])-(\d+)$/i);
+    // dashless run-together: W4R1M2
+    m = code.match(/^([A-Z]+\d+)\s*R(\d+)\s*([A-Z])(\d+)$/i);
     if (m) return `${m[1].toUpperCase()}-R${m[2]}-${m[3].toUpperCase()}${m[4]}`;
-    // dash-separated but odd spacing/case
+    // loose dash-separated fallback
     const parts = code.split('-').filter(p => p);
     if (parts.length >= 3) {
       const w = parts[0].toUpperCase();
       const r = parts[1].replace(/^R/i, '');
       const ls = parts.slice(2).join('').match(/([A-Z])(\d+)/i);
-      if (ls && /^W\d+$/i.test(w) && /^\d+$/.test(r)) return `${w}-R${r}-${ls[1].toUpperCase()}${ls[2]}`;
+      if (ls && /^[A-Z]+\d+$/i.test(w) && /^\d+$/.test(r)) {
+        return `${w}-R${r}-${ls[1].toUpperCase()}${ls[2]}`;
+      }
     }
-    // dashless run-together: W4R1M2
-    m = code.match(/^(W\d+)\s*R(\d+)\s*([A-Z])(\d+)$/i);
-    if (m) return `${m[1].toUpperCase()}-R${m[2]}-${m[3].toUpperCase()}${m[4]}`;
     return code; // not a parseable shelf code (e.g. "W4" alone)
+  },
+
+  // ── One-time migration: canonicalise location codes + merge duplicates ────
+  // Your DB grew two formats for the same shelf ("W1-R1-A-1" and "W1-R1-A1").
+  // Canonical is the NO-dash form. This rewrites every location record to
+  // canonical, merges any records that collapse to the same shelf (summing
+  // their inventory), and repoints item.location strings to match.
+  // dryRun: true reports what WOULD happen without writing anything.
+  async repairLocationCodes(dryRun) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const locations = await this.getLocations();
+    const items = await this.getItems();
+    const report = [];
+
+    // Group every location by its canonical code
+    const groups = {};
+    locations.forEach(loc => {
+      const raw = loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`;
+      const key = this.canonicalLocationCode(raw);
+      (groups[key] = groups[key] || []).push({ loc, raw });
+    });
+
+    let renamed = 0, merged = 0, unitsMoved = 0, itemsRepointed = 0;
+
+    for (const canonCode of Object.keys(groups)) {
+      const set = groups[canonCode];
+
+      if (set.length > 1) {
+        // Prefer a survivor already in canonical form, else the first record.
+        const survivor = set.find(e => e.raw === canonCode) || set[0];
+        const others = set.filter(e => e !== survivor);
+        const mergedInv = { ...(survivor.loc.inventory || {}) };
+        others.forEach(o => {
+          const inv = o.loc.inventory || {};
+          Object.keys(inv).forEach(itemId => {
+            const q = parseInt(inv[itemId]) || 0;
+            if (q > 0) { mergedInv[itemId] = (parseInt(mergedInv[itemId]) || 0) + q; unitsMoved += q; }
+          });
+        });
+        report.push(`MERGE ${canonCode}: ${set.map(e => e.raw).join(' + ')} → ${canonCode}`);
+        if (!dryRun) {
+          await updateDoc(doc(db, 'locations', survivor.loc.id), {
+            locationCode: canonCode, inventory: mergedInv, updatedAt: Date.now()
+          });
+          for (const o of others) await deleteDoc(doc(db, 'locations', o.loc.id));
+        }
+        merged += others.length;
+      } else {
+        const only = set[0];
+        if (only.raw !== canonCode && canonCode) {
+          report.push(`RENAME ${only.raw} → ${canonCode}`);
+          if (!dryRun) {
+            await updateDoc(doc(db, 'locations', only.loc.id), {
+              locationCode: canonCode, updatedAt: Date.now()
+            });
+          }
+          renamed++;
+        }
+      }
+    }
+
+    // Repoint item.location strings onto the canonical code
+    for (const it of items) {
+      if (!it.location) continue;
+      const canonIt = this.canonicalLocationCode(it.location);
+      if (canonIt && canonIt !== it.location) {
+        if (!dryRun) {
+          await updateDoc(doc(db, 'items', it.id), { location: canonIt, updatedAt: Date.now() });
+        }
+        itemsRepointed++;
+      }
+    }
+
+    return { renamed, merged, unitsMoved, itemsRepointed, totalLocations: locations.length, report, dryRun: !!dryRun };
   },
 
   async reconcileImportedLocations() {
@@ -1087,13 +1162,13 @@ export const OrgDB = {
   async syncItemToLocation(itemId, newLocationCode, quantity) {
     if (!currentOrgId) return;
     
-    const normalizedCode = this.normalizeLocationCode(newLocationCode);
+    const normalizedCode = this.canonicalLocationCode(newLocationCode);
     const locations = await this.getLocations();
     
     // First, remove item from all other locations
     for (const loc of locations) {
       if (loc.inventory && loc.inventory[itemId] !== undefined) {
-        const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
+        const locCode = this.canonicalLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         if (locCode !== normalizedCode) {
           // Remove from this location
           const currentInventory = { ...loc.inventory };
@@ -1110,7 +1185,7 @@ export const OrgDB = {
     // Then add to the new location if specified (regardless of quantity - even 0 or negative)
     if (normalizedCode) {
       const targetLoc = locations.find(loc => {
-        const locCode = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
+        const locCode = this.canonicalLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
         return locCode === normalizedCode;
       });
       
@@ -1583,7 +1658,7 @@ export const OrgDB = {
 
     // Add to the specific location's inventory map (additive)
     let newLocQty = null;
-    let normalizedCode = this.normalizeLocationCode(locationCode);
+    let normalizedCode = this.canonicalLocationCode(locationCode);
 
     // No location specified → drop into the staging bucket so the stock is
     // always accounted for in-warehouse and shows up as "needs shelving",
@@ -1597,7 +1672,7 @@ export const OrgDB = {
       if (!targetLoc) {
         const locations = await this.getLocations();
         targetLoc = locations.find(loc => {
-          const code = this.normalizeLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
+          const code = this.canonicalLocationCode(loc.locationCode || `${loc.warehouse}-R${loc.rack}-${loc.letter}${loc.shelf}`);
           return code === normalizedCode;
         });
       }
@@ -1705,7 +1780,7 @@ export const OrgDB = {
       const cur = itemSnap.data();
       if (qty > 0) {
         if (!cur.location) await updateDoc(itemRef, { location: code, updatedAt: Date.now() });
-      } else if (this.normalizeLocationCode(cur.location) === this.normalizeLocationCode(code)) {
+      } else if (this.canonicalLocationCode(cur.location) === this.canonicalLocationCode(code)) {
         // Cleared this location and it was the item's primary — repoint to another
         // location that still holds it, if any.
         const locs = await this.getLocations();

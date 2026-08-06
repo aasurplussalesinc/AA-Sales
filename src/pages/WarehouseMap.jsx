@@ -283,6 +283,21 @@ export default function WarehouseMap() {
     return { w: Math.max(900, maxX + 120), h: Math.max(500, maxY + 120) };
   }, [visibleRacks]);
 
+  // Rack list grouped by warehouse and naturally sorted (R2 before R10),
+  // scoped to the tab you're on so the panel isn't a wall of every rack.
+  const rackGroups = useMemo(() => {
+    const natural = (a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' });
+    const src = racks.map((cfg, idx) => ({ cfg, idx }));
+    const scoped = showingAll ? src : src.filter(e => e.cfg.wh === activeTab);
+    const byWh = {};
+    scoped.forEach(e => { (byWh[e.cfg.wh] = byWh[e.cfg.wh] || []).push(e); });
+    return Object.keys(byWh).sort(natural).map(w => ({
+      wh: w,
+      racks: byWh[w].sort((a, b) => natural(a.cfg.rack, b.cfg.rack)),
+      spots: byWh[w].reduce((sum, e) => sum + e.cfg.colShelves.reduce((a, b) => a + b, 0), 0)
+    }));
+  }, [racks, showingAll, activeTab]);
+
   const compassFor = (w) => compasses[w] || { x: 40, y: 40, rot: 0, show: true };
   const setCompassFor = (w, patch) =>
     setCompasses(prev => ({ ...prev, [w]: { ...compassFor(w), ...patch } }));
@@ -531,16 +546,36 @@ export default function WarehouseMap() {
               <button className="btn ghost" onClick={() => setEditingIdx(null)}>Cancel edit</button>
             )}
 
-            {racks.length > 0 && (
+            {rackGroups.length > 0 && (
               <div className="grp" style={{ marginTop: 14 }}>
-                <h2>Racks on map</h2>
-                {racks.map((r, i) => (
-                  <div className="rrow" key={i}>
-                    <span className="nm">{r.wh}-{r.rack}</span>
-                    <span className="sz">{r.colShelves.length}× · {r.colShelves.reduce((a, b) => a + b, 0)}</span>
-                    <button className="go" onClick={() => stageRef.current?.scrollTo({ left: Math.max(0, (r.x || 0) - 80), top: Math.max(0, (r.y || 0) - 80), behavior: 'smooth' })}>Find</button>
-                    <button className="ed" onClick={() => startEdit(i)}>Edit</button>
-                    <button className="rm" onClick={() => removeRack(i)}>Delete</button>
+                <h2>Racks {showingAll ? 'on map' : `in ${activeTab}`}</h2>
+                {rackGroups.map(g => (
+                  <div key={g.wh} className="rgroup">
+                    {showingAll && (
+                      <div className="ghead">
+                        <span>{g.wh}</span>
+                        <span className="gmeta">{g.racks.length} rack{g.racks.length === 1 ? '' : 's'} · {g.spots} spots</span>
+                      </div>
+                    )}
+                    {g.racks.map(({ cfg, idx }) => (
+                      <div className="rrow" key={idx}>
+                        <span className="nm">{cfg.rack}</span>
+                        <span className="sz">
+                          {cfg.colShelves.length} col · {cfg.colShelves.reduce((a, b) => a + b, 0)} spots
+                        </span>
+                        <div className="acts">
+                          <button className="go" title="Scroll to this rack"
+                            onClick={() => {
+                              if (cfg.wh !== activeTab && !showingAll) setActiveTab(cfg.wh);
+                              stageRef.current?.scrollTo({
+                                left: Math.max(0, (cfg.x || 0) - 80),
+                                top: Math.max(0, (cfg.y || 0) - 80), behavior: 'smooth' });
+                            }}>Find</button>
+                          <button className="ed" onClick={() => startEdit(idx)}>Edit</button>
+                          <button className="rm" onClick={() => removeRack(idx)}>Delete</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ))}
               </div>
@@ -810,14 +845,23 @@ const CSS = `
 .wmap .btn.primary:disabled { background:#b9c0ab; cursor:default; }
 .wmap .btn.ghost { background:#fff; color:var(--army); border:1px solid var(--army); }
 .wmap .btn.tiny { width:auto; padding:6px 12px; font-size:12px; margin:0; }
-.wmap .rrow { display:flex; align-items:center; gap:6px; padding:5px 0; border-bottom:1px solid var(--linem); font-size:12px; }
+.wmap .rgroup { margin-bottom:10px; }
+.wmap .rgroup:last-child { margin-bottom:0; }
+.wmap .ghead { display:flex; align-items:baseline; justify-content:space-between; gap:8px;
+  padding:4px 0 3px; margin-bottom:2px; border-bottom:2px solid var(--army); }
+.wmap .ghead span:first-child { font-size:12px; font-weight:800; color:var(--army); letter-spacing:.06em; }
+.wmap .gmeta { font-size:10px; color:var(--mutedm); font-weight:600; }
+.wmap .rrow { display:grid; grid-template-columns:1fr auto; grid-template-areas:"nm acts" "sz acts";
+  align-items:center; gap:0 8px; padding:6px 0; border-bottom:1px solid var(--linem); }
 .wmap .rrow:last-child { border-bottom:none; }
-.wmap .rrow .nm { flex:1; font-weight:700; color:var(--army); }
-.wmap .rrow .sz { color:var(--mutedm); font-size:11px; }
-.wmap .rrow button { border:1px solid var(--linem); background:#fff; border-radius:4px; cursor:pointer; font-size:11px; padding:2px 6px; font-weight:700; }
-.wmap .rrow .go:hover { background:var(--army); color:#fff; }
-.wmap .rrow .ed { color:#1565c0; } .wmap .rrow .ed:hover { background:#1565c0; color:#fff; }
-.wmap .rrow .rm { color:var(--hitm); } .wmap .rrow .rm:hover { background:var(--hitm); color:#fff; }
+.wmap .rrow .nm { grid-area:nm; font-weight:700; color:var(--army); font-size:12.5px; }
+.wmap .rrow .sz { grid-area:sz; color:var(--mutedm); font-size:10.5px; }
+.wmap .rrow .acts { grid-area:acts; display:flex; gap:4px; }
+.wmap .rrow button { border:1px solid var(--linem); background:#fff; border-radius:4px;
+  cursor:pointer; font-size:10.5px; padding:3px 7px; font-weight:700; }
+.wmap .rrow .go:hover { background:var(--army); color:#fff; border-color:var(--army); }
+.wmap .rrow .ed { color:#1565c0; } .wmap .rrow .ed:hover { background:#1565c0; color:#fff; border-color:#1565c0; }
+.wmap .rrow .rm { color:var(--hitm); } .wmap .rrow .rm:hover { background:var(--hitm); color:#fff; border-color:var(--hitm); }
 .wmap-main { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
 .wmap-bar { min-height:52px; flex-shrink:0; border-bottom:1px solid var(--linem); display:flex;
   align-items:center; gap:10px; padding:8px 14px; flex-wrap:wrap; }

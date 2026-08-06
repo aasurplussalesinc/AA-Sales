@@ -3,8 +3,24 @@ import { BrowserMultiFormatReader } from '@zxing/library';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
 
+// Two-step confirm: window.confirm() can be suppressed by the browser, which
+// silently aborts the action. Returns true only on the SECOND call within the
+// timeout, so the caller can prompt "Click again to confirm".
+function useTwoStep(ms = 4000) {
+  const [pending, setPending] = useState(null);
+  const armed = (key) => pending === key;
+  const confirmStep = (key) => {
+    if (pending === key) { setPending(null); return true; }
+    setPending(key);
+    setTimeout(() => setPending(p => (p === key ? null : p)), ms);
+    return false;
+  };
+  return { armed, confirmStep };
+}
+
 export default function PickLists() {
   const { organization } = useAuth();
+  const { armed, confirmStep } = useTwoStep();
   const [pickLists, setPickLists] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set()); // for bulk print
   const [items, setItems] = useState([]);
@@ -455,7 +471,7 @@ export default function PickLists() {
   };
 
   const deletePickList = async (list) => {
-    if (!confirm(`Delete pick list "${list.name}"?\n\nThis cannot be undone.`)) return;
+    if (!confirmStep('delpl:' + list.id)) return;
     
     await DB.deletePickList(list.id);
     loadData();
@@ -683,7 +699,7 @@ export default function PickLists() {
       message += 'No new items found. Quantities will be updated if changed.';
     }
     
-    if (!confirm(message)) return;
+    if (!confirmStep('plmsg')) return;
     
     // Update the pick list
     await DB.updatePickList(pickList.id, { items: updatedItems });
@@ -1051,7 +1067,7 @@ export default function PickLists() {
       return;
     }
     
-    if (!confirm('This will RESET all packing data and reload items fresh from the pick list.\n\nAll box assignments, triwall data, and packed checkboxes will be cleared.\n\nContinue?')) {
+    if (!confirmStep('resetpack')) {
       return;
     }
     
@@ -1725,7 +1741,7 @@ export default function PickLists() {
                 <button 
                   className="btn"
                   onClick={async () => {
-                    if (confirm('Reopen this pick list? Status will change back to "in progress".')) {
+                    if (confirmStep('reopen:' + list.id)) {
                       await DB.updatePickList(selectedList.id, { status: 'in_progress' });
                       setSelectedList(prev => ({ ...prev, status: 'in_progress' }));
                       loadData();

@@ -49,6 +49,7 @@ export default function WarehouseMap() {
   const [search, setSearch] = useState('');
   const [editingIdx, setEditingIdx] = useState(null);
   const [undo, setUndo] = useState(null);
+  const [peek, setPeek] = useState(null); // { code, rows[], total }
   const stageRef = useRef(null);
   const shellRef = useRef(null);
   const [shellH, setShellH] = useState(null);
@@ -297,6 +298,48 @@ export default function WarehouseMap() {
       spots: byWh[w].reduce((sum, e) => sum + e.cfg.colShelves.reduce((a, b) => a + b, 0), 0)
     }));
   }, [racks, showingAll, activeTab]);
+
+  // What's sitting in a given shelf — read from the location's inventory map,
+  // falling back to items whose primary location points here.
+  const openCell = (code) => {
+    const target = canon(code);
+    const loc = (locations || []).find(l => {
+      const raw = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
+      return canon(raw) === target;
+    });
+    const rows = [];
+    if (loc && loc.inventory) {
+      Object.keys(loc.inventory).forEach(itemId => {
+        const qty = parseInt(loc.inventory[itemId]) || 0;
+        if (qty <= 0) return;
+        const it = (items || []).find(i => i.id === itemId);
+        rows.push({
+          id: itemId,
+          name: it?.name || '(item not found)',
+          sku: it?.partNumber || '',
+          grade: it?.grade || '',
+          category: it?.category || '',
+          qty
+        });
+      });
+    }
+    // items that name this shelf as their location but aren't in the map
+    (items || []).forEach(it => {
+      if (!it.location || canon(it.location) !== target) return;
+      if (rows.some(r => r.id === it.id)) return;
+      rows.push({
+        id: it.id, name: it.name, sku: it.partNumber || '', grade: it.grade || '',
+        category: it.category || '', qty: null, unmapped: true
+      });
+    });
+    rows.sort((a, b) => (b.qty || 0) - (a.qty || 0));
+    setPeek({
+      code: loc ? (loc.locationCode || code) : code,
+      exists: !!loc,
+      rows,
+      total: rows.reduce((sum, r) => sum + (r.qty || 0), 0)
+    });
+  };
 
   const compassFor = (w) => compasses[w] || { x: 40, y: 40, rot: 0, show: true };
   const setCompassFor = (w, patch) =>
@@ -588,6 +631,10 @@ export default function WarehouseMap() {
             <div className="srch">
               <input value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search any order — &quot;w1 b2&quot;, &quot;b2 r1 w1&quot;, &quot;duffle od&quot;, or a SKU…" />
+              {search && (
+                <button className="srch-x" title="Clear search"
+                  onClick={() => setSearch('')}>×</button>
+              )}
             </div>
             {searchNote && <span className="snote">{searchNote}</span>}
             <div className="spacer" />
@@ -649,7 +696,7 @@ export default function WarehouseMap() {
                   offX={offX} offY={offY}
                   hitCodes={hitCodes} hitMode={hitMode} locationCodeSet={locationCodeSet}
                   onDrag={dragRack} onResize={resizeRack} onRotate={rotateRack}
-                  onDelete={removeRack} />
+                  onDelete={removeRack} onCellClick={openCell} />
               ))}
 
               {/* Quadrant labels on the All tab */}
@@ -697,6 +744,51 @@ export default function WarehouseMap() {
         </div>
       </div>
 
+      {peek && (
+        <div className="peek-back" onClick={() => setPeek(null)}>
+          <div className="peek" onClick={e => e.stopPropagation()}>
+            <div className="peek-head">
+              <div>
+                <div className="peek-code">📍 {peek.code}</div>
+                <div className="peek-sub">
+                  {peek.exists
+                    ? `${peek.rows.length} item${peek.rows.length === 1 ? '' : 's'} · ${peek.total} unit${peek.total === 1 ? '' : 's'}`
+                    : 'No matching Locations record'}
+                </div>
+              </div>
+              <button className="peek-x" onClick={() => setPeek(null)}>×</button>
+            </div>
+
+            <div className="peek-body">
+              {!peek.exists ? (
+                <div className="peek-empty">
+                  This shelf is drawn on the map but doesn't exist in Locations.
+                  Create it on the Locations tab if it's real.
+                </div>
+              ) : peek.rows.length === 0 ? (
+                <div className="peek-empty">Nothing stored here.</div>
+              ) : (
+                <table className="peek-tbl">
+                  <thead>
+                    <tr><th>SKU</th><th>Item</th><th>Cond</th><th style={{ textAlign: 'right' }}>Qty</th></tr>
+                  </thead>
+                  <tbody>
+                    {peek.rows.map(r => (
+                      <tr key={r.id}>
+                        <td className="mono">{r.sku}</td>
+                        <td>{r.name}{r.unmapped && <span className="tagwarn">not in map</span>}</td>
+                        <td>{r.grade}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{r.qty == null ? '—' : r.qty}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {undo && (
         <div className="undobar">
           <span>Deleted {undo.cfg.wh}-{undo.cfg.rack}</span>
@@ -718,7 +810,7 @@ function Stepper({ value, min, max, onChange }) {
   );
 }
 
-function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locationCodeSet, onDrag, onResize, onRotate, onDelete }) {
+function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locationCodeSet, onDrag, onResize, onRotate, onDelete, onCellClick }) {
   const boxRef = useRef(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
 
@@ -799,7 +891,9 @@ function Rack({ cfg, idx, canBuild, offX = 0, offY = 0, hitCodes, hitMode, locat
               ? <div className="cell void" key={cell.key} />
               : <div key={cell.key}
                   className={'cell' + (cell.hit ? (hitMode === 'item' ? ' item-hit' : ' hit') : (anyHit ? ' dim' : '')) + (!cell.known ? ' unknown' : '')}
-                  title={cell.known ? cell.code : `${cell.code} — no matching Locations record`}>
+                  title={cell.known ? `${cell.code} — click to see what's here` : `${cell.code} — no matching Locations record`}
+                  onClick={() => onCellClick && onCellClick(cell.code)}
+                  style={{ cursor: 'pointer' }}>
                   <span style={upright}>{cell.label}</span>
                 </div>)}
           </div>
@@ -874,8 +968,14 @@ const CSS = `
 .wmap-main { flex:1; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
 .wmap-bar { min-height:52px; flex-shrink:0; border-bottom:1px solid var(--linem); display:flex;
   align-items:center; gap:10px; padding:8px 14px; flex-wrap:wrap; }
-.wmap .srch { flex:0 1 320px; min-width:200px; }
-.wmap .srch input { width:100%; padding:7px 10px; border:1px solid var(--linem); border-radius:6px; font-size:13px; }
+.wmap .srch { flex:1 1 420px; min-width:240px; max-width:520px; position:relative; }
+.wmap .srch input { width:100%; padding:7px 30px 7px 10px; border:1px solid var(--linem);
+  border-radius:6px; font-size:13px; }
+.wmap .srch-x { position:absolute; right:6px; top:calc(50% - 10px); width:20px; height:20px;
+  border:none; background:var(--linem); color:var(--ink); border-radius:50%; cursor:pointer;
+  font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center;
+  font-weight:700; padding:0; }
+.wmap .srch-x:hover { background:var(--hitm); color:#fff; }
 .wmap .snote { font-size:12px; color:var(--army); font-weight:600; }
 .wmap .spacer { flex:1; }
 .wmap .warn { font-size:11px; color:#a8791a; background:#fbeecd; padding:3px 8px; border-radius:10px; font-weight:700; }
@@ -942,6 +1042,28 @@ const CSS = `
   letter-spacing:.08em; background:#fff; border:1px solid var(--linem); border-radius:6px;
   padding:3px 12px; z-index:5; }
 .wmap .cwh { font-size:10px; font-weight:800; color:var(--army); letter-spacing:.06em; margin-top:1px; }
+.wmap .peek-back { position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:9998;
+  display:flex; align-items:center; justify-content:center; padding:20px; }
+.wmap .peek { background:#fff; border-radius:12px; width:min(620px,96vw); max-height:80vh;
+  display:flex; flex-direction:column; box-shadow:0 10px 40px rgba(0,0,0,.3); overflow:hidden; }
+.wmap .peek-head { display:flex; align-items:flex-start; justify-content:space-between;
+  gap:12px; padding:16px 18px; background:var(--army); color:#fff; }
+.wmap .peek-code { font-size:17px; font-weight:800; letter-spacing:.03em; }
+.wmap .peek-sub { font-size:12px; opacity:.85; margin-top:2px; }
+.wmap .peek-x { background:rgba(255,255,255,.2); border:1px solid rgba(255,255,255,.5);
+  color:#fff; width:26px; height:26px; border-radius:50%; cursor:pointer; font-size:16px;
+  line-height:1; font-weight:700; padding:0; flex-shrink:0; }
+.wmap .peek-x:hover { background:var(--hitm); }
+.wmap .peek-body { overflow-y:auto; padding:4px 0; }
+.wmap .peek-empty { padding:28px 20px; text-align:center; color:var(--mutedm); font-size:13px; }
+.wmap .peek-tbl { width:100%; border-collapse:collapse; font-size:13px; }
+.wmap .peek-tbl th { text-align:left; font-size:11px; text-transform:uppercase;
+  letter-spacing:.05em; color:var(--mutedm); padding:8px 14px; border-bottom:1px solid var(--linem); }
+.wmap .peek-tbl td { padding:9px 14px; border-bottom:1px solid var(--linem); }
+.wmap .peek-tbl tr:last-child td { border-bottom:none; }
+.wmap .peek-tbl .mono { color:var(--mutedm); font-size:12px; }
+.wmap .tagwarn { background:#fbeecd; color:#a8791a; font-size:10px; font-weight:700;
+  padding:1px 6px; border-radius:8px; margin-left:6px; }
 .wmap .undobar { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:#26281f;
   color:#fff; padding:10px 14px; border-radius:8px; display:flex; align-items:center; gap:14px;
   font-size:13px; z-index:9999; box-shadow:0 4px 14px rgba(0,0,0,.3); }

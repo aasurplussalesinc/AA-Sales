@@ -3,8 +3,25 @@ import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
 
+// Two-step confirm: window.confirm() can be suppressed by the browser, which
+// silently aborts the action. Returns true only on the SECOND call within the
+// timeout, so the caller can prompt "Click again to confirm".
+function useTwoStep(ms = 4000) {
+  const [pending, setPending] = useState(null);
+  const armed = (key) => pending === key;
+  const confirmStep = (key) => {
+    if (pending === key) { setPending(null); return true; }
+    setPending(key);
+    setTimeout(() => setPending(p => (p === key ? null : p)), ms);
+    return false;
+  };
+  return { armed, confirmStep };
+}
+
 export default function PurchaseOrders() {
   const { userRole, organization } = useAuth();
+  const { armed, confirmStep } = useTwoStep();
+  const [pendingShip, setPendingShip] = useState(null); // two-step ship guard
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = userRole === 'admin';
   const isManager = userRole === 'manager';
@@ -394,7 +411,7 @@ export default function PurchaseOrders() {
   };
 
   const confirmAndCreatePickList = async (order) => {
-    if (!confirm('Confirm PO ' + order.poNumber + ' and create pick list?')) return;
+
     try { await DB.confirmPurchaseOrder(order.id); alert('Pick list created!'); loadData(); closeOrderModal(); }
     catch (error) { alert('Error: ' + error.message); }
   };
@@ -609,7 +626,14 @@ export default function PurchaseOrders() {
   };
 
   const markShippedInline = async (order) => {
-    if (!window.confirm(`Mark ${order.poNumber} as Shipped?`)) return;
+    // window.confirm can be suppressed by the browser, which silently aborted
+    // shipping (and its inventory decrement). Two-step click instead.
+    if (pendingShip !== order.id) {
+      setPendingShip(order.id);
+      setTimeout(() => setPendingShip(p => (p === order.id ? null : p)), 4000);
+      return;
+    }
+    setPendingShip(null);
     setProcessingOrder(prev => ({ ...prev, [order.id]: true }));
     try {
       for (const item of order.items || []) {
@@ -654,7 +678,7 @@ export default function PurchaseOrders() {
   };
 
   const markUnpaid = async (order) => {
-    if (!window.confirm(`Reverse payment for ${order.poNumber}? This sets it back to Unpaid (status returns to Shipped) and clears the recorded payment method.`)) return;
+    if (!confirmStep('revpay:' + order.id)) return;
     try {
       await DB.markPOUnpaid(order.id);
       await loadData();
@@ -724,7 +748,7 @@ export default function PurchaseOrders() {
   };
 
   const restoreCancelledOrder = async (order) => {
-    if (!window.confirm(`Restore "${order.poNumber}" to Draft status? You can edit and re-process it.`)) return;
+    if (!confirmStep('draft:' + order.id)) return;
     try {
       await DB.restorePOFromCancelled(order.id, 'draft');
       loadData();
@@ -1970,7 +1994,7 @@ ${labelsHtml}
                     <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white', fontSize: 12 }}>📦 Edit Packing</button>
                   )}
                   {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.packingComplete) && (
-                    <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: '#2e7d32', color: 'white', fontSize: 12 }}>🚚 Mark Shipped</button>
+                    <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: pendingShip === selectedOrder.id ? '#d98a1f' : '#2e7d32', color: 'white', fontSize: 12 }}>{pendingShip === selectedOrder.id ? 'Click again to confirm' : '🚚 Mark Shipped'}</button>
                   )}
                   {canEdit && selectedOrder.status === 'shipped' && (
                     <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#1565c0', color: 'white', fontSize: 12 }}>💰 Mark Paid</button>

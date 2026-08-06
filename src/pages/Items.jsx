@@ -28,8 +28,24 @@ function DropdownItem({ icon, label, color, onClick, danger }) {
   );
 }
 
+// Two-step confirm: window.confirm() can be suppressed by the browser, which
+// silently aborts the action. Returns true only on the SECOND call within the
+// timeout, so the caller can prompt "Click again to confirm".
+function useTwoStep(ms = 4000) {
+  const [pending, setPending] = useState(null);
+  const armed = (key) => pending === key;
+  const confirmStep = (key) => {
+    if (pending === key) { setPending(null); return true; }
+    setPending(key);
+    setTimeout(() => setPending(p => (p === key ? null : p)), ms);
+    return false;
+  };
+  return { armed, confirmStep };
+}
+
 export default function Items() {
   const { userRole, organization } = useAuth();
+  const { armed, confirmStep } = useTwoStep();
   const isAdmin = userRole === 'admin';
   const isManager = userRole === 'manager';
   const canEdit = isAdmin || isManager; // Admin and Manager can edit
@@ -579,7 +595,6 @@ export default function Items() {
     // Skip confirmation for Save & Add Another to speed up workflow
     if (!addAnother) {
       const confirmMsg = `Add new item?\n\nSKU: ${newItem.partNumber || '(none)'}\nName: ${newItem.name || '(none)'}\nCategory: ${newItem.category || '(none)'}\nTotal Stock: ${totalStock}\nPrice: $${newItem.price}\nLocation(s): ${locationInfo}`;
-      if (!confirm(confirmMsg)) return;
     }
 
     // Create the item
@@ -872,7 +887,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
   // multi-location view alongside received/moved stock. Safe + idempotent.
   const reconcileLocations = async () => {
     if (reconciling) return;
-    if (!window.confirm('Place imported stock into its location on the map?\n\nThis makes CSV-imported items show up properly in the multi-location view. It does not change any quantities or delete anything, and is safe to run more than once.')) return;
+    if (!confirmStep('reconcile')) return;
     setReconciling(true);
     try {
       const res = await DB.reconcileImportedLocations();
@@ -1147,7 +1162,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         }
         confirmMsg += '\n\nProceed?';
 
-        if (!confirm(confirmMsg)) {
+        if (!confirmStep('bulkimport')) {
           setImporting(false);
           return;
         }
@@ -1330,7 +1345,6 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     console.log('items count:', items.length);
     console.log('originalItems count:', originalItems.length);
     
-    if (!confirm('Save all changes to items?')) return;
     
     setSaving(true);
     try {
@@ -1401,7 +1415,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
   };
 
   const discardChanges = () => {
-    if (!confirm('Discard all unsaved changes?')) return;
+    if (!confirmStep('discard')) return;
     setItems(JSON.parse(JSON.stringify(originalItems)));
     setHasChanges(false);
     setLockedItemIds(new Set()); // Clear locked items after discarding
@@ -1422,7 +1436,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
       : Math.max(0, currentStock - qty);
     
     const action = adjustingItem.adjustType === 'add' ? 'Add' : 'Remove';
-    if (!confirm(`${action} ${qty} to ${adjustingItem.name || adjustingItem.partNumber}?\n\nCurrent: ${currentStock}\nNew: ${newStock}`)) {
+    if (!confirmStep('adjust:' + (adjustingItem?.id || 'x'))) {
       return;
     }
     
@@ -1445,7 +1459,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
   };
 
   const deleteItem = async (id) => {
-    if (!confirm('Delete this item?')) return;
+    if (!confirmStep('delitem:' + (item?.id || 'x'))) return;
     setItems(items.filter(item => item.id !== id));
     setHasChanges(true);
   };
@@ -1831,7 +1845,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
             title="Place CSV-imported stock into its location on the map, so imported items show up in the multi-location view. Safe to run anytime."
             style={{ background: '#6b7f3e', color: 'var(--text-on-dark)' }}
           >
-            {reconciling ? '⏳ Reconciling…' : '🔧 Fix imported locations'}
+            {reconciling ? '⏳ Reconciling…' : armed('reconcile') ? 'Click again to run' : '🔧 Fix imported locations'}
           </button>
         )}
         

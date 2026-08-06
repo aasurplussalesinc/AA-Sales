@@ -12,6 +12,7 @@ export default function Locations() {
   const canEdit = isAdmin || isManager;
   
   const [locations, setLocations] = useState([]);
+  const [pendingDelete, setPendingDelete] = useState(null); // two-step delete guard
   const [newLocation, setNewLocation] = useState({ warehouse: 'W1', rack: '1', letter: 'A', shelf: '1' });
   const [items, setItems] = useState([]);
   const [viewingLocation, setViewingLocation] = useState(null);
@@ -113,6 +114,20 @@ export default function Locations() {
 
   // Format location code for display (uses the stored code when present, so
   // existing locations keep the format they were created with)
+  // Canonical comparison so "W1-R1-A-1" and "W1-R1-A1" are recognised as the
+  // SAME shelf. Exact string matching let both formats exist as separate
+  // records for one physical location, which split inventory between them.
+  const sameCode = (a, b) => {
+    if (!a || !b) return false;
+    const c = v => (DB.canonicalLocationCode ? DB.canonicalLocationCode(v) : String(v)).toUpperCase();
+    return c(a) === c(b);
+  };
+  const findDuplicate = (code, excludeId) => locations.find(l => {
+    if (excludeId && l.id === excludeId) return false;
+    const raw = l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`;
+    return sameCode(raw, code);
+  });
+
   const formatLocation = (loc) => {
     if (loc.locationCode) return loc.locationCode;
     return DB.buildLocationCode(loc, locSchema);
@@ -145,13 +160,12 @@ export default function Locations() {
     const locationCode = DB.buildLocationCode(newLocation, locSchema);
     
     // Check for duplicate
-    const exists = locations.find(loc => loc.locationCode === locationCode);
+    const exists = findDuplicate(locationCode);
     if (exists) {
-      alert(`Location ${locationCode} already exists!`);
+      alert(`Location ${locationCode} already exists (as "${exists.locationCode || formatLocation(exists)}").`);
       return;
     }
     
-    if (!confirm(`Add new location: ${locationCode}?`)) return;
     
     const qrCode = `LOC-${locationCode}-${Date.now()}`;
     
@@ -212,18 +226,16 @@ export default function Locations() {
   const saveEditLocation = async () => {
     if (!editingLocation) return;
     
-    const newLocationCode = `${editingLocation.warehouse}-R${editingLocation.rack}-${editingLocation.letter}${editingLocation.shelf}`;
+    // Build from the org's schema (was hardcoded, which ignored custom nomenclature)
+    const newLocationCode = DB.buildLocationCode(editingLocation, locSchema);
     
     // Check for duplicate (excluding current location)
-    const exists = locations.find(loc => 
-      loc.id !== editingLocation.id && loc.locationCode === newLocationCode
-    );
+    const exists = findDuplicate(newLocationCode, editingLocation.id);
     if (exists) {
       alert(`Location ${newLocationCode} already exists!`);
       return;
     }
     
-    if (!confirm(`Update location from ${editingLocation.locationCode || 'Unknown'} to ${newLocationCode}?`)) return;
     
     setSaving(true);
     try {
@@ -252,7 +264,14 @@ export default function Locations() {
       return;
     }
     
-    if (!confirm(`Delete location ${formatLocation(loc)}?`)) return;
+    // window.confirm can be suppressed by the browser, which silently aborted
+    // deletes. Use an explicit two-step click instead.
+    if (pendingDelete !== loc.id) {
+      setPendingDelete(loc.id);
+      setTimeout(() => setPendingDelete(p => (p === loc.id ? null : p)), 4000);
+      return;
+    }
+    setPendingDelete(null);
     
     await DB.deleteLocation(loc.id);
     loadData();
@@ -286,7 +305,12 @@ export default function Locations() {
       return;
     }
     
-    if (!confirm(`Delete ${selectedLocations.length} selected location(s)?`)) return;
+    if (pendingDelete !== '__bulk__') {
+      setPendingDelete('__bulk__');
+      setTimeout(() => setPendingDelete(p => (p === '__bulk__' ? null : p)), 4000);
+      return;
+    }
+    setPendingDelete(null);
     
     try {
       let deleted = 0;
@@ -337,10 +361,11 @@ export default function Locations() {
           // Strip "R" prefix from rack if present (e.g., "R1" -> "1")
           rack = rack.replace(/^R/i, '');
           
-          const locationCode = `${warehouse}-R${rack}-${letter}${shelf}`;
+          // Use the org's schema so bulk-generate matches single-add exactly
+          const locationCode = DB.buildLocationCode({ warehouse, rack, letter, shelf }, locSchema);
           
           // Check if exists
-          const exists = locations.find(loc => loc.locationCode === locationCode);
+          const exists = findDuplicate(locationCode);
           if (exists) {
             skipped++;
             continue;
@@ -366,7 +391,7 @@ export default function Locations() {
             const [, warehouse, rack, letter, shelf] = match;
             
             // Check if exists
-            const exists = locations.find(loc => loc.locationCode === locationCode);
+            const exists = findDuplicate(locationCode);
             if (exists) {
               skipped++;
               continue;
@@ -835,7 +860,9 @@ W2,2,C,3`;
                 className="btn btn-danger btn-sm"
                 onClick={deleteSelectedLocations}
               >
-                🗑️ Delete Selected
+                {pendingDelete === '__bulk__'
+                  ? `Click again to delete ${selectedLocations.length}`
+                  : '🗑️ Delete Selected'}
               </button>
               <button 
                 className="btn btn-sm"
@@ -926,8 +953,9 @@ W2,2,C,3`;
                           <button 
                             className="btn btn-danger btn-sm"
                             onClick={() => deleteLocation(loc)}
+                            title={pendingDelete === loc.id ? 'Click again to confirm' : 'Delete this location'}
                           >
-                            Delete
+                            {pendingDelete === loc.id ? 'Click again to confirm' : 'Delete'}
                           </button>
                         </>
                       )}

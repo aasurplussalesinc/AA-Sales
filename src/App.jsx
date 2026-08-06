@@ -12,6 +12,7 @@ import Movements from './pages/Movements';
 import ActivityLog from './pages/ActivityLog';
 import PickLists from './pages/PickLists';
 import Receiving from './pages/Receiving';
+import WarehouseMap from './pages/WarehouseMap';
 import Reports from './pages/Reports';
 import PurchaseOrders from './pages/PurchaseOrders';
 import Customers from './pages/Customers';
@@ -162,6 +163,7 @@ function NavBar() {
       <div className="nav-tabs">
         <Link to="/" className={`nav-tab ${isActive('/') ? 'active' : ''}`}>📊 Dashboard</Link>
         <Link to="/receiving" className={`nav-tab ${isActive('/receiving') ? 'active' : ''}`}>📥 Receiving</Link>
+        <Link to="/warehouse-map" className={`nav-tab ${isActive('/warehouse-map') ? 'active' : ''}`}>🗺️ Map</Link>
         <Link to="/locations" className={`nav-tab ${isActive('/locations') ? 'active' : ''}`}>📍 Locations</Link>
         <Link to="/items" className={`nav-tab ${isActive('/items') ? 'active' : ''}`}>📦 Items</Link>
         {tier.canUsePickLists && <Link to="/pick-lists" className={`nav-tab ${isActive('/pick-lists') ? 'active' : ''}`}>📋 Pick Lists</Link>}
@@ -287,6 +289,11 @@ function AppRoutes() {
       <Route path="/items" element={
         <ProtectedRoute>
           <AppLayout><Items /></AppLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/warehouse-map" element={
+        <ProtectedRoute>
+          <AppLayout><WarehouseMap /></AppLayout>
         </ProtectedRoute>
       } />
       <Route path="/locations" element={

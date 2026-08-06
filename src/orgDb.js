@@ -734,6 +734,55 @@ export const OrgDB = {
   // canonical, merges any records that collapse to the same shelf (summing
   // their inventory), and repoints item.location strings to match.
   // dryRun: true reports what WOULD happen without writing anything.
+  // ── Read-only diagnostic: where does each item's stock ACTUALLY sit? ──────
+  // Compares item.location (the string on the item) against the location
+  // inventory maps that hold it. Reports disagreements. Changes nothing.
+  async auditItemLocations() {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const items = await this.getItems();
+    const locations = await this.getLocations();
+
+    // itemId -> [{ code, qty }]
+    const held = {};
+    locations.forEach(l => {
+      const code = this.canonicalLocationCode(l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`);
+      const inv = l.inventory || {};
+      Object.keys(inv).forEach(id => {
+        const q = parseInt(inv[id]) || 0;
+        if (q > 0) (held[id] = held[id] || []).push({ code, qty: q });
+      });
+    });
+
+    const out = { ok: 0, orphan: [], elsewhere: [], mismatchQty: [], noLocation: 0 };
+
+    items.forEach(it => {
+      const stock = parseInt(it.stock) || 0;
+      const claim = it.location ? this.canonicalLocationCode(it.location) : '';
+      const spots = held[it.id] || [];
+      const inMaps = spots.reduce((s, x) => s + x.qty, 0);
+
+      if (!claim && spots.length === 0) { out.noLocation++; return; }
+
+      const atClaim = spots.find(x => x.code === claim);
+
+      if (claim && spots.length === 0 && stock > 0) {
+        // says it lives somewhere, but no map holds it at all
+        out.orphan.push({ sku: it.partNumber, name: it.name, claim, stock });
+      } else if (claim && !atClaim && spots.length > 0) {
+        // its location field points one place, its stock is somewhere else
+        out.elsewhere.push({ sku: it.partNumber, name: it.name, claim, stock,
+                             actually: spots.map(x => `${x.code}:${x.qty}`).join(', ') });
+      } else if (stock !== inMaps && inMaps > 0) {
+        out.mismatchQty.push({ sku: it.partNumber, name: it.name, stock, inMaps,
+                               spots: spots.map(x => `${x.code}:${x.qty}`).join(', ') });
+      } else {
+        out.ok++;
+      }
+    });
+
+    return out;
+  },
+
   async repairLocationCodes(dryRun) {
     if (!currentOrgId) throw new Error('No organization selected');
     const locations = await this.getLocations();

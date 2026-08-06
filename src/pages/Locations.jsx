@@ -144,6 +144,33 @@ export default function Locations() {
 
   // One-time cleanup: canonicalise every location code and merge duplicates.
   const [repairing, setRepairing] = useState(false);
+  const runAudit = async () => {
+    if (repairing) return;
+    setRepairing(true);
+    try {
+      const r = await DB.auditItemLocations();
+      const fmt = (arr, n) => arr.slice(0, n).map(x =>
+        `  ${x.sku || '(no sku)'} ${x.name}\n     claims ${x.claim || '—'} · stock ${x.stock}` +
+        (x.actually ? `\n     actually at ${x.actually}` : '') +
+        (x.spots ? `\n     maps hold ${x.inMaps} at ${x.spots}` : '')
+      ).join('\n');
+      alert(
+        'ITEM / LOCATION AUDIT (read-only)\n\n' +
+        `✅ Consistent: ${r.ok}\n` +
+        `⚪ No location at all: ${r.noLocation}\n` +
+        `🟠 Claims a shelf but NO map holds it: ${r.orphan.length}\n` +
+        `🔴 Location field disagrees with where stock sits: ${r.elsewhere.length}\n` +
+        `🟡 Stock total ≠ sum of its map entries: ${r.mismatchQty.length}\n` +
+        (r.orphan.length ? `\n— Orphans (first 5) —\n${fmt(r.orphan, 5)}\n` : '') +
+        (r.elsewhere.length ? `\n— Disagreements (first 5) —\n${fmt(r.elsewhere, 5)}\n` : '') +
+        (r.mismatchQty.length ? `\n— Qty mismatches (first 5) —\n${fmt(r.mismatchQty, 5)}` : '')
+      );
+    } catch (e) {
+      alert('Audit failed: ' + (e.message || e));
+    }
+    setRepairing(false);
+  };
+
   const runRepair = async (dryRun) => {
     if (repairing) return;
     setRepairing(true);
@@ -728,6 +755,11 @@ W2,2,C,3`;
         </button>
         {userRole === 'admin' && (
           <>
+            <button className="btn" onClick={runAudit} disabled={repairing}
+              title="Read-only: shows where each item's stock actually sits vs where its location field claims"
+              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
+              {repairing ? '⏳ Auditing…' : '🩺 Audit item locations'}
+            </button>
             <button className="btn" onClick={() => runRepair(true)} disabled={repairing}
               title="Preview the cleanup without changing anything"
               style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>

@@ -737,57 +737,55 @@ export const OrgDB = {
   // ── Read-only diagnostic: where does each item's stock ACTUALLY sit? ──────
   // Compares item.location (the string on the item) against the location
   // inventory maps that hold it. Reports disagreements. Changes nothing.
+  // Read-only health check for the ITEM-OWNED model.
+  // With one source of truth there's no second list to compare against, so the
+  // meaningful checks are: does stock equal the sum of its shelves, does every
+  // shelf it names actually exist, and is any stock unplaced.
   async auditItemLocations() {
     if (!currentOrgId) throw new Error('No organization selected');
     const items = await this.getItems();
     const locations = await this.getLocations();
 
-    // itemId -> [{ code, qty }]
-    const held = {};
+    const realCodes = new Set();
     locations.forEach(l => {
-      const code = this.canonicalLocationCode(l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`);
-      const inv = l.inventory || {};
-      Object.keys(inv).forEach(id => {
-        const q = parseInt(inv[id]) || 0;
-        if (q > 0) (held[id] = held[id] || []).push({ code, qty: q });
-      });
+      const c = this.canonicalLocationCode(l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`);
+      if (c) realCodes.add(c);
     });
 
-    const out = { ok: 0, orphan: [], elsewhere: [], mismatchQty: [], noLocation: 0 };
+    const out = { ok: 0, noStock: 0, sumMismatch: [], unknownShelf: [], unplaced: [], staged: 0, stagedUnits: 0 };
 
     items.forEach(it => {
       const stock = parseInt(it.stock) || 0;
-      const claim = it.location ? this.canonicalLocationCode(it.location) : '';
-      const spots = held[it.id] || [];
-      const inMaps = spots.reduce((s, x) => s + x.qty, 0);
+      const entries = this.itemLocations(it);
+      const sum = entries.reduce((s, e) => s + e.qty, 0);
 
-      if (!claim && spots.length === 0) { out.noLocation++; return; }
+      if (stock === 0 && entries.length === 0) { out.noStock++; return; }
 
-      const atClaim = spots.find(x => x.code === claim);
-
-      if (claim && spots.length === 0 && stock > 0) {
-        // says it lives somewhere, but no map holds it at all
-        out.orphan.push({ sku: it.partNumber, name: it.name, claim, stock });
-      } else if (claim && !atClaim && spots.length > 0) {
-        // its location field points one place, its stock is somewhere else
-        out.elsewhere.push({ sku: it.partNumber, name: it.name, claim, stock,
-                             actually: spots.map(x => `${x.code}:${x.qty}`).join(', ') });
-      } else if (stock !== inMaps && inMaps > 0) {
-        out.mismatchQty.push({ sku: it.partNumber, name: it.name, stock, inMaps,
-                               spots: spots.map(x => `${x.code}:${x.qty}`).join(', ') });
-      } else {
-        out.ok++;
+      // stock must equal the sum of its shelves — the core invariant
+      if (stock !== sum) {
+        out.sumMismatch.push({ sku: it.partNumber, name: it.name, stock, sum,
+                               spots: entries.map(e => `${e.code}:${e.qty}`).join(', ') });
+        return;
       }
+      // every named shelf should exist as a Locations record
+      const bad = entries.filter(e => e.code !== this.STAGING_CODE && !realCodes.has(e.code));
+      if (bad.length) {
+        out.unknownShelf.push({ sku: it.partNumber, name: it.name, stock,
+                                spots: bad.map(e => e.code).join(', ') });
+        return;
+      }
+      if (stock > 0 && entries.length === 0) {
+        out.unplaced.push({ sku: it.partNumber, name: it.name, stock });
+        return;
+      }
+      const st = entries.find(e => e.code === this.STAGING_CODE);
+      if (st) { out.staged++; out.stagedUnits += st.qty; }
+      out.ok++;
     });
 
     return out;
   },
 
-  // ── Repair ONLY the safe bucket: items whose location field names a shelf
-  // but whose stock isn't recorded in ANY location map. Writing it to the
-  // named shelf cannot double-count, because nothing else holds it.
-  // Items whose stock sits on a DIFFERENT shelf are deliberately left alone —
-  // that needs a human decision, not a guess.
   async placeOrphanStock(dryRun) {
     if (!currentOrgId) throw new Error('No organization selected');
     const items = await this.getItems();

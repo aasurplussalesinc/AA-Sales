@@ -37,7 +37,11 @@ export default function Reports() {
   const [phCustomerId, setPhCustomerId] = useState('all');
   const [phSearch, setPhSearch] = useState('');
   const [phPaidOnly, setPhPaidOnly] = useState(false);
-  const [phView, setPhView] = useState('detail'); // 'detail' = every line, 'summary' = per-item totals
+  const [phView, setPhView] = useState('detail');
+  const [salesPeriod, setSalesPeriod] = useState('ytd');
+  const [salesFrom, setSalesFrom] = useState('');
+  const [salesTo, setSalesTo] = useState('');
+  const [salesGroup, setSalesGroup] = useState('month'); // 'detail' = every line, 'summary' = per-item totals
 
   useEffect(() => {
     loadAllData();
@@ -226,9 +230,128 @@ export default function Reports() {
     { id: 'lowstock', label: '⚠️ Low Stock' },
     { id: 'deadstock', label: '💀 Dead Stock' },
     { id: 'turnover', label: '📈 Turnover' },
+    { id: 'sales', label: '💵 Sales' },
     { id: 'purchases', label: '🧾 Customer Purchases' },
     { id: 'custom', label: '📋 Custom' }
   ];
+
+  // ── SALES REPORT ────────────────────────────────────────────────────────
+  const SALE_STATUSES = new Set(['invoiced', 'shipped', 'paid', 'packed', 'completed']);
+  const saleDate = (o) => o.paidAt || o.shippedAt || o.invoiceDate || o.createdAt || 0;
+
+  // Resolve the chosen period into a [start, end) window.
+  const salesRange = (() => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth();
+    const startOf = (yy, mm, dd) => new Date(yy, mm, dd || 1).getTime();
+    const endOfDay = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x.getTime(); };
+    switch (salesPeriod) {
+      case 'mtd':      return { from: startOf(y, m), to: endOfDay(now), label: 'Month to date' };
+      case 'lastmonth':return { from: startOf(y, m - 1), to: startOf(y, m) - 1, label: 'Last month' };
+      case 'ytd':      return { from: startOf(y, 0), to: endOfDay(now), label: 'Year to date' };
+      case 'lastyear': return { from: startOf(y - 1, 0), to: startOf(y, 0) - 1, label: `${y - 1}` };
+      case 'prev2':    return { from: startOf(y - 2, 0), to: startOf(y - 1, 0) - 1, label: `${y - 2}` };
+      case 'last30':   return { from: now.getTime() - 30 * 864e5, to: endOfDay(now), label: 'Last 30 days' };
+      case 'last90':   return { from: now.getTime() - 90 * 864e5, to: endOfDay(now), label: 'Last 90 days' };
+      case 'all':      return { from: 0, to: endOfDay(now), label: 'All time' };
+      case 'custom':   return {
+        from: salesFrom ? new Date(salesFrom + 'T00:00:00').getTime() : 0,
+        to:   salesTo   ? endOfDay(new Date(salesTo + 'T00:00:00')) : endOfDay(now),
+        label: `${salesFrom || 'start'} → ${salesTo || 'today'}`
+      };
+      default: return { from: 0, to: endOfDay(now), label: 'All time' };
+    }
+  })();
+
+  // Every qualifying order in the window, with its computed totals.
+  const salesOrders = (orders || [])
+    .filter(o => SALE_STATUSES.has(o.status))
+    .map(o => {
+      const when = saleDate(o);
+      const lines = (o.items || []).map(li => ({
+        qty: parseInt(li.qtyShipped) || parseInt(li.quantity) || 0,
+        price: parseFloat(li.unitPrice) || 0,
+        sku: li.partNumber || '', name: li.itemName || '',
+        cost: parseFloat(li.cost) || 0
+      }));
+      const subtotal = lines.reduce((s, l) => s + l.qty * l.price, 0);
+      const cogs = lines.reduce((s, l) => s + l.qty * l.cost, 0);
+      const units = lines.reduce((s, l) => s + l.qty, 0);
+      const tax = parseFloat(o.tax) || 0;
+      const shipping = parseFloat(o.shipping) || 0;
+      const discount = parseFloat(o.discount) || 0;
+      return {
+        id: o.id, when, po: o.poNumber || '', customer: o.customerName || '',
+        customerId: o.customerId || '', status: o.status,
+        payment: o.paymentMethod || '', lines, units,
+        subtotal, tax, shipping, discount, cogs,
+        total: subtotal + tax + shipping - discount
+      };
+    })
+    .filter(o => o.when >= salesRange.from && o.when <= salesRange.to)
+    .sort((a, b) => b.when - a.when);
+
+  const salesTotals = salesOrders.reduce((a, o) => {
+    a.orders += 1; a.units += o.units; a.subtotal += o.subtotal;
+    a.tax += o.tax; a.shipping += o.shipping; a.discount += o.discount;
+    a.cogs += o.cogs; a.revenue += o.total;
+    return a;
+  }, { orders: 0, units: 0, subtotal: 0, tax: 0, shipping: 0, discount: 0, cogs: 0, revenue: 0 });
+  salesTotals.avgOrder = salesTotals.orders ? salesTotals.revenue / salesTotals.orders : 0;
+  salesTotals.margin = salesTotals.subtotal ? ((salesTotals.subtotal - salesTotals.cogs) / salesTotals.subtotal) * 100 : 0;
+
+  // Break the window into buckets (day / month / year) for the trend table.
+  const salesBuckets = (() => {
+    const keyOf = (ts) => {
+      const d = new Date(ts);
+      if (salesGroup === 'day') return d.toLocaleDateString();
+      if (salesGroup === 'year') return String(d.getFullYear());
+      return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+    };
+    const map = new Map();
+    salesOrders.forEach(o => {
+      const k = keyOf(o.when);
+      const b = map.get(k) || { key: k, ts: o.when, orders: 0, units: 0, revenue: 0, subtotal: 0, cogs: 0 };
+      b.orders += 1; b.units += o.units; b.revenue += o.total;
+      b.subtotal += o.subtotal; b.cogs += o.cogs;
+      if (o.when > b.ts) b.ts = o.when;
+      map.set(k, b);
+    });
+    return [...map.values()].sort((a, b) => b.ts - a.ts);
+  })();
+
+  // Top customers and top items within the window.
+  const topCustomers = (() => {
+    const m = new Map();
+    salesOrders.forEach(o => {
+      const k = o.customer || '(no customer)';
+      const c = m.get(k) || { name: k, orders: 0, revenue: 0, units: 0 };
+      c.orders += 1; c.revenue += o.total; c.units += o.units;
+      m.set(k, c);
+    });
+    return [...m.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+  })();
+
+  const topItems = (() => {
+    const m = new Map();
+    salesOrders.forEach(o => o.lines.forEach(l => {
+      if (!l.qty) return;
+      const k = (l.sku || '') + '|' + l.name;
+      const it = m.get(k) || { sku: l.sku, name: l.name, units: 0, revenue: 0 };
+      it.units += l.qty; it.revenue += l.qty * l.price;
+      m.set(k, it);
+    }));
+    return [...m.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
+  })();
+
+  const exportSales = () => {
+    exportToCSV(salesOrders, `sales-${salesPeriod}`,
+      ['Date', 'Order #', 'Customer', 'Status', 'Payment', 'Units', 'Subtotal', 'Discount', 'Tax', 'Shipping', 'Total'],
+      (o) => [
+        o.when ? new Date(o.when).toLocaleDateString() : '', o.po, o.customer, o.status, o.payment,
+        o.units, o.subtotal.toFixed(2), o.discount.toFixed(2), o.tax.toFixed(2), o.shipping.toFixed(2), o.total.toFixed(2)
+      ]);
+  };
 
   // ── Customer purchase history: flatten every order line into one row ──
   // Only orders that represent a real sale (invoiced/shipped/paid), never drafts.
@@ -784,6 +907,147 @@ export default function Reports() {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Sales Tab */}
+      {activeTab === 'sales' && (
+        <div>
+          <h3 style={{ marginBottom: 4 }}>💵 Sales</h3>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+            Showing <strong>{salesRange.label}</strong>
+          </div>
+
+          {/* period selector */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            {[
+              ['mtd', 'Month to date'], ['lastmonth', 'Last month'],
+              ['ytd', 'Year to date'], ['lastyear', 'Last year'], ['prev2', '2 years ago'],
+              ['last30', 'Last 30 days'], ['last90', 'Last 90 days'],
+              ['all', 'All time'], ['custom', 'Custom…']
+            ].map(([id, label]) => (
+              <button key={id} onClick={() => setSalesPeriod(id)}
+                style={{
+                  padding: '6px 13px', borderRadius: 16, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  border: salesPeriod === id ? '1px solid #4a5d23' : '1px solid var(--border)',
+                  background: salesPeriod === id ? '#4a5d23' : 'transparent',
+                  color: salesPeriod === id ? '#fff' : 'var(--text-secondary)'
+                }}>{label}</button>
+            ))}
+          </div>
+
+          {salesPeriod === 'custom' && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14 }}>
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>From</label>
+              <input type="date" value={salesFrom} onChange={e => setSalesFrom(e.target.value)}
+                style={{ padding: 6, borderRadius: 6, border: '1px solid var(--border)' }} />
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>To</label>
+              <input type="date" value={salesTo} onChange={e => setSalesTo(e.target.value)}
+                style={{ padding: 6, borderRadius: 6, border: '1px solid var(--border)' }} />
+            </div>
+          )}
+
+          {/* KPI cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, marginBottom: 18 }}>
+            {[
+              ['Revenue', `$${salesTotals.revenue.toFixed(2)}`, '#2e7d32'],
+              ['Orders', salesTotals.orders, '#1565c0'],
+              ['Units sold', salesTotals.units, '#6b7f3e'],
+              ['Avg order', `$${salesTotals.avgOrder.toFixed(2)}`, '#7b1fa2'],
+              ['Product sales', `$${salesTotals.subtotal.toFixed(2)}`, '#00838f'],
+              ['Shipping billed', `$${salesTotals.shipping.toFixed(2)}`, '#d98a1f'],
+              ['Tax', `$${salesTotals.tax.toFixed(2)}`, '#8d6e63'],
+              ['Gross margin', salesTotals.cogs > 0 ? `${salesTotals.margin.toFixed(1)}%` : '—', '#c62828']
+            ].map(([label, val, color]) => (
+              <div key={label} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
+                <div style={{ fontSize: 21, fontWeight: 800, color, marginTop: 3 }}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Group by</span>
+            {[['day', 'Day'], ['month', 'Month'], ['year', 'Year']].map(([id, l]) => (
+              <button key={id} onClick={() => setSalesGroup(id)}
+                style={{
+                  padding: '4px 12px', borderRadius: 14, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  border: salesGroup === id ? '1px solid #4a5d23' : '1px solid var(--border)',
+                  background: salesGroup === id ? '#4a5d23' : 'transparent',
+                  color: salesGroup === id ? '#fff' : 'var(--text-secondary)'
+                }}>{l}</button>
+            ))}
+            <button className="btn" onClick={exportSales} disabled={!salesOrders.length}
+              style={{ marginLeft: 'auto', background: '#17a2b8', color: 'var(--text-on-dark)' }}>
+              ⬇️ Export CSV
+            </button>
+          </div>
+
+          {/* trend */}
+          <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 20 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-surface-2)', textAlign: 'left' }}>
+                  {['Period', 'Orders', 'Units', 'Product sales', 'Revenue'].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', borderBottom: '2px solid var(--border)' }}>{h}</th>))}
+                </tr>
+              </thead>
+              <tbody>
+                {salesBuckets.length === 0 ? (
+                  <tr><td colSpan={5} style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>No sales in this period.</td></tr>
+                ) : salesBuckets.map(b => (
+                  <tr key={b.key} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '6px 10px', fontWeight: 600 }}>{b.key}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right' }}>{b.orders}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right' }}>{b.units}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right' }}>${b.subtotal.toFixed(2)}</td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>${b.revenue.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* top customers + items */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(320px,1fr))', gap: 16 }}>
+            <div>
+              <h4 style={{ marginBottom: 8 }}>🏆 Top customers</h4>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {topCustomers.length === 0 ? (
+                      <tr><td style={{ padding: 16, color: 'var(--text-muted)', textAlign: 'center' }}>No data</td></tr>
+                    ) : topCustomers.map(c => (
+                      <tr key={c.name} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '6px 10px' }}>{c.name}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>{c.orders} ord</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>${c.revenue.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div>
+              <h4 style={{ marginBottom: 8 }}>📦 Top items</h4>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {topItems.length === 0 ? (
+                      <tr><td style={{ padding: 16, color: 'var(--text-muted)', textAlign: 'center' }}>No data</td></tr>
+                    ) : topItems.map(i => (
+                      <tr key={i.sku + i.name} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '6px 10px', color: 'var(--text-muted)', fontSize: 12 }}>{i.sku}</td>
+                        <td style={{ padding: '6px 10px' }}>{i.name}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>{i.units}</td>
+                        <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>${i.revenue.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

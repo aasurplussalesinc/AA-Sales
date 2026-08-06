@@ -150,71 +150,26 @@ export default function Locations() {
     try {
       const r = await DB.auditItemLocations();
       const fmt = (arr, n) => arr.slice(0, n).map(x =>
-        `  ${x.sku || '(no sku)'} ${x.name}\n     claims ${x.claim || '—'} · stock ${x.stock}` +
-        (x.actually ? `\n     actually at ${x.actually}` : '') +
-        (x.spots ? `\n     maps hold ${x.inMaps} at ${x.spots}` : '')
+        `  ${x.sku || '(no sku)'} ${x.name}` +
+        (x.sum !== undefined ? `\n     stock ${x.stock} vs shelves ${x.sum} (${x.spots})` : '') +
+        (x.spots && x.sum === undefined ? `\n     unknown shelf: ${x.spots}` : '')
       ).join('\n');
+      const clean = r.sumMismatch.length === 0 && r.unknownShelf.length === 0 && r.unplaced.length === 0;
       alert(
-        'ITEM / LOCATION AUDIT (read-only)\n\n' +
-        `✅ Consistent: ${r.ok}\n` +
-        `⚪ No location at all: ${r.noLocation}\n` +
-        `🟠 Claims a shelf but NO map holds it: ${r.orphan.length}\n` +
-        `🔴 Location field disagrees with where stock sits: ${r.elsewhere.length}\n` +
-        `🟡 Stock total ≠ sum of its map entries: ${r.mismatchQty.length}\n` +
-        (r.orphan.length ? `\n— Orphans (first 5) —\n${fmt(r.orphan, 5)}\n` : '') +
-        (r.elsewhere.length ? `\n— Disagreements (first 5) —\n${fmt(r.elsewhere, 5)}\n` : '') +
-        (r.mismatchQty.length ? `\n— Qty mismatches (first 5) —\n${fmt(r.mismatchQty, 5)}` : '')
+        'INVENTORY HEALTH CHECK (read-only)\n' +
+        'One source of truth: quantities live on the item.\n\n' +
+        (clean ? '✅ ALL CONSISTENT — nothing to fix.\n\n' : '') +
+        `✅ Healthy items: ${r.ok}\n` +
+        `⚪ No stock (untouched): ${r.noStock}\n` +
+        `📋 Items with units in STAGING: ${r.staged} (${r.stagedUnits} units)\n\n` +
+        `🔴 Stock ≠ sum of its shelves: ${r.sumMismatch.length}\n` +
+        `🟠 Names a shelf that doesn't exist: ${r.unknownShelf.length}\n` +
+        `🟡 Has stock but no shelf at all: ${r.unplaced.length}` +
+        (r.sumMismatch.length ? `\n\n— Sum mismatches —\n${fmt(r.sumMismatch, 5)}` : '') +
+        (r.unknownShelf.length ? `\n\n— Unknown shelves —\n${fmt(r.unknownShelf, 5)}` : '')
       );
     } catch (e) {
       alert('Audit failed: ' + (e.message || e));
-    }
-    setRepairing(false);
-  };
-
-  const runUnify = async (dryRun) => {
-    if (repairing) return;
-    setRepairing(true);
-    try {
-      const r = await DB.migrateToItemOwnedInventory(dryRun);
-      const preview = r.report.slice(0, 12).join('\n');
-      const more = r.report.length > 12 ? `\n…and ${r.report.length - 12} more` : '';
-      alert(
-        (dryRun ? 'DRY RUN — nothing changed.\n\n' : 'Done.\n\n') +
-        'ONE SOURCE OF TRUTH — inventory now lives on the ITEM.\n\n' +
-        `Items converted: ${r.converted}\n` +
-        `Items with units parked in STAGING: ${r.toStaging}\n` +
-        `Units parked in STAGING: ${r.stagedUnits}\n` +
-        `Items with no stock (untouched): ${r.unchanged}\n` +
-        `Total items: ${r.total}` +
-        (r.report.length ? `\n\n${preview}${more}` : '')
-      );
-      if (!dryRun) loadData();
-    } catch (e) {
-      alert('Migration failed: ' + (e.message || e));
-    }
-    setRepairing(false);
-  };
-
-  const runOrphanFix = async (dryRun) => {
-    if (repairing) return;
-    setRepairing(true);
-    try {
-      const r = await DB.placeOrphanStock(dryRun);
-      const preview = r.report.slice(0, 12).join('\n');
-      const more = r.report.length > 12 ? `\n…and ${r.report.length - 12} more` : '';
-      alert(
-        (dryRun ? 'DRY RUN — nothing changed.\n\n' : 'Done.\n\n') +
-        `Items placed onto their shelf: ${r.placed}\n` +
-        `Units recorded: ${r.units}\n` +
-        `Locations created: ${r.created}\n` +
-        `Left alone (not orphans / no shelf): ${r.skipped}\n\n` +
-        'Items whose stock sits on a DIFFERENT shelf were not touched —\n' +
-        'those need a physical count.' +
-        (r.report.length ? `\n\n${preview}${more}` : '')
-      );
-      if (!dryRun) loadData();
-    } catch (e) {
-      alert('Repair failed: ' + (e.message || e));
     }
     setRepairing(false);
   };

@@ -2412,3 +2412,143 @@ exports.transcribeVoice = functions
       throw new functions.https.HttpsError('internal', error.message || 'Transcription failed');
     }
   });
+
+// ════════════════════════════════════════════════════════════════════
+// RECEIPT OCR — reads a photographed receipt / invoice / bill and
+// returns the fields to pre-fill an expense with.
+// Uses Document AI's receipt parser when a processor is configured
+// (best accuracy on crumpled thermal receipts); otherwise falls back to
+// Cloud Vision text detection with parsing rules.
+// Auth: the function's own service account — no keys to manage.
+// ════════════════════════════════════════════════════════════════════
+
+function _money(str) {
+  if (!str) return null;
+  var m = String(str).replace(/[, ]/g, '').match(/-?\d+(\.\d{1,2})?/);
+  return m ? parseFloat(m[0]) : null;
+}
+
+// Pull the likely total, tax, date and vendor out of raw OCR text.
+function parseReceiptText(text) {
+  var out = { vendor: '', date: '', total: null, tax: null };
+  if (!text) return out;
+  var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+
+  // Vendor: first line with letters that isn't an address/phone/receipt word
+  for (var i = 0; i < Math.min(lines.length, 6); i++) {
+    var l = lines[i];
+    if (/[A-Za-z]{3}/.test(l) && !/^\d/.test(l) &&
+        !/receipt|invoice|order|tel|phone|www\.|@|store\s*#/i.test(l)) {
+      out.vendor = l.replace(/[^\w &'.,-]/g, '').trim().slice(0, 60);
+      break;
+    }
+  }
+
+  // Total: prefer an explicit TOTAL / AMOUNT DUE / BALANCE line; take the LAST
+  // such line, since receipts often show subtotal before total.
+  var totalRe = /(grand\s*total|amount\s*due|balance\s*due|total\s*due|^total\b|\btotal\b)/i;
+  var candidates = [];
+  lines.forEach(function (l) {
+    if (totalRe.test(l) && !/sub\s*total|subtotal|tax/i.test(l)) {
+      var v = _money(l.replace(/.*?(total|due)/i, ''));
+      if (v != null) candidates.push(v);
+    }
+  });
+  if (candidates.length) out.total = candidates[candidates.length - 1];
+
+  // Fallback: the largest money value on the receipt
+  if (out.total == null) {
+    var all = (text.match(/\$?\s?\d{1,6}(?:,\d{3})*\.\d{2}/g) || []).map(_money).filter(function (v) { return v != null; });
+    if (all.length) out.total = Math.max.apply(null, all);
+  }
+
+  // Tax
+  lines.forEach(function (l) {
+    if (/\btax\b/i.test(l) && !/tax\s*id|taxable/i.test(l)) {
+      var v = _money(l.replace(/.*tax[^\d-]*/i, ''));
+      if (v != null && (out.tax == null || v > out.tax)) out.tax = v;
+    }
+  });
+
+  // Date — common US formats, plus 2026-08-06
+  var dm = text.match(/\b(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})\b/);
+  if (dm) {
+    out.date = dm[1] + '-' + ('0' + dm[2]).slice(-2) + '-' + ('0' + dm[3]).slice(-2);
+  } else {
+    dm = text.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2}|\d{2})\b/);
+    if (dm) {
+      var yr = dm[3].length === 2 ? '20' + dm[3] : dm[3];
+      out.date = yr + '-' + ('0' + dm[1]).slice(-2) + '-' + ('0' + dm[2]).slice(-2);
+    }
+  }
+  return out;
+}
+
+exports.parseReceipt = functions
+  .runWith({ timeoutSeconds: 60, memory: '512MB' })
+  .https.onCall(async function (data, context) {
+    if (!context.auth) {
+      throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+    }
+    if (!checkRateLimit('ocr_' + context.auth.uid, 60, 10 * 60 * 1000)) {
+      throw new functions.https.HttpsError('resource-exhausted', 'Too many receipt scans. Please wait a moment.');
+    }
+    var b64 = data && data.imageBase64;
+    if (!b64) throw new functions.https.HttpsError('invalid-argument', 'No image provided');
+    var mime = (data && data.mimeType) || 'image/jpeg';
+
+    var token = await getGoogleAccessToken();
+    var cfg = (functions.config && functions.config().docai) || {};
+    var projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
+
+    // ---------- Preferred: Document AI receipt/invoice processor ----------
+    if (cfg.processor && cfg.location) {
+      try {
+        var url = 'https://' + cfg.location + '-documentai.googleapis.com/v1/projects/' +
+          projectId + '/locations/' + cfg.location + '/processors/' + cfg.processor + ':process';
+        var r = await fetch(url, {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rawDocument: { content: b64, mimeType: mime } })
+        });
+        var j = await r.json();
+        if (r.ok && j.document) {
+          var fields = {};
+          (j.document.entities || []).forEach(function (e) {
+            fields[e.type] = e.normalizedValue && e.normalizedValue.text ? e.normalizedValue.text : e.mentionText;
+          });
+          var parsed = parseReceiptText(j.document.text || '');
+          return {
+            engine: 'documentai',
+            vendor: fields.supplier_name || parsed.vendor || '',
+            date: fields.receipt_date || fields.invoice_date || parsed.date || '',
+            total: _money(fields.total_amount) != null ? _money(fields.total_amount) : parsed.total,
+            tax: _money(fields.total_tax_amount) != null ? _money(fields.total_tax_amount) : parsed.tax,
+            reference: fields.invoice_id || fields.receipt_id || '',
+            text: (j.document.text || '').slice(0, 4000)
+          };
+        }
+        console.warn('Document AI failed, falling back to Vision:', j.error && j.error.message);
+      } catch (e) {
+        console.warn('Document AI error, falling back to Vision:', e.message);
+      }
+    }
+
+    // ---------- Fallback: Cloud Vision text detection ----------
+    var vr = await fetch('https://vision.googleapis.com/v1/images:annotate', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [{ image: { content: b64 }, features: [{ type: 'DOCUMENT_TEXT_DETECTION' }] }]
+      })
+    });
+    var vj = await vr.json();
+    if (!vr.ok) {
+      var msg = (vj && vj.error && vj.error.message) || ('Vision API error ' + vr.status);
+      throw new functions.https.HttpsError('internal', msg);
+    }
+    var ann = (vj.responses && vj.responses[0]) || {};
+    var text = (ann.fullTextAnnotation && ann.fullTextAnnotation.text) || '';
+    var p = parseReceiptText(text);
+    return { engine: 'vision', vendor: p.vendor, date: p.date, total: p.total, tax: p.tax, reference: '', text: text.slice(0, 4000) };
+  });

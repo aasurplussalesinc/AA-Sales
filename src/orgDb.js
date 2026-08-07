@@ -991,6 +991,85 @@ export const OrgDB = {
   },
 
   // ══════════════════════════════════════════════════════════════════════
+  // EXPENSES — money going out. Receipts/invoices/bills with photo capture.
+  // Tracks spend only; it never pays anyone.
+  // ══════════════════════════════════════════════════════════════════════
+  EXPENSE_CATEGORIES: [
+    'Employee Pay', 'Contractor', 'Inventory Purchase', 'Freight & Shipping',
+    'Warehouse Rent', 'Utilities', 'Equipment', 'Supplies', 'Vehicle & Fuel',
+    'Insurance', 'Software & Subscriptions', 'Professional Fees', 'Taxes & Licenses',
+    'Marketing', 'Repairs & Maintenance', 'Other'
+  ],
+
+  async uploadReceipt(file) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    if (!file) throw new Error('No file provided');
+    const ext = (file.name && file.name.includes('.'))
+      ? file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') : 'jpg';
+    const path = `receipts/${currentOrgId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const fileRef = storageRef(storage, path);
+    await uploadBytes(fileRef, file);
+    return await getDownloadURL(fileRef);
+  },
+
+  // Remember how a vendor was categorised before, so the next receipt from
+  // them pre-selects the same category. Gets smarter as you file more.
+  vendorCategory(expenses, vendor) {
+    if (!vendor) return '';
+    const v = String(vendor).toLowerCase().trim();
+    const match = (expenses || [])
+      .filter(e => e.vendor && String(e.vendor).toLowerCase().trim() === v && e.category)
+      .sort((a, b) => (b.date || 0) - (a.date || 0))[0];
+    return match ? match.category : '';
+  },
+
+  async createExpense(data) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const amount = parseFloat(data.amount) || 0;
+    const ref = await addDoc(collection(db, 'expenses'), {
+      orgId: currentOrgId,
+      date: data.date ? new Date(data.date + 'T12:00:00').getTime() : Date.now(),
+      vendor: data.vendor || '',
+      category: data.category || 'Other',
+      amount,
+      taxAmount: parseFloat(data.taxAmount) || 0,
+      paymentMethod: data.paymentMethod || '',
+      reference: data.reference || '',       // invoice / bill number
+      warehouse: data.warehouse || '',       // which site it belongs to
+      employee: data.employee || '',         // who it relates to (pay, reimbursement)
+      notes: data.notes || '',
+      receiptUrl: data.receiptUrl || '',
+      billable: !!data.billable,
+      createdAt: Date.now(),
+      createdBy: auth.currentUser?.email || '',
+      updatedAt: Date.now()
+    });
+    await this.logActivity('EXPENSE_ADDED', { id: ref.id, vendor: data.vendor, amount });
+    return ref.id;
+  },
+
+  async getExpenses() {
+    if (!currentOrgId) return [];
+    const q = query(collection(db, 'expenses'), where('orgId', '==', currentOrgId));
+    const snap = await getDocs(q);
+    return snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => (b.date || 0) - (a.date || 0));
+  },
+
+  async updateExpense(id, updates) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const clean = { ...updates, updatedAt: Date.now() };
+    if (clean.amount !== undefined) clean.amount = parseFloat(clean.amount) || 0;
+    if (typeof clean.date === 'string' && clean.date) clean.date = new Date(clean.date + 'T12:00:00').getTime();
+    await updateDoc(doc(db, 'expenses', id), clean);
+  },
+
+  async deleteExpense(id) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    await deleteDoc(doc(db, 'expenses', id));
+    await this.logActivity('EXPENSE_DELETED', { id });
+  },
+
+  // ══════════════════════════════════════════════════════════════════════
   // SINGLE SOURCE OF TRUTH: the ITEM owns its inventory.
   //   item.locations = [{ code, qty }]   ← the only place quantities live
   //   item.stock     = sum of that array (derived, never set by hand)

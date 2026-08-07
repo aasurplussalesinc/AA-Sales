@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { OrgDB as DB } from '../orgDb';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { useAuth } from '../OrgAuthContext';
+
+const fbFunctions = getFunctions();
+
+const fieldLbl = { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 3, textTransform: 'uppercase', letterSpacing: '.04em' };
+const inp = { padding: '7px 9px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, background: 'var(--bg-input)', color: 'var(--text-primary)' };
 
 export default function Reports() {
   const { userRole } = useAuth();
@@ -41,7 +47,23 @@ export default function Reports() {
   const [salesPeriod, setSalesPeriod] = useState('ytd');
   const [salesFrom, setSalesFrom] = useState('');
   const [salesTo, setSalesTo] = useState('');
-  const [salesGroup, setSalesGroup] = useState('month'); // 'detail' = every line, 'summary' = per-item totals
+  const [salesGroup, setSalesGroup] = useState('month');
+  // ---- expenses ----
+  const [expenses, setExpenses] = useState([]);
+  const [expPeriod, setExpPeriod] = useState('ytd');
+  const [expFrom, setExpFrom] = useState('');
+  const [expTo, setExpTo] = useState('');
+  const [expCat, setExpCat] = useState('');
+  const [expWh, setExpWh] = useState('');
+  const [expSaving, setExpSaving] = useState(false);
+  const [expForm, setExpForm] = useState({
+    date: new Date().toISOString().slice(0, 10), vendor: '', category: 'Other',
+    amount: '', taxAmount: '', paymentMethod: '', reference: '',
+    warehouse: '', employee: '', notes: '', receiptUrl: ''
+  });
+  const [receiptBusy, setReceiptBusy] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState(''); // 'detail' = every line, 'summary' = per-item totals
 
   useEffect(() => {
     loadAllData();
@@ -49,18 +71,20 @@ export default function Reports() {
 
   const loadAllData = async () => {
     setLoading(true);
-    const [itemsData, locsData, movementsData, ordersData, customersData] = await Promise.all([
+    const [itemsData, locsData, movementsData, ordersData, customersData, expenseData] = await Promise.all([
       DB.getItems(),
       DB.getLocations(),
       DB.getMovements(),
       DB.getPurchaseOrders(),
-      DB.getCustomers()
+      DB.getCustomers(),
+      DB.getExpenses()
     ]);
     setItems(itemsData);
     setLocations(locsData);
     setMovements(movementsData);
     setOrders(ordersData || []);
     setCustomers(customersData || []);
+    setExpenses(expenseData || []);
     setLoading(false);
   };
 
@@ -231,6 +255,7 @@ export default function Reports() {
     { id: 'deadstock', label: '💀 Dead Stock' },
     { id: 'turnover', label: '📈 Turnover' },
     { id: 'sales', label: '💵 Sales' },
+    { id: 'expenses', label: '🧾 Expenses' },
     { id: 'purchases', label: '🧾 Customer Purchases' },
     { id: 'custom', label: '📋 Custom' }
   ];
@@ -350,6 +375,133 @@ export default function Reports() {
       (o) => [
         o.when ? new Date(o.when).toLocaleDateString() : '', o.po, o.customer, o.status, o.payment,
         o.units, o.subtotal.toFixed(2), o.discount.toFixed(2), o.tax.toFixed(2), o.shipping.toFixed(2), o.total.toFixed(2)
+      ]);
+  };
+
+  // ── EXPENSES ────────────────────────────────────────────────────────────
+  const expRange = (() => {
+    const now = new Date(); const y = now.getFullYear(), m = now.getMonth();
+    const startOf = (yy, mm) => new Date(yy, mm, 1).getTime();
+    const eod = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x.getTime(); };
+    switch (expPeriod) {
+      case 'mtd':       return { from: startOf(y, m), to: eod(now), label: 'Month to date' };
+      case 'lastmonth': return { from: startOf(y, m - 1), to: startOf(y, m) - 1, label: 'Last month' };
+      case 'ytd':       return { from: startOf(y, 0), to: eod(now), label: 'Year to date' };
+      case 'lastyear':  return { from: startOf(y - 1, 0), to: startOf(y, 0) - 1, label: `${y - 1}` };
+      case 'all':       return { from: 0, to: eod(now), label: 'All time' };
+      case 'custom':    return {
+        from: expFrom ? new Date(expFrom + 'T00:00:00').getTime() : 0,
+        to: expTo ? eod(new Date(expTo + 'T00:00:00')) : eod(now),
+        label: `${expFrom || 'start'} → ${expTo || 'today'}` };
+      default:          return { from: 0, to: eod(now), label: 'All time' };
+    }
+  })();
+
+  const expRows = (expenses || [])
+    .filter(e => (e.date || 0) >= expRange.from && (e.date || 0) <= expRange.to)
+    .filter(e => !expCat || e.category === expCat)
+    .filter(e => !expWh || e.warehouse === expWh);
+
+  const expTotal = expRows.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+
+  const expByCategory = (() => {
+    const m = new Map();
+    expRows.forEach(e => {
+      const k = e.category || 'Other';
+      const c = m.get(k) || { name: k, total: 0, count: 0 };
+      c.total += parseFloat(e.amount) || 0; c.count += 1;
+      m.set(k, c);
+    });
+    return [...m.values()].sort((a, b) => b.total - a.total);
+  })();
+
+  const expWarehouses = [...new Set((expenses || []).map(e => e.warehouse).filter(Boolean))].sort();
+
+  // Money in vs money out for the same window
+  const expVsSales = (() => {
+    const revenue = (orders || [])
+      .filter(o => SALE_STATUSES.has(o.status))
+      .map(o => ({ when: saleDate(o), total: (o.items || []).reduce((s, li) =>
+          s + (parseInt(li.qtyShipped) || parseInt(li.quantity) || 0) * (parseFloat(li.unitPrice) || 0), 0)
+          + (parseFloat(o.tax) || 0) + (parseFloat(o.shipping) || 0) - (parseFloat(o.discount) || 0) }))
+      .filter(o => o.when >= expRange.from && o.when <= expRange.to)
+      .reduce((s, o) => s + o.total, 0);
+    return { revenue, expenses: expTotal, net: revenue - expTotal };
+  })();
+
+  const saveExpense = async () => {
+    if (expSaving) return;
+    if (!expForm.amount || parseFloat(expForm.amount) <= 0) { alert('Enter an amount.'); return; }
+    setExpSaving(true);
+    try {
+      await DB.createExpense(expForm);
+      setExpForm({
+        date: new Date().toISOString().slice(0, 10), vendor: '', category: 'Other',
+        amount: '', taxAmount: '', paymentMethod: '', reference: '',
+        warehouse: '', employee: '', notes: '', receiptUrl: ''
+      });
+      const fresh = await DB.getExpenses();
+      setExpenses(fresh || []);
+    } catch (e) { alert('Could not save: ' + (e.message || e)); }
+    setExpSaving(false);
+  };
+
+  // Upload the receipt AND read it — OCR pre-fills the form, you confirm.
+  const attachReceipt = async (file) => {
+    if (!file) return;
+    setReceiptBusy(true);
+    try {
+      const url = await DB.uploadReceipt(file);
+      setExpForm(f => ({ ...f, receiptUrl: url }));
+
+      // read it
+      setScanning(true);
+      const b64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onloadend = () => res(String(r.result).split(',')[1] || '');
+        r.onerror = rej;
+        r.readAsDataURL(file);
+      });
+      const fn = httpsCallable(fbFunctions, 'parseReceipt');
+      const out = await fn({ imageBase64: b64, mimeType: file.type || 'image/jpeg' });
+      const d = out?.data || {};
+      const vendor = d.vendor || '';
+      // remember what this vendor was filed under last time
+      const remembered = vendor ? DB.vendorCategory(expenses, vendor) : '';
+      setExpForm(f => ({
+        ...f,
+        vendor: vendor || f.vendor,
+        date: d.date || f.date,
+        amount: d.total != null ? String(d.total) : f.amount,
+        taxAmount: d.tax != null ? String(d.tax) : f.taxAmount,
+        reference: d.reference || f.reference,
+        category: remembered || f.category
+      }));
+      setScanNote(
+        d.total != null
+          ? `Read by ${d.engine === 'documentai' ? 'Document AI' : 'Vision'} — check the numbers before saving.`
+          : 'Could not read a total — enter it manually.'
+      );
+    } catch (e) {
+      setScanNote('Receipt saved, but could not be read automatically — enter the details manually.');
+      console.warn('OCR failed:', e && e.message);
+    }
+    setScanning(false);
+    setReceiptBusy(false);
+  };
+
+  const removeExpense = async (id) => {
+    try { await DB.deleteExpense(id); setExpenses(prev => prev.filter(e => e.id !== id)); }
+    catch (e) { alert('Delete failed: ' + (e.message || e)); }
+  };
+
+  const exportExpenses = () => {
+    exportToCSV(expRows, `expenses-${expPeriod}`,
+      ['Date', 'Vendor', 'Category', 'Amount', 'Tax', 'Payment', 'Reference', 'Warehouse', 'Employee', 'Notes', 'Receipt'],
+      (e) => [
+        e.date ? new Date(e.date).toLocaleDateString() : '', e.vendor, e.category,
+        (parseFloat(e.amount) || 0).toFixed(2), (parseFloat(e.taxAmount) || 0).toFixed(2),
+        e.paymentMethod, e.reference, e.warehouse, e.employee, e.notes, e.receiptUrl
       ]);
   };
 
@@ -1047,6 +1199,183 @@ export default function Reports() {
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Expenses Tab */}
+      {activeTab === 'expenses' && (
+        <div>
+          <h3 style={{ marginBottom: 4 }}>🧾 Expenses</h3>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+            Money going out — receipts, bills, invoices and pay. Showing <strong>{expRange.label}</strong>.
+          </div>
+
+          {/* ---- capture ---- */}
+          <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, marginBottom: 18 }}>
+            <h4 style={{ margin: '0 0 12px' }}>➕ Log an expense</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
+              <div><label style={fieldLbl}>Date</label>
+                <input type="date" value={expForm.date} onChange={e => setExpForm(f => ({ ...f, date: e.target.value }))} style={inp} /></div>
+              <div><label style={fieldLbl}>Vendor / paid to</label>
+                <input value={expForm.vendor} placeholder="e.g. Uline, John Smith" onChange={e => setExpForm(f => ({ ...f, vendor: e.target.value }))} style={inp} /></div>
+              <div><label style={fieldLbl}>Category</label>
+                <select value={expForm.category} onChange={e => setExpForm(f => ({ ...f, category: e.target.value }))} style={inp}>
+                  {DB.EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select></div>
+              <div><label style={fieldLbl}>Amount</label>
+                <input type="number" step="0.01" min="0" value={expForm.amount} placeholder="0.00"
+                  onChange={e => setExpForm(f => ({ ...f, amount: e.target.value }))} style={inp} /></div>
+              <div><label style={fieldLbl}>Tax (optional)</label>
+                <input type="number" step="0.01" min="0" value={expForm.taxAmount} placeholder="0.00"
+                  onChange={e => setExpForm(f => ({ ...f, taxAmount: e.target.value }))} style={inp} /></div>
+              <div><label style={fieldLbl}>Paid with</label>
+                <input value={expForm.paymentMethod} placeholder="Card, Check #, ACH" onChange={e => setExpForm(f => ({ ...f, paymentMethod: e.target.value }))} style={inp} /></div>
+              <div><label style={fieldLbl}>Invoice / bill #</label>
+                <input value={expForm.reference} onChange={e => setExpForm(f => ({ ...f, reference: e.target.value }))} style={inp} /></div>
+              <div><label style={fieldLbl}>Warehouse / site</label>
+                <input value={expForm.warehouse} placeholder="W1, W4…" onChange={e => setExpForm(f => ({ ...f, warehouse: e.target.value }))} style={inp} /></div>
+              <div><label style={fieldLbl}>Employee (if pay)</label>
+                <input value={expForm.employee} onChange={e => setExpForm(f => ({ ...f, employee: e.target.value }))} style={inp} /></div>
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+              <label style={fieldLbl}>Notes</label>
+              <input value={expForm.notes} onChange={e => setExpForm(f => ({ ...f, notes: e.target.value }))} style={{ ...inp, width: '100%' }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
+              <label className="btn" style={{ cursor: 'pointer', background: '#1565c0', color: '#fff' }}>
+                {scanning ? '🔎 Reading…' : receiptBusy ? '⏳ Uploading…' : expForm.receiptUrl ? '📷 Replace receipt' : '📷 Photograph / attach receipt'}
+                <input type="file" accept="image/*,application/pdf" capture="environment" hidden disabled={receiptBusy}
+                  onChange={e => attachReceipt(e.target.files && e.target.files[0])} />
+              </label>
+              {expForm.receiptUrl && (
+                <a href={expForm.receiptUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#2e7d32', fontWeight: 700 }}>
+                  ✓ Receipt attached — view
+                </a>
+              )}
+              {scanning && <span style={{ fontSize: 12, color: '#1565c0', fontWeight: 700 }}>🔎 Reading receipt…</span>}
+              {!scanning && scanNote && <span style={{ fontSize: 12, color: '#7a5a12' }}>{scanNote}</span>}
+              <button className="btn" onClick={saveExpense} disabled={expSaving}
+                style={{ marginLeft: 'auto', background: '#4a5d23', color: '#fff' }}>
+                {expSaving ? 'Saving…' : '💾 Save expense'}
+              </button>
+            </div>
+          </div>
+
+          {/* ---- period + filters ---- */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+            {[['mtd', 'Month to date'], ['lastmonth', 'Last month'], ['ytd', 'Year to date'],
+              ['lastyear', 'Last year'], ['all', 'All time'], ['custom', 'Custom…']].map(([id, label]) => (
+              <button key={id} onClick={() => setExpPeriod(id)}
+                style={{
+                  padding: '6px 13px', borderRadius: 16, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  border: expPeriod === id ? '1px solid #4a5d23' : '1px solid var(--border)',
+                  background: expPeriod === id ? '#4a5d23' : 'transparent',
+                  color: expPeriod === id ? '#fff' : 'var(--text-secondary)'
+                }}>{label}</button>
+            ))}
+          </div>
+          {expPeriod === 'custom' && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>From</label>
+              <input type="date" value={expFrom} onChange={e => setExpFrom(e.target.value)} style={inp} />
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>To</label>
+              <input type="date" value={expTo} onChange={e => setExpTo(e.target.value)} style={inp} />
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+            <select value={expCat} onChange={e => setExpCat(e.target.value)} style={inp}>
+              <option value="">All categories</option>
+              {DB.EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {expWarehouses.length > 0 && (
+              <select value={expWh} onChange={e => setExpWh(e.target.value)} style={inp}>
+                <option value="">All sites</option>
+                {expWarehouses.map(w => <option key={w} value={w}>{w}</option>)}
+              </select>
+            )}
+            <button className="btn" onClick={exportExpenses} disabled={!expRows.length}
+              style={{ marginLeft: 'auto', background: '#17a2b8', color: 'var(--text-on-dark)' }}>⬇️ Export CSV</button>
+          </div>
+
+          {/* ---- totals ---- */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 12, marginBottom: 18 }}>
+            {[
+              ['Total out', `$${expTotal.toFixed(2)}`, '#c62828'],
+              ['Entries', expRows.length, '#1565c0'],
+              ['Revenue in', `$${expVsSales.revenue.toFixed(2)}`, '#2e7d32'],
+              ['Net', `$${expVsSales.net.toFixed(2)}`, expVsSales.net >= 0 ? '#2e7d32' : '#c62828']
+            ].map(([l, v, c]) => (
+              <div key={l} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 14px' }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{l}</div>
+                <div style={{ fontSize: 21, fontWeight: 800, color: c, marginTop: 3 }}>{v}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* ---- by category ---- */}
+          {expByCategory.length > 0 && (
+            <div style={{ marginBottom: 18 }}>
+              <h4 style={{ marginBottom: 8 }}>By category</h4>
+              <div style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <tbody>
+                    {expByCategory.map(c => (
+                      <tr key={c.name} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '7px 10px', fontWeight: 600 }}>{c.name}</td>
+                        <td style={{ padding: '7px 10px', textAlign: 'right', color: 'var(--text-muted)', fontSize: 12 }}>{c.count}</td>
+                        <td style={{ padding: '7px 10px', textAlign: 'right', width: 120 }}>
+                          <div style={{ background: '#c62828', height: 6, borderRadius: 3,
+                            width: `${expTotal ? Math.max(4, (c.total / expTotal) * 100) : 0}%`, marginLeft: 'auto' }} />
+                        </td>
+                        <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700 }}>${c.total.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ---- list ---- */}
+          <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg-surface-2)', textAlign: 'left' }}>
+                  {['Date', 'Vendor', 'Category', 'Site', 'Employee', 'Ref', 'Receipt', 'Amount', ''].map(h => (
+                    <th key={h} style={{ padding: '8px 10px', borderBottom: '2px solid var(--border)', whiteSpace: 'nowrap' }}>{h}</th>))}
+                </tr>
+              </thead>
+              <tbody>
+                {expRows.length === 0 ? (
+                  <tr><td colSpan={9} style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No expenses in this period.</td></tr>
+                ) : expRows.map(e => (
+                  <tr key={e.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>{e.date ? new Date(e.date).toLocaleDateString() : '—'}</td>
+                    <td style={{ padding: '6px 10px' }}>{e.vendor}</td>
+                    <td style={{ padding: '6px 10px' }}>{e.category}</td>
+                    <td style={{ padding: '6px 10px' }}>{e.warehouse}</td>
+                    <td style={{ padding: '6px 10px' }}>{e.employee}</td>
+                    <td style={{ padding: '6px 10px', color: 'var(--text-muted)', fontSize: 12 }}>{e.reference}</td>
+                    <td style={{ padding: '6px 10px' }}>
+                      {e.receiptUrl
+                        ? <a href={e.receiptUrl} target="_blank" rel="noreferrer" style={{ color: '#1565c0', fontWeight: 700 }}>View</a>
+                        : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700 }}>${(parseFloat(e.amount) || 0).toFixed(2)}</td>
+                    <td style={{ padding: '6px 10px' }}>
+                      <button onClick={() => removeExpense(e.id)}
+                        style={{ border: '1px solid var(--border)', background: '#fff', color: '#c62828',
+                          borderRadius: 4, cursor: 'pointer', fontSize: 11, padding: '2px 7px', fontWeight: 700 }}>Delete</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

@@ -1221,7 +1221,7 @@ export default function Reports() {
                 <input value={expForm.vendor} placeholder="e.g. Uline, John Smith" onChange={e => setExpForm(f => ({ ...f, vendor: e.target.value }))} style={inp} /></div>
               <div><label style={fieldLbl}>Category</label>
                 <select value={expForm.category} onChange={e => setExpForm(f => ({ ...f, category: e.target.value }))} style={inp}>
-                  {DB.EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {(DB.EXPENSE_CATEGORIES || []).map(c => <option key={c} value={c}>{c}</option>)}
                 </select></div>
               <div><label style={fieldLbl}>Amount</label>
                 <input type="number" step="0.01" min="0" value={expForm.amount} placeholder="0.00"
@@ -1289,7 +1289,7 @@ export default function Reports() {
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
             <select value={expCat} onChange={e => setExpCat(e.target.value)} style={inp}>
               <option value="">All categories</option>
-              {DB.EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+              {(DB.EXPENSE_CATEGORIES || []).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
             {expWarehouses.length > 0 && (
               <select value={expWh} onChange={e => setExpWh(e.target.value)} style={inp}>

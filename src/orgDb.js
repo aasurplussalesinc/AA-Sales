@@ -786,6 +786,17 @@ export const OrgDB = {
     return out;
   },
 
+  // ══════════════════════════════════════════════════════════════════════
+  // EXPENSES — money going out. Receipts/invoices/bills with photo capture.
+  // Tracks spend only; it never pays anyone.
+  // ══════════════════════════════════════════════════════════════════════
+  EXPENSE_CATEGORIES: [
+    'Employee Pay', 'Contractor', 'Inventory Purchase', 'Freight & Shipping',
+    'Warehouse Rent', 'Utilities', 'Equipment', 'Supplies', 'Vehicle & Fuel',
+    'Insurance', 'Software & Subscriptions', 'Professional Fees', 'Taxes & Licenses',
+    'Marketing', 'Repairs & Maintenance', 'Other'
+  ],
+
   async uploadReceipt(file) {
     if (!currentOrgId) throw new Error('No organization selected');
     if (!file) throw new Error('No file provided');

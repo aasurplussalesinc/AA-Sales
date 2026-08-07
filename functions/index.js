@@ -2457,16 +2457,19 @@ function parseReceiptText(text) {
     }
   }
 
-  var skip = /sub\s*total|subtotal|\btax\b|\bhrs?\b|hours|discount/i;
+  var skip = /sub\s*total|subtotal|\btax\b|\bhrs?\b|hours|discount|less\s*:|credit|adjustment/i;
+  // A figure in parentheses is a negative (discount/credit) — never a total.
+  var isNegative = function (l) { return /\(\s*\$?\s?[\d,]+\.\d{2}\s*\)/.test(l); };
 
   // Find the amount for a label line. Two-column invoices put the figure on a
   // LATER line than its label, so look ahead a couple of lines if needed.
   function amountFor(idx) {
+    if (isNegative(lines[idx])) return null;
     var here = _amountsIn(lines[idx]);
     if (here.length) return here[here.length - 1];
     for (var k = 1; k <= 2 && idx + k < lines.length; k++) {
       var nxt = lines[idx + k];
-      if (skip.test(nxt)) continue;
+      if (skip.test(nxt) || isNegative(nxt)) continue;   // skip discounts/credits
       var a = _amountsIn(nxt);
       // a bare amount line (mostly just the number) belongs to the label above
       if (a.length && nxt.replace(/[^A-Za-z]/g, '').length <= 3) return a[a.length - 1];
@@ -2492,7 +2495,7 @@ function parseReceiptText(text) {
 
   if (out.total == null) {
     var all = [];
-    lines.forEach(function (l) { all = all.concat(_amountsIn(l)); });
+    lines.forEach(function (l) { if (!isNegative(l)) all = all.concat(_amountsIn(l)); });
     if (all.length) out.total = Math.max.apply(null, all);
   }
 

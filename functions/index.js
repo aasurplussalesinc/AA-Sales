@@ -2457,24 +2457,39 @@ function parseReceiptText(text) {
     }
   }
 
-  // Totals, in priority order. "Amount due" beats a generic "Total" line,
-  // which matters on invoices that total several sections.
+  var skip = /sub\s*total|subtotal|\btax\b|\bhrs?\b|hours|discount/i;
+
+  // Find the amount for a label line. Two-column invoices put the figure on a
+  // LATER line than its label, so look ahead a couple of lines if needed.
+  function amountFor(idx) {
+    var here = _amountsIn(lines[idx]);
+    if (here.length) return here[here.length - 1];
+    for (var k = 1; k <= 2 && idx + k < lines.length; k++) {
+      var nxt = lines[idx + k];
+      if (skip.test(nxt)) continue;
+      var a = _amountsIn(nxt);
+      // a bare amount line (mostly just the number) belongs to the label above
+      if (a.length && nxt.replace(/[^A-Za-z]/g, '').length <= 3) return a[a.length - 1];
+    }
+    return null;
+  }
+
+  // Priority tiers — "amount due" beats a generic "Total" line.
   var tiers = [
     /(total\s+amount\s+due|amount\s+due|balance\s+due|total\s+due|grand\s+total|new\s+charges)/i,
     /\btotal\b/i
   ];
   for (var t = 0; t < tiers.length && out.total == null; t++) {
     var hits = [];
-    lines.forEach(function (l) {
-      if (!tiers[t].test(l)) return;
-      if (/sub\s*total|subtotal|\btax\b|\bhrs?\b|hours/i.test(l)) return;  // skip hours + subtotals
-      var amts = _amountsIn(l);
-      if (amts.length) hits.push(amts[amts.length - 1]);   // rightmost figure on the line
-    });
+    for (var j = 0; j < lines.length; j++) {
+      if (!tiers[t].test(lines[j])) continue;
+      if (skip.test(lines[j])) continue;
+      var v = amountFor(j);
+      if (v != null) hits.push(v);
+    }
     if (hits.length) out.total = hits[hits.length - 1];
   }
 
-  // Fallback: largest money value anywhere
   if (out.total == null) {
     var all = [];
     lines.forEach(function (l) { all = all.concat(_amountsIn(l)); });
@@ -2482,24 +2497,34 @@ function parseReceiptText(text) {
   }
 
   // Tax
-  lines.forEach(function (l) {
-    if (/\btax\b/i.test(l) && !/tax\s*id|taxable/i.test(l)) {
-      var a = _amountsIn(l);
-      if (a.length) { var v = a[a.length - 1]; if (out.tax == null || v > out.tax) out.tax = v; }
-    }
-  });
-
-  // Date
-  var dm = text.match(/\b(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})\b/);
-  if (dm) {
-    out.date = dm[1] + '-' + ('0' + dm[2]).slice(-2) + '-' + ('0' + dm[3]).slice(-2);
-  } else {
-    dm = text.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2}|\d{2})\b/);
-    if (dm) {
-      var yr = dm[3].length === 2 ? '20' + dm[3] : dm[3];
-      out.date = yr + '-' + ('0' + dm[1]).slice(-2) + '-' + ('0' + dm[2]).slice(-2);
+  for (var q = 0; q < lines.length; q++) {
+    if (/\btax\b/i.test(lines[q]) && !/tax\s*id|taxable/i.test(lines[q])) {
+      var tv = amountFor(q);
+      if (tv != null && (out.tax == null || tv > out.tax)) out.tax = tv;
     }
   }
+
+  // ---- Date ----
+  // Prefer a date in the header (top ~12 lines) — line-item dates further down
+  // are transaction dates, not the invoice date.
+  var MONTHS = { jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12 };
+  function findDate(chunk) {
+    var m = chunk.match(/\b([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(20\d{2})\b/);
+    if (m) {
+      var mo = MONTHS[m[1].slice(0, 3).toLowerCase()];
+      if (mo) return m[3] + '-' + ('0' + mo).slice(-2) + '-' + ('0' + m[2]).slice(-2);
+    }
+    m = chunk.match(/\b(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})\b/);
+    if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+    m = chunk.match(/\b(\d{1,2})[-\/](\d{1,2})[-\/](20\d{2}|\d{2})\b/);
+    if (m) {
+      var yr = m[3].length === 2 ? '20' + m[3] : m[3];
+      return yr + '-' + ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2);
+    }
+    return '';
+  }
+  out.date = findDate(lines.slice(0, 12).join('\n')) || findDate(text);
+
   return out;
 }
 

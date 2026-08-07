@@ -2429,48 +2429,67 @@ function _money(str) {
 }
 
 // Pull the likely total, tax, date and vendor out of raw OCR text.
+// Money is only taken from $-amounts or 2-decimal figures, so "9.20 hrs"
+// can never be mistaken for a dollar total.
+function _amountsIn(line) {
+  var out = [];
+  var re = /\$\s?(\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\d+\.\d{2})|(?:^|\s)(\d{1,3}(?:,\d{3})+\.\d{2}|\d+\.\d{2})(?=\s|$)/g;
+  var m;
+  while ((m = re.exec(line)) !== null) {
+    var v = parseFloat(String(m[1] || m[2]).replace(/,/g, ''));
+    if (!isNaN(v)) out.push(v);
+  }
+  return out;
+}
+
 function parseReceiptText(text) {
   var out = { vendor: '', date: '', total: null, tax: null };
   if (!text) return out;
   var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
 
-  // Vendor: first line with letters that isn't an address/phone/receipt word
+  // Vendor: first meaningful line at the top
   for (var i = 0; i < Math.min(lines.length, 6); i++) {
-    var l = lines[i];
-    if (/[A-Za-z]{3}/.test(l) && !/^\d/.test(l) &&
-        !/receipt|invoice|order|tel|phone|www\.|@|store\s*#/i.test(l)) {
-      out.vendor = l.replace(/[^\w &'.,-]/g, '').trim().slice(0, 60);
+    var l0 = lines[i];
+    if (/[A-Za-z]{3}/.test(l0) && !/^\d/.test(l0) &&
+        !/receipt|invoice|order|tel|phone|www\.|@|store\s*#/i.test(l0)) {
+      out.vendor = l0.replace(/[^\w &'.,-]/g, '').trim().slice(0, 60);
       break;
     }
   }
 
-  // Total: prefer an explicit TOTAL / AMOUNT DUE / BALANCE line; take the LAST
-  // such line, since receipts often show subtotal before total.
-  var totalRe = /(grand\s*total|amount\s*due|balance\s*due|total\s*due|^total\b|\btotal\b)/i;
-  var candidates = [];
-  lines.forEach(function (l) {
-    if (totalRe.test(l) && !/sub\s*total|subtotal|tax/i.test(l)) {
-      var v = _money(l.replace(/.*?(total|due)/i, ''));
-      if (v != null) candidates.push(v);
-    }
-  });
-  if (candidates.length) out.total = candidates[candidates.length - 1];
+  // Totals, in priority order. "Amount due" beats a generic "Total" line,
+  // which matters on invoices that total several sections.
+  var tiers = [
+    /(total\s+amount\s+due|amount\s+due|balance\s+due|total\s+due|grand\s+total|new\s+charges)/i,
+    /\btotal\b/i
+  ];
+  for (var t = 0; t < tiers.length && out.total == null; t++) {
+    var hits = [];
+    lines.forEach(function (l) {
+      if (!tiers[t].test(l)) return;
+      if (/sub\s*total|subtotal|\btax\b|\bhrs?\b|hours/i.test(l)) return;  // skip hours + subtotals
+      var amts = _amountsIn(l);
+      if (amts.length) hits.push(amts[amts.length - 1]);   // rightmost figure on the line
+    });
+    if (hits.length) out.total = hits[hits.length - 1];
+  }
 
-  // Fallback: the largest money value on the receipt
+  // Fallback: largest money value anywhere
   if (out.total == null) {
-    var all = (text.match(/\$?\s?\d{1,6}(?:,\d{3})*\.\d{2}/g) || []).map(_money).filter(function (v) { return v != null; });
+    var all = [];
+    lines.forEach(function (l) { all = all.concat(_amountsIn(l)); });
     if (all.length) out.total = Math.max.apply(null, all);
   }
 
   // Tax
   lines.forEach(function (l) {
     if (/\btax\b/i.test(l) && !/tax\s*id|taxable/i.test(l)) {
-      var v = _money(l.replace(/.*tax[^\d-]*/i, ''));
-      if (v != null && (out.tax == null || v > out.tax)) out.tax = v;
+      var a = _amountsIn(l);
+      if (a.length) { var v = a[a.length - 1]; if (out.tax == null || v > out.tax) out.tax = v; }
     }
   });
 
-  // Date — common US formats, plus 2026-08-06
+  // Date
   var dm = text.match(/\b(20\d{2})[-\/](\d{1,2})[-\/](\d{1,2})\b/);
   if (dm) {
     out.date = dm[1] + '-' + ('0' + dm[2]).slice(-2) + '-' + ('0' + dm[3]).slice(-2);
@@ -2535,20 +2554,47 @@ exports.parseReceipt = functions
     }
 
     // ---------- Fallback: Cloud Vision text detection ----------
-    var vr = await fetch('https://vision.googleapis.com/v1/images:annotate', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requests: [{ image: { content: b64 }, features: [{ type: 'DOCUMENT_TEXT_DETECTION' }] }]
-      })
-    });
-    var vj = await vr.json();
-    if (!vr.ok) {
-      var msg = (vj && vj.error && vj.error.message) || ('Vision API error ' + vr.status);
-      throw new functions.https.HttpsError('internal', msg);
+    // PDFs must go to files:annotate — images:annotate only accepts images,
+    // which is why PDF invoices previously came back with no text at all.
+    var text = '';
+    if (mime === 'application/pdf' || mime === 'image/tiff') {
+      var fr = await fetch('https://vision.googleapis.com/v1/files:annotate', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{
+            inputConfig: { content: b64, mimeType: mime },
+            features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+            pages: [1, 2, 3, 4, 5]
+          }]
+        })
+      });
+      var fj = await fr.json();
+      if (!fr.ok) {
+        var fmsg = (fj && fj.error && fj.error.message) || ('Vision file API error ' + fr.status);
+        throw new functions.https.HttpsError('internal', fmsg);
+      }
+      var pages = (fj.responses && fj.responses[0] && fj.responses[0].responses) || [];
+      text = pages.map(function (pg) {
+        return (pg.fullTextAnnotation && pg.fullTextAnnotation.text) || '';
+      }).join('\n');
+    } else {
+      var vr = await fetch('https://vision.googleapis.com/v1/images:annotate', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requests: [{ image: { content: b64 }, features: [{ type: 'DOCUMENT_TEXT_DETECTION' }] }]
+        })
+      });
+      var vj = await vr.json();
+      if (!vr.ok) {
+        var msg = (vj && vj.error && vj.error.message) || ('Vision API error ' + vr.status);
+        throw new functions.https.HttpsError('internal', msg);
+      }
+      var ann = (vj.responses && vj.responses[0]) || {};
+      text = (ann.fullTextAnnotation && ann.fullTextAnnotation.text) || '';
     }
-    var ann = (vj.responses && vj.responses[0]) || {};
-    var text = (ann.fullTextAnnotation && ann.fullTextAnnotation.text) || '';
+
     var p = parseReceiptText(text);
     return { engine: 'vision', vendor: p.vendor, date: p.date, total: p.total, tax: p.tax, reference: '', text: text.slice(0, 4000) };
   });

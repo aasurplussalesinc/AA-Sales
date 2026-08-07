@@ -483,7 +483,8 @@ export default function Reports() {
           : 'Could not read a total — enter it manually.'
       );
     } catch (e) {
-      setScanNote('Receipt saved, but could not be read automatically — enter the details manually.');
+      const why = (e && e.message) ? ` (${String(e.message).slice(0, 120)})` : '';
+      setScanNote('Receipt saved, but could not be read automatically — enter the details manually.' + why);
       console.warn('OCR failed:', e && e.message);
     }
     setScanning(false);

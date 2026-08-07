@@ -174,29 +174,6 @@ export default function Locations() {
     setRepairing(false);
   };
 
-  const runRepair = async (dryRun) => {
-    if (repairing) return;
-    setRepairing(true);
-    try {
-      const r = await DB.repairLocationCodes(dryRun);
-      const preview = r.report.slice(0, 15).join('\n');
-      const more = r.report.length > 15 ? `\n…and ${r.report.length - 15} more` : '';
-      alert(
-        (dryRun ? 'DRY RUN — nothing was changed.\n\n' : 'Cleanup complete.\n\n') +
-        `Codes renamed to canonical: ${r.renamed}\n` +
-        `Duplicate records merged away: ${r.merged}\n` +
-        `Units re-homed by merging: ${r.unitsMoved}\n` +
-        `Item location fields updated: ${r.itemsRepointed}\n` +
-        `Locations scanned: ${r.totalLocations}` +
-        (r.report.length ? `\n\n${preview}${more}` : '')
-      );
-      if (!dryRun) loadData();
-    } catch (e) {
-      alert('Cleanup failed: ' + (e.message || e));
-    }
-    setRepairing(false);
-  };
-
   const formatLocation = (loc) => {
     if (loc.locationCode) return loc.locationCode;
     return DB.buildLocationCode(loc, locSchema);
@@ -760,36 +737,6 @@ W2,2,C,3`;
               title="Read-only: shows where each item's stock actually sits vs where its location field claims"
               style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
               {repairing ? '⏳ Auditing…' : '🩺 Audit item locations'}
-            </button>
-            <button className="btn" onClick={() => runUnify(true)} disabled={repairing}
-              title="Preview: fold all shelf quantities onto the items themselves"
-              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
-              {repairing ? '⏳…' : '🔍 Preview unify'}
-            </button>
-            <button className="btn" onClick={() => runUnify(false)} disabled={repairing}
-              title="Make the Items tab the single source of truth for all quantities"
-              style={{ background: '#1565c0', color: '#fff' }}>
-              {repairing ? '⏳…' : '🎯 Unify to Items'}
-            </button>
-            <button className="btn" onClick={() => runOrphanFix(true)} disabled={repairing}
-              title="Preview: place stock for items whose shelf holds no record of them"
-              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
-              {repairing ? '⏳…' : '🔍 Preview orphan fix'}
-            </button>
-            <button className="btn" onClick={() => runOrphanFix(false)} disabled={repairing}
-              title="Write orphaned stock onto the shelf its item names"
-              style={{ background: '#6b7f3e', color: 'var(--text-on-dark)' }}>
-              {repairing ? '⏳…' : '🧩 Place orphan stock'}
-            </button>
-            <button className="btn" onClick={() => runRepair(true)} disabled={repairing}
-              title="Preview the cleanup without changing anything"
-              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
-              {repairing ? '⏳ Checking…' : '🔍 Preview code cleanup'}
-            </button>
-            <button className="btn" onClick={() => runRepair(false)} disabled={repairing}
-              title="Rewrite all codes to W1-R1-A1 form and merge duplicate shelves"
-              style={{ background: '#6b7f3e', color: 'var(--text-on-dark)' }}>
-              {repairing ? '⏳ Cleaning…' : '🔧 Fix codes & merge duplicates'}
             </button>
           </>
         )}

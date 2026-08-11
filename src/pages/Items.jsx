@@ -52,6 +52,7 @@ export default function Items() {
   
   const [items, setItems] = useState([]);
   const [originalItems, setOriginalItems] = useState([]);
+  const [confirmDeleteItem, setConfirmDeleteItem] = useState(null); // item pending delete
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -1383,10 +1384,9 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     }
   };
 
-  const deleteItem = async (id) => {
-    // `id` is what's passed in — referencing `item` here threw a ReferenceError
-    // and silently killed every delete click.
-    if (!confirmStep('delitem:' + id)) return;
+  // The Actions menu closes on click, so a two-step "click again" confirm could
+  // never complete there. Confirmation happens in a modal instead.
+  const deleteItem = (id) => {
     setItems(prev => prev.filter(i => i.id !== id));
     setHasChanges(true);
   };
@@ -2864,7 +2864,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                           <DropdownItem
                             icon="🗑️" label="Delete"
                             color="#f44336"
-                            onClick={() => { deleteItem(item.id); setOpenActionMenu(null); }}
+                            onClick={() => { setConfirmDeleteItem(item); setOpenActionMenu(null); }}
                             danger
                           />
                         )}
@@ -2898,6 +2898,41 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           </div>
         )}
       </div>
+
+      {/* Delete confirmation */}
+      {confirmDeleteItem && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20
+        }} onClick={() => setConfirmDeleteItem(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'var(--bg-surface)', borderRadius: 10, width: 'min(440px, 96vw)',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.3)', overflow: 'hidden'
+          }}>
+            <div style={{ background: '#c62828', color: '#fff', padding: '14px 18px', fontWeight: 700, fontSize: 16 }}>
+              🗑️ Delete item?
+            </div>
+            <div style={{ padding: 18 }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>{confirmDeleteItem.name}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+                SKU {confirmDeleteItem.partNumber || '—'} · stock {confirmDeleteItem.stock || 0}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                This removes it from the list. It is permanently deleted when you press
+                <strong> Save Changes</strong>.
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, padding: '0 18px 18px', justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmDeleteItem(null)}>Cancel</button>
+              <button className="btn"
+                style={{ background: '#c62828', color: '#fff' }}
+                onClick={() => { deleteItem(confirmDeleteItem.id); setConfirmDeleteItem(null); }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Item Modal */}
       {showAddItem && (

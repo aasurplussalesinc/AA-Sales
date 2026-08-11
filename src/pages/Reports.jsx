@@ -479,7 +479,7 @@ export default function Reports() {
       }));
       setScanNote(
         d.total != null
-          ? `Read by ${d.engine === 'documentai' ? '✅ Document AI' : '⚠️ Vision (fallback)'} — check the numbers before saving.`
+          ? `Read by ${d.engine === 'documentai' ? '✅ Document AI' : '⚠️ Vision (fallback)'}${d.amountSource === 'text:amount-due' ? ' · used "amount due"' : d.amountSource === 'docai:net_amount' ? ' · used net after credits' : ''} — check the numbers before saving.`
           : `⚠️ ${d.engine === 'documentai' ? 'Document AI' : 'Vision'} could not read a total — enter it manually.`
       );
     } catch (e) {

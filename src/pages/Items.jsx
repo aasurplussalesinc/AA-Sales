@@ -658,7 +658,7 @@ export default function Items() {
   // Duplicate an existing item (opens Add modal with item data pre-filled)
   const duplicateItem = (item) => {
     setNewItem({
-      partNumber: '', // Clear SKU - must be unique
+      partNumber: generateNextSku(), // fresh SKU, same as Add Item
       name: item.name || '',
       grade: item.grade || '',
       category: item.category || '',
@@ -1384,8 +1384,10 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
   };
 
   const deleteItem = async (id) => {
-    if (!confirmStep('delitem:' + (item?.id || 'x'))) return;
-    setItems(items.filter(item => item.id !== id));
+    // `id` is what's passed in — referencing `item` here threw a ReferenceError
+    // and silently killed every delete click.
+    if (!confirmStep('delitem:' + id)) return;
+    setItems(prev => prev.filter(i => i.id !== id));
     setHasChanges(true);
   };
 

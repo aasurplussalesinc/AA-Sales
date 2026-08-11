@@ -2442,6 +2442,29 @@ function _amountsIn(line) {
   return out;
 }
 
+// Find an explicit "amount due / balance due" figure. This is what the customer
+// actually owes, and it beats a billed total whenever both are present.
+function _amountDue(text) {
+  if (!text) return null;
+  var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+  var label = /(total\s+amount\s+due|amount\s+due|balance\s+due|total\s+due|please\s+pay|pay\s+this\s+amount)/i;
+  var neg = /\(\s*\$?\s?[\d,]+\.\d{2}\s*\)/;
+  var hits = [];
+  for (var i = 0; i < lines.length; i++) {
+    if (!label.test(lines[i]) || neg.test(lines[i])) continue;
+    var here = _amountsIn(lines[i]);
+    if (here.length) { hits.push(here[here.length - 1]); continue; }
+    // amount may sit on the next line or two (two-column layouts)
+    for (var k = 1; k <= 2 && i + k < lines.length; k++) {
+      var nxt = lines[i + k];
+      if (neg.test(nxt) || /discount|credit|less\s*:/i.test(nxt)) continue;
+      var a = _amountsIn(nxt);
+      if (a.length && nxt.replace(/[^A-Za-z]/g, '').length <= 3) { hits.push(a[a.length - 1]); break; }
+    }
+  }
+  return hits.length ? hits[hits.length - 1] : null;
+}
+
 function parseReceiptText(text) {
   var out = { vendor: '', date: '', total: null, tax: null };
   if (!text) return out;
@@ -2545,14 +2568,27 @@ exports.parseReceipt = functions
     var mime = (data && data.mimeType) || 'image/jpeg';
 
     var token = await getGoogleAccessToken();
-    var cfg = (functions.config && functions.config().docai) || {};
+    // Read the Document AI setting from either the legacy config or env vars.
+    var cfgAll = {};
+    try { cfgAll = (functions.config && functions.config()) || {}; } catch (e) { cfgAll = {}; }
+    var cfg = cfgAll.docai || {};
+    // Fallback to environment variables (works on newer SDKs where
+    // functions.config() returns nothing).
+    var procId = cfg.processor || process.env.DOCAI_PROCESSOR || '';
+    var procLoc = cfg.location || process.env.DOCAI_LOCATION || 'us';
     var projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
 
+    console.log('parseReceipt: docai configured =', !!procId,
+                '| processor =', procId ? procId.slice(0, 6) + '…' : '(none)',
+                '| location =', procLoc,
+                '| config keys =', Object.keys(cfgAll).join(',') || '(empty)');
+
     // ---------- Preferred: Document AI receipt/invoice processor ----------
-    if (cfg.processor && cfg.location) {
+    if (procId) {
       try {
-        var url = 'https://' + cfg.location + '-documentai.googleapis.com/v1/projects/' +
-          projectId + '/locations/' + cfg.location + '/processors/' + cfg.processor + ':process';
+        var url = 'https://' + procLoc + '-documentai.googleapis.com/v1/projects/' +
+          projectId + '/locations/' + procLoc + '/processors/' + procId + ':process';
+        console.log('parseReceipt: calling Document AI ->', url);
         var r = await fetch(url, {
           method: 'POST',
           headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -2562,20 +2598,46 @@ exports.parseReceipt = functions
         if (r.ok && j.document) {
           var fields = {};
           (j.document.entities || []).forEach(function (e) {
-            fields[e.type] = e.normalizedValue && e.normalizedValue.text ? e.normalizedValue.text : e.mentionText;
+            var val = (e.normalizedValue && e.normalizedValue.text) ? e.normalizedValue.text : e.mentionText;
+            // keep the first occurrence of each type (Doc AI can repeat them)
+            if (fields[e.type] === undefined) fields[e.type] = val;
           });
-          var parsed = parseReceiptText(j.document.text || '');
+          var docText = j.document.text || '';
+          var parsed = parseReceiptText(docText);
+
+          // ---- Choose the amount the customer actually owes ----------------
+          // Document AI's total_amount is the billed total, which on invoices
+          // carrying a discount/credit is NOT what's due. An explicit
+          // "amount due / balance due" line always wins when one exists.
+          var dueFromText = _amountDue(docText);
+          var docTotal = _money(fields.total_amount);
+          var netTotal = _money(fields.net_amount);
+          var chosen = null, why = '';
+
+          if (dueFromText != null) { chosen = dueFromText; why = 'text:amount-due'; }
+          else if (docTotal != null && netTotal != null && netTotal < docTotal) {
+            // a net lower than the total implies a credit was applied
+            chosen = netTotal; why = 'docai:net_amount';
+          }
+          else if (docTotal != null) { chosen = docTotal; why = 'docai:total_amount'; }
+          else if (parsed.total != null) { chosen = parsed.total; why = 'text:parsed'; }
+
+          console.log('parseReceipt: amount chosen =', chosen, 'via', why,
+                      '| docai total_amount =', docTotal, '| net_amount =', netTotal,
+                      '| text amount-due =', dueFromText);
+
           return {
             engine: 'documentai',
             vendor: fields.supplier_name || parsed.vendor || '',
             date: fields.receipt_date || fields.invoice_date || parsed.date || '',
-            total: _money(fields.total_amount) != null ? _money(fields.total_amount) : parsed.total,
+            total: chosen,
             tax: _money(fields.total_tax_amount) != null ? _money(fields.total_tax_amount) : parsed.tax,
             reference: fields.invoice_id || fields.receipt_id || '',
-            text: (j.document.text || '').slice(0, 4000)
+            amountSource: why,
+            text: docText.slice(0, 4000)
           };
         }
-        console.warn('Document AI failed, falling back to Vision:', j.error && j.error.message);
+        console.warn('Document AI HTTP', r.status, '- falling back to Vision:', JSON.stringify(j.error || {}).slice(0, 500));
       } catch (e) {
         console.warn('Document AI error, falling back to Vision:', e.message);
       }

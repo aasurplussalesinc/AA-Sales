@@ -784,7 +784,7 @@ export default function Items() {
       setEditingItem(null);
       setEditUseMultiLocation(false);
       setEditLocationBreakdown([{ location: '', quantity: 0 }]);
-      loadData();
+      await loadData();  // must finish before the grid can be saved again
     } catch (error) {
       console.error('Error saving item:', error);
       throw error;
@@ -1289,6 +1289,8 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     setSaving(true);
     try {
       let changeCount = 0;
+      const skippedLocation = [];
+      const skippedStock = [];
       
       // Find items that were deleted (in original but not in current)
       const currentIds = new Set(items.map(i => i.id));
@@ -1320,32 +1322,64 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           
           if (changed) {
             changeCount++;
-            console.log('Changed item found:', item.id, item.name);
-            console.log('  Location: "' + itemLocation + '" vs original: "' + originalLocation + '"');
-            console.log('  Calling updateItemWithSync...');
-            
-            // Always use sync function to keep locations in sync
-            await DB.updateItemWithSync(item.id, {
+
+            const base = {
               partNumber: item.partNumber || '',
               name: item.name || '',
               grade: item.grade || '',
               category: item.category || '',
-              stock: parseInt(item.stock) || 0,
-              price: parseFloat(item.price) || 0,
-              location: itemLocation
-            });
-            console.log('  updateItemWithSync completed');
+              price: parseFloat(item.price) || 0
+            };
+
+            const locationChanged = itemLocation !== originalLocation;
+            const spots = DB.itemLocations(item);
+            const isMulti = spots.length > 1;
+            const stockChanged = String(item.stock || 0) !== String(original.stock || 0);
+
+            if (isMulti) {
+              // NEVER pass `location` (or a raw stock) for a split item:
+              // updateItemWithSync collapses every shelf into ONE holding the
+              // full quantity, silently destroying the split. Grid edits here
+              // only touch the plain fields.
+              await DB.updateItem(item.id, base);
+              if (locationChanged) skippedLocation.push(item.name || item.partNumber || item.id);
+              if (stockChanged) skippedStock.push(item.name || item.partNumber || item.id);
+            } else if (locationChanged) {
+              // Single-location item moved via the grid dropdown — safe to sync.
+              await DB.updateItemWithSync(item.id, {
+                ...base,
+                stock: parseInt(item.stock) || 0,
+                location: itemLocation
+              });
+            } else {
+              // Location untouched — write the fields only, leave shelves alone.
+              await DB.updateItem(item.id, { ...base, stock: parseInt(item.stock) || 0 });
+              if (stockChanged && spots.length === 1) {
+                // keep the single shelf in step with the new total
+                await DB.setItemLocations(item.id, [{ code: spots[0].code, qty: parseInt(item.stock) || 0 }]);
+              }
+            }
           }
         }
       }
       
       console.log('Total changes saved:', changeCount);
       
-      setOriginalItems(JSON.parse(JSON.stringify(items)));
       setHasChanges(false);
       setLockedItemIds(new Set()); // Clear locked items after saving
-      loadData(); // Reload to get synced data
-      toast('Changes saved successfully!');
+      // Await the reload so `originalItems` is rebuilt from what's actually in
+      // the database — a stale baseline made unedited rows look "changed" and
+      // got them rewritten on the next save.
+      await loadData();
+
+      if (skippedLocation.length || skippedStock.length) {
+        const parts = [];
+        if (skippedLocation.length) parts.push(`Location not changed for: ${[...new Set(skippedLocation)].join(', ')}`);
+        if (skippedStock.length) parts.push(`Quantity not changed for: ${[...new Set(skippedStock)].join(', ')}`);
+        toast(`Saved. ${parts.join(' — ')}. These items are split across several shelves, so use Actions → Edit to change where the stock sits.`);
+      } else {
+        toast('Changes saved successfully!');
+      }
     } catch (error) {
       console.error('Error saving:', error);
       toast('Error saving changes: ' + error.message);

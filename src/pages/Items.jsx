@@ -172,6 +172,7 @@ export default function Items() {
     sku: '',
     name: '',
     category: '',
+    grade: '',
     quantity: '',
     location: '',
     stockStatus: '', // '', 'low', 'reorder', 'ok'
@@ -323,6 +324,9 @@ export default function Items() {
 
   // Get unique categories for dropdown
   const categories = [...new Set(items.map(i => i.category).filter(Boolean))].sort();
+  // Grade is free text, so build the list from what's actually in use.
+  const grades = [...new Set(items.map(i => i.grade).filter(Boolean))]
+    .sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
 
   // Get location options - normalize to consistent format W1-R1-A1
   const locationOptions = (() => {
@@ -388,6 +392,15 @@ export default function Items() {
     // Category filter
     if (filters.category && item.category !== filters.category) {
       return false;
+    }
+
+    // Grade filter ("__NONE__" catches items with no grade recorded)
+    if (filters.grade) {
+      if (filters.grade === '__NONE__') {
+        if (item.grade && String(item.grade).trim()) return false;
+      } else if (item.grade !== filters.grade) {
+        return false;
+      }
     }
     
     // Quantity filter
@@ -509,6 +522,7 @@ export default function Items() {
       sku: '',
       name: '',
       category: '',
+      grade: '',
       quantity: '',
       location: '',
       stockStatus: '',
@@ -2366,6 +2380,25 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                 <option value="">All Categories</option>
                 {categories.map(cat => (
                   <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Grade filter */}
+            <div>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>
+                Grade
+              </label>
+              <select
+                className="form-input"
+                value={filters.grade}
+                onChange={e => setFilters({ ...filters, grade: e.target.value })}
+                style={{ width: '100%' }}
+              >
+                <option value="">All Grades</option>
+                <option value="__NONE__">— No grade set —</option>
+                {grades.map(g => (
+                  <option key={g} value={g}>{g}</option>
                 ))}
               </select>
             </div>

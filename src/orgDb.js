@@ -1301,7 +1301,13 @@ export const OrgDB = {
     // Item-owned model: put the whole quantity at one shelf (exclusive move).
     const code = this.canonicalLocationCode(locationCode || '');
     const qty = parseInt(quantity) || 0;
-    if (!code) return;
+    // A BLANK location means "this item is nowhere" — clear its shelves.
+    // Returning early here made clearing a location a silent no-op, so the
+    // item kept showing on its old shelf in Locations and on the Map.
+    if (!code) {
+      await this.setItemLocations(itemId, []);
+      return;
+    }
     await this.setItemLocations(itemId, qty > 0 ? [{ code, qty }] : []);
   },
 

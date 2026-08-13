@@ -778,6 +778,10 @@ export default function Items() {
           code: editingItem.location,
           qty: parseInt(editingItem.stock) || 0
         }]);
+      } else {
+        // Location cleared — the item is nowhere. Previously this branch did
+        // nothing, so the item kept showing on its old shelf.
+        await DB.setItemLocations(editingItem.id, []);
       }
 
       setShowEditItem(false);

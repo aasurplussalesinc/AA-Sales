@@ -105,10 +105,25 @@ export default function PurchaseOrders() {
     setLoading(false);
   };
 
-  const filteredItems = items.filter(item => searchItem && (
-    item.name?.toLowerCase().includes(searchItem.toLowerCase()) ||
-    item.partNumber?.toLowerCase().includes(searchItem.toLowerCase())
-  ));
+  // Token-based search: every word you type must appear somewhere, in any order.
+  // The old version required the whole query to be ONE contiguous substring, so
+  // "pack assault usmc" missed "PACK ASSAULT MOLLE II USMC" and "usmc assault"
+  // matched nothing at all. Grade and category are searchable too, so you can
+  // narrow with "assault usmc new".
+  const itemSearchTokens = (searchItem || '').toLowerCase().split(/[^a-z0-9#/]+/i).filter(Boolean);
+  const filteredItems = !itemSearchTokens.length ? [] : items.filter(item => {
+    const haystack = [
+      item.name, item.partNumber, item.grade, item.category
+    ].filter(Boolean).join(' ').toLowerCase();
+    return itemSearchTokens.every(t => haystack.includes(t));
+  }).sort((a, b) => {
+    // Exact SKU match first, then shorter names (more specific) before longer.
+    const q = itemSearchTokens.join(' ');
+    const aSku = String(a.partNumber || '').toLowerCase() === q ? 0 : 1;
+    const bSku = String(b.partNumber || '').toLowerCase() === q ? 0 : 1;
+    if (aSku !== bSku) return aSku - bSku;
+    return String(a.name || '').length - String(b.name || '').length;
+  });
 
   const filteredCustomers = customers.filter(c => searchCustomer && (
     c.company?.toLowerCase().includes(searchCustomer.toLowerCase()) ||
@@ -1674,9 +1689,20 @@ ${labelsHtml}
                 </div>
                 <input type="text" placeholder="Search items..." value={searchItem} onChange={e => setSearchItem(e.target.value)}
                   style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+                {searchItem && filteredItems.length === 0 && (
+                  <div style={{ marginTop: 5, padding: 10, border: '1px solid var(--border)', borderRadius: 4,
+                    fontSize: 13, color: 'var(--text-muted)' }}>
+                    No items match “{searchItem}”. Every word has to appear somewhere in the name, SKU, grade or category.
+                  </div>
+                )}
                 {filteredItems.length > 0 && (
-                  <div style={{ border: '1px solid var(--border)', borderRadius: 4, maxHeight: 150, overflow: 'auto', marginTop: 5 }}>
-                    {filteredItems.slice(0, 10).map(item => (
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 4, maxHeight: 260, overflow: 'auto', marginTop: 5 }}>
+                    <div style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+                      background: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border)', letterSpacing: '.04em' }}>
+                      {filteredItems.length} MATCH{filteredItems.length === 1 ? '' : 'ES'}
+                      {filteredItems.length > 25 ? ' — showing first 25, keep typing to narrow' : ''}
+                    </div>
+                    {filteredItems.slice(0, 25).map(item => (
                       <div key={item.id} onClick={() => addItemToPO(item)} style={{ padding: 10, borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
                         <strong>{item.name}</strong>
                         {item.grade && (

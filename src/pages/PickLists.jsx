@@ -131,6 +131,7 @@ export default function PickLists() {
         itemId: item.id,
         itemName: item.name,
         partNumber: item.partNumber,
+        grade: item.grade || '',
         requestedQty: 1,
         pickedQty: 0,
         location: item.location || ''
@@ -476,6 +477,19 @@ export default function PickLists() {
 
   // Builds the printable HTML body for a single pick list.
   // Shared between single-print and bulk-print so both produce identical layouts.
+  // Grade/condition for a pick line. Older pick lists don't store it, so fall
+  // back to looking the item up in inventory by id, then by SKU.
+  const gradeOf = (line) => {
+    if (!line) return '';
+    if (line.grade) return line.grade;
+    const byId = line.itemId && (items || []).find(i => i.id === line.itemId);
+    if (byId?.grade) return byId.grade;
+    const sku = String(line.partNumber || '').trim().toLowerCase();
+    if (!sku) return '';
+    const bySku = (items || []).find(i => String(i.partNumber || '').trim().toLowerCase() === sku);
+    return bySku?.grade || '';
+  };
+
   const buildPickListPrintBody = (list) => `
     <div class="pl-page">
       <div class="header">
@@ -492,6 +506,7 @@ export default function PickLists() {
           <tr>
             <th style="width: 40px">#</th>
             <th>Item</th>
+            <th class="text-center" style="width: 70px">Grade</th>
             <th class="text-center" style="width: 100px">Location</th>
             <th class="text-center" style="width: 80px">Requested</th>
             <th class="text-center" style="width: 80px">Picked</th>
@@ -507,6 +522,7 @@ export default function PickLists() {
                 <div class="sku">${item.partNumber || ''}</div>
                 ${item.notes ? `<div style="font-size:9px;color:#795548;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}
               </td>
+              <td class="text-center"><strong>${gradeOf(item) || '-'}</strong></td>
               <td class="text-center"><strong>${item.location || '-'}</strong></td>
               <td class="text-center"><strong>${item.requestedQty}</strong></td>
               <td class="text-center">${list.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>'}</td>
@@ -657,6 +673,7 @@ export default function PickLists() {
           requestedQty: parseInt(poItem.quantity) || 0,
           itemName: poItem.itemName,
           partNumber: poItem.partNumber,
+          grade: poItem.grade || '',
           unitPrice: poItem.unitPrice,
           notes: poItem.notes || existingItem.notes || ''
         };
@@ -669,6 +686,7 @@ export default function PickLists() {
           itemId: poItem.itemId,
           itemName: poItem.itemName,
           partNumber: poItem.partNumber,
+          grade: poItem.grade || '',
           requestedQty: parseInt(poItem.quantity) || 0,
           pickedQty: 0,
           location: itemLocation?.code || '-',
@@ -1555,6 +1573,13 @@ export default function PickLists() {
                     <div key={item.itemId} style={{ padding: 10, borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ flex: 1 }}>
                         <strong>{item.itemName}</strong>
+                        {(() => { const g = gradeOf(item); return g ? (
+                        <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 9, fontSize: 10,
+                          fontWeight: 800, letterSpacing: '.03em', textTransform: 'uppercase',
+                          background: /new/i.test(g) ? '#e8f5e9' : '#fff3e0',
+                          color: /new/i.test(g) ? '#2e7d32' : '#e65100',
+                          border: '1px solid ' + (/new/i.test(g) ? '#a5d6a7' : '#ffcc80') }}>{g}</span>
+                      ) : null; })()}
                         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.partNumber}</div>
                         {item.notes && (
                           <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3, fontStyle: 'italic', background: 'var(--bg-badge-orange)', padding: '2px 7px', borderRadius: 4, display: 'inline-block' }}>
@@ -1771,6 +1796,13 @@ export default function PickLists() {
                   <tr key={lineKey} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: 10 }}>
                       <strong>{item.itemName}</strong>
+                      {(() => { const g = gradeOf(item); return g ? (
+                        <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 9, fontSize: 10,
+                          fontWeight: 800, letterSpacing: '.03em', textTransform: 'uppercase',
+                          background: /new/i.test(g) ? '#e8f5e9' : '#fff3e0',
+                          color: /new/i.test(g) ? '#2e7d32' : '#e65100',
+                          border: '1px solid ' + (/new/i.test(g) ? '#a5d6a7' : '#ffcc80') }}>{g}</span>
+                      ) : null; })()}
                       <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{item.partNumber}</div>
                       {!multiLoc && item.location && <div style={{ fontSize: 11, color: 'var(--accent)' }}>📍 {item.location}</div>}
                       {multiLoc && selectedList.status !== 'completed' && (
@@ -2249,6 +2281,13 @@ export default function PickLists() {
                             </button>
                             <div>
                               <strong>{item.itemName}</strong>
+                              {(() => { const g = gradeOf(item); return g ? (
+                        <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 9, fontSize: 10,
+                          fontWeight: 800, letterSpacing: '.03em', textTransform: 'uppercase',
+                          background: /new/i.test(g) ? '#e8f5e9' : '#fff3e0',
+                          color: /new/i.test(g) ? '#2e7d32' : '#e65100',
+                          border: '1px solid ' + (/new/i.test(g) ? '#a5d6a7' : '#ffcc80') }}>{g}</span>
+                      ) : null; })()}
                               {item.partNumber && <span style={{ color: 'var(--text-muted)', marginLeft: 10, fontSize: 12 }}>{item.partNumber}</span>}
                               {hasShortage && (
                                 <div style={{ fontSize: 11, color: 'var(--text-badge-orange)', marginTop: 2 }}>

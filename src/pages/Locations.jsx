@@ -671,8 +671,9 @@ W2,2,C,3`;
                 <div class="qr-item">
                   <h3>${item.name}</h3>
                   <img src="${qrImage}" />
-                  <div class="info">Part #: ${item.partNumber}</div>
+                  <div class="info">Part #: ${item.partNumber || '—'}</div>
                   <div class="quantity">Qty: ${quantity}</div>
+                  ${item.grade ? `<div class="info">Condition: ${item.grade}</div>` : ''}
                 </div>
               `).join('')}
             </div>

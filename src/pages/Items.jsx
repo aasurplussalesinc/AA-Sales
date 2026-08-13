@@ -1443,34 +1443,66 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     try {
       const qrData = item.partNumber || item.id;
       const qrImage = await QRCode.toDataURL(qrData, { width: 300 });
-      
+
+      // Current inventory, derived from the item itself (single source of truth)
+      const spots = DB.itemLocations(item);
+      const totalQty = spots.length
+        ? spots.reduce((sum, e) => sum + e.qty, 0)
+        : (parseInt(item.stock) || 0);
+      const whereText = spots.length
+        ? spots.map(e => `${e.code}: ${e.qty}`).join(' &nbsp;•&nbsp; ')
+        : (item.location || '— no location —');
+
       const printWindow = window.open('', '_blank');
       printWindow.document.write(`
         <html>
           <head>
             <title>QR Code - ${item.name}</title>
             <style>
-              body {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                padding: 40px;
-                font-family: Arial;
+              body { font-family: Arial; padding: 20px; }
+              .header { text-align: center; margin-bottom: 30px; }
+              .header h1 { margin: 0; font-size: 24px; }
+              .header p { margin: 5px 0 0; color: #666; font-size: 14px; }
+              .qr-grid {
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 30px;
+                page-break-inside: avoid;
               }
-              h2 { margin-bottom: 20px; }
-              img { border: 2px solid #000; padding: 15px; }
-              p { margin-top: 10px; font-size: 12px; color: #666; }
+              .qr-item {
+                border: 2px solid #000;
+                padding: 15px;
+                text-align: center;
+                page-break-inside: avoid;
+              }
+              .qr-item h3 { margin: 0 0 10px 0; font-size: 16px; }
+              .qr-item img { width: 200px; height: 200px; border: 1px solid #ddd; }
+              .qr-item .info { margin-top: 10px; font-size: 12px; color: #666; }
+              .qr-item .quantity { font-weight: bold; color: #0d7a52; margin-top: 5px; }
+              @media print { .qr-grid { grid-template-columns: repeat(2, 1fr); } }
             </style>
           </head>
           <body>
-            <h2>${item.name}</h2>
-            <img src="${qrImage}" />
-            <p>${item.partNumber}</p>
+            <div class="header">
+              <h1>${item.name}</h1>
+              <p>Total Quantity: ${totalQty}${item.grade ? ' | Condition: ' + item.grade : ''}</p>
+            </div>
+            <div class="qr-grid">
+              <div class="qr-item">
+                <h3>${item.name}</h3>
+                <img src="${qrImage}" />
+                <div class="info">Part #: ${item.partNumber || '—'}</div>
+                <div class="quantity">Qty: ${totalQty}</div>
+                <div class="info">${whereText}</div>
+              </div>
+            </div>
+            <div style="text-align: center; margin-top: 30px;">
+              <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px; cursor: pointer;">🖨️ Print</button>
+            </div>
           </body>
         </html>
       `);
       printWindow.document.close();
-      printWindow.print();
     } catch (error) {
       toast('Print failed: ' + error.message);
     }

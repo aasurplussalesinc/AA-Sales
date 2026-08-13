@@ -612,79 +612,66 @@ W2,2,C,3`;
       printWindow.document.write(`
         <html>
           <head>
-            <title>QR Codes - ${locCode}</title>
+            <title>Labels - ${locCode}</title>
             <style>
+              @page { size: 4in 6in; margin: 0; }
+              * { box-sizing: border-box; }
               body {
-                font-family: Arial, sans-serif;
-                padding: 20px;
+                margin: 0; padding: 0;
+                font-family: Arial, Helvetica, sans-serif;
+                -webkit-print-color-adjust: exact;
               }
-              .header {
+              .label {
+                width: 4in; height: 6in;
+                padding: 0.18in 0.16in;
+                display: flex; flex-direction: column;
+                align-items: center; justify-content: flex-start;
                 text-align: center;
-                margin-bottom: 30px;
-                page-break-after: avoid;
+                page-break-after: always;
+                break-after: page;
+                overflow: hidden;
               }
-              .qr-grid {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 30px;
-                page-break-inside: avoid;
+              .label:last-child { page-break-after: auto; break-after: auto; }
+              .l-loc {
+                font-size: 30px; font-weight: 900; letter-spacing: .02em;
+                line-height: 1.05; margin-bottom: 2px; word-break: break-word;
               }
-              .qr-item {
-                border: 2px solid #000;
-                padding: 15px;
-                text-align: center;
-                page-break-inside: avoid;
+              .l-name {
+                font-size: 15px; font-weight: 700; line-height: 1.15;
+                margin: 2px 0 6px; max-height: 0.62in; overflow: hidden;
               }
-              .qr-item h3 {
-                margin: 0 0 10px 0;
-                font-size: 16px;
+              .l-qr { width: 2.5in; height: 2.5in; display: block; margin: 2px auto; }
+              .l-sku { font-size: 22px; font-weight: 800; margin-top: 4px; letter-spacing: .04em; }
+              .l-qty {
+                font-size: 40px; font-weight: 900; line-height: 1;
+                margin-top: 6px; padding: 3px 0;
+                border-top: 3px solid #000; border-bottom: 3px solid #000;
+                width: 100%;
               }
-              .qr-item img {
-                width: 200px;
-                height: 200px;
-                border: 1px solid #ddd;
-              }
-              .qr-item .info {
-                margin-top: 10px;
-                font-size: 12px;
-                color: #666;
-              }
-              .qr-item .quantity {
-                font-weight: bold;
-                color: #0d7a52;
-                margin-top: 5px;
-              }
-              @media print {
-                .qr-grid {
-                  grid-template-columns: repeat(2, 1fr);
-                }
-              }
+              .l-qty span { font-size: 15px; font-weight: 700; vertical-align: middle; }
+              .l-meta { font-size: 13px; font-weight: 600; margin-top: 6px; line-height: 1.25; }
+              .l-foot { font-size: 11px; margin-top: auto; padding-top: 4px; }
+              .screen-only { text-align: center; padding: 14px; }
+              @media print { .screen-only { display: none; } }
             </style>
           </head>
           <body>
-            <div class="header">
-              <h1>Location: ${locCode}</h1>
-              <p>Total Items: ${itemsInLocation.length} | Total Quantity: ${getCurrentQty(location)}</p>
+            <div class="screen-only">
+              <button onclick="window.print()" style="padding:10px 30px;font-size:16px;cursor:pointer;">
+                🖨️ Print ${qrCodes.length} label${qrCodes.length === 1 ? '' : 's'} (4×6)
+              </button>
             </div>
-            <div class="qr-grid">
-              ${qrCodes.map(({ item, quantity, qrImage }) => `
-                <div class="qr-item">
-                  <h3>${item.name}</h3>
-                  <img src="${qrImage}" />
-                  <div class="info">Part #: ${item.partNumber || '—'}</div>
-                  <div class="quantity">Qty: ${quantity}</div>
-                  ${item.grade ? `<div class="info">Condition: ${item.grade}</div>` : ''}
-                </div>
-              `).join('')}
-            </div>
-            <div style="text-align: center; margin-top: 30px;">
-              <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px; cursor: pointer;">🖨️ Print All</button>
-            </div>
-            <style>
-              @media print {
-                button { display: none; }
-              }
-            </style>
+            ${qrCodes.map(({ item, quantity, qrImage }) => `
+              <div class="label">
+                <div class="l-loc">${locCode}</div>
+                <div class="l-name">${item.name || ''}</div>
+                <img class="l-qr" src="${qrImage}" />
+                <div class="l-sku">${item.partNumber || '—'}</div>
+                <div class="l-qty">${quantity}<span> UNITS</span></div>
+                <div class="l-meta">${item.grade ? 'Condition: ' + item.grade : ''}</div>
+                <div class="l-foot">${new Date().toLocaleDateString()}</div>
+              </div>
+            `).join('')}
           </body>
         </html>
       `);

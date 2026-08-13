@@ -1442,63 +1442,84 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
   const printQR = async (item) => {
     try {
       const qrData = item.partNumber || item.id;
-      const qrImage = await QRCode.toDataURL(qrData, { width: 300 });
+      const qrImage = await QRCode.toDataURL(qrData, { width: 600, margin: 1 });
 
       // Current inventory, derived from the item itself (single source of truth)
       const spots = DB.itemLocations(item);
       const totalQty = spots.length
         ? spots.reduce((sum, e) => sum + e.qty, 0)
         : (parseInt(item.stock) || 0);
-      const whereText = spots.length
-        ? spots.map(e => `${e.code}: ${e.qty}`).join(' &nbsp;•&nbsp; ')
-        : (item.location || '— no location —');
+
+      // One 4x6 label per shelf the item sits on, so each label shows the
+      // quantity actually at that location. Unlocated items get one label.
+      const labels = spots.length
+        ? spots.map(e => ({ loc: e.code, qty: e.qty }))
+        : [{ loc: item.location || '— NO LOCATION —', qty: totalQty }];
 
       const printWindow = window.open('', '_blank');
       printWindow.document.write(`
         <html>
           <head>
-            <title>QR Code - ${item.name}</title>
+            <title>Label - ${item.partNumber || item.name}</title>
             <style>
-              body { font-family: Arial; padding: 20px; }
-              .header { text-align: center; margin-bottom: 30px; }
-              .header h1 { margin: 0; font-size: 24px; }
-              .header p { margin: 5px 0 0; color: #666; font-size: 14px; }
-              .qr-grid {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 30px;
-                page-break-inside: avoid;
+              @page { size: 4in 6in; margin: 0; }
+              * { box-sizing: border-box; }
+              body {
+                margin: 0; padding: 0;
+                font-family: Arial, Helvetica, sans-serif;
+                -webkit-print-color-adjust: exact;
               }
-              .qr-item {
-                border: 2px solid #000;
-                padding: 15px;
+              .label {
+                width: 4in; height: 6in;
+                padding: 0.18in 0.16in;
+                display: flex; flex-direction: column;
+                align-items: center; justify-content: flex-start;
                 text-align: center;
-                page-break-inside: avoid;
+                page-break-after: always;
+                break-after: page;
+                overflow: hidden;
               }
-              .qr-item h3 { margin: 0 0 10px 0; font-size: 16px; }
-              .qr-item img { width: 200px; height: 200px; border: 1px solid #ddd; }
-              .qr-item .info { margin-top: 10px; font-size: 12px; color: #666; }
-              .qr-item .quantity { font-weight: bold; color: #0d7a52; margin-top: 5px; }
-              @media print { .qr-grid { grid-template-columns: repeat(2, 1fr); } }
+              .label:last-child { page-break-after: auto; break-after: auto; }
+              .l-loc {
+                font-size: 30px; font-weight: 900; letter-spacing: .02em;
+                line-height: 1.05; margin-bottom: 2px; word-break: break-word;
+              }
+              .l-name {
+                font-size: 15px; font-weight: 700; line-height: 1.15;
+                margin: 2px 0 6px; max-height: 0.62in; overflow: hidden;
+              }
+              .l-qr { width: 2.5in; height: 2.5in; display: block; margin: 2px auto; }
+              .l-sku { font-size: 22px; font-weight: 800; margin-top: 4px; letter-spacing: .04em; }
+              .l-qty {
+                font-size: 40px; font-weight: 900; line-height: 1;
+                margin-top: 6px; padding: 3px 0;
+                border-top: 3px solid #000; border-bottom: 3px solid #000;
+                width: 100%;
+              }
+              .l-qty span { font-size: 15px; font-weight: 700; vertical-align: middle; }
+              .l-meta { font-size: 13px; font-weight: 600; margin-top: 6px; line-height: 1.25; }
+              .l-foot { font-size: 11px; margin-top: auto; padding-top: 4px; }
+              .screen-only { text-align: center; padding: 14px; }
+              @media print { .screen-only { display: none; } }
             </style>
           </head>
           <body>
-            <div class="header">
-              <h1>${item.name}</h1>
-              <p>Total Quantity: ${totalQty}${item.grade ? ' | Condition: ' + item.grade : ''}</p>
+            <div class="screen-only">
+              <button onclick="window.print()" style="padding:10px 30px;font-size:16px;cursor:pointer;">
+                🖨️ Print ${labels.length} label${labels.length === 1 ? '' : 's'} (4×6)
+              </button>
             </div>
-            <div class="qr-grid">
-              <div class="qr-item">
-                <h3>${item.name}</h3>
-                <img src="${qrImage}" />
-                <div class="info">Part #: ${item.partNumber || '—'}</div>
-                <div class="quantity">Qty: ${totalQty}</div>
-                <div class="info">${whereText}</div>
+            ${labels.map(l => `
+              <div class="label">
+                <div class="l-loc">${l.loc}</div>
+                <div class="l-name">${item.name || ''}</div>
+                <img class="l-qr" src="${qrImage}" />
+                <div class="l-sku">${item.partNumber || '—'}</div>
+                <div class="l-qty">${l.qty}<span> UNITS</span></div>
+                <div class="l-meta">${item.grade ? 'Condition: ' + item.grade : ''}${labels.length > 1 ? ' &nbsp;·&nbsp; total ' + totalQty : ''}</div>
+                <div class="l-foot">${new Date().toLocaleDateString()}</div>
               </div>
-            </div>
-            <div style="text-align: center; margin-top: 30px;">
-              <button onclick="window.print()" style="padding: 10px 30px; font-size: 16px; cursor: pointer;">🖨️ Print</button>
-            </div>
+            `).join('')}
           </body>
         </html>
       `);

@@ -583,18 +583,14 @@ W2,2,C,3`;
 
   const printLocationQRCodes = async (location) => {
     try {
-      // Get all items in this location
-      const itemsInLocation = [];
-      if (location.inventory) {
-        for (const [itemId, quantity] of Object.entries(location.inventory)) {
-          if (quantity > 0) {
-            const item = items.find(i => i.id === itemId);
-            if (item) {
-              itemsInLocation.push({ item, quantity });
-            }
-          }
-        }
-      }
+      // Get all items in this location.
+      // SINGLE SOURCE OF TRUTH: derive from the items themselves. This used to
+      // read location.inventory — the maps retired by the unify migration —
+      // so anything stored here AFTER that migration looked empty, and
+      // anything stored before printed stale pre-migration quantities.
+      const itemsInLocation = getLocationItems(location)
+        .filter(r => (parseInt(r.quantity) || 0) > 0)
+        .map(r => ({ item: r, quantity: r.quantity }));
 
       if (itemsInLocation.length === 0) {
         alert('No items in this location to print');

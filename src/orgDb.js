@@ -947,6 +947,46 @@ export const OrgDB = {
   },
 
   // Move qty between shelves — total stock unchanged.
+  // Move a whole shelf's contents (or a chosen subset) to another shelf.
+  // Item-owned model: each item's entry for `fromCode` is retargeted to
+  // `toCode`, merging if the item already holds stock there. Totals never
+  // change — this is a relocation, not a receive.
+  async moveLocationContents(fromCode, toCode, itemIds) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const from = this.canonicalLocationCode(fromCode);
+    const to = this.canonicalLocationCode(toCode);
+    if (!from || !to) throw new Error('Both a source and destination are required');
+    if (from === to) throw new Error('Source and destination must be different');
+
+    const only = Array.isArray(itemIds) && itemIds.length ? new Set(itemIds) : null;
+    const items = await this.getItems();
+    let movedItems = 0, movedUnits = 0, mergedInto = 0;
+    const report = [];
+
+    for (const it of items) {
+      if (only && !only.has(it.id)) continue;
+      const entries = this.itemLocations(it);
+      const src = entries.find(e => e.code === from);
+      if (!src || src.qty <= 0) continue;
+
+      const qty = src.qty;
+      const dst = entries.find(e => e.code === to);
+      if (dst) { dst.qty += qty; mergedInto++; } else { entries.push({ code: to, qty }); }
+
+      const remaining = entries.filter(e => e.code !== from && e.qty > 0);
+      await this.setItemLocations(it.id, remaining);
+      await this.logMovement({
+        itemId: it.id, itemName: it.name, quantity: qty,
+        type: 'MOVE', fromLocation: from, toLocation: to
+      });
+
+      movedItems++; movedUnits += qty;
+      report.push(`${it.partNumber || ''} ${it.name}: ${qty}`);
+    }
+
+    return { movedItems, movedUnits, mergedInto, from, to, report };
+  },
+
   async moveStockBetweenLocations(itemId, fromCode, toCode, qty) {
     const amount = parseInt(qty) || 0;
     if (amount <= 0) throw new Error('Quantity must be greater than zero');

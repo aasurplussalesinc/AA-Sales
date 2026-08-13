@@ -16,6 +16,10 @@ export default function Locations() {
   const [newLocation, setNewLocation] = useState({ warehouse: 'W1', rack: '1', letter: 'A', shelf: '1' });
   const [items, setItems] = useState([]);
   const [viewingLocation, setViewingLocation] = useState(null);
+  const [movingFrom, setMovingFrom] = useState(null);     // source location
+  const [moveTarget, setMoveTarget] = useState('');
+  const [movePicked, setMovePicked] = useState({});        // itemId -> bool
+  const [moveBusy, setMoveBusy] = useState(false);
   const [editingLocation, setEditingLocation] = useState(null);
   const [saving, setSaving] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -251,6 +255,36 @@ export default function Locations() {
       const item = items.find(i => i.id === r.id);
       return { ...(item || {}), id: r.id, name: r.name, partNumber: r.sku, quantity: r.qty };
     });
+  };
+
+  // Open the move dialog with every item on the shelf ticked by default.
+  const openMove = (loc) => {
+    const rows = getLocationItems(loc).filter(r => (parseInt(r.quantity) || 0) > 0);
+    const picked = {};
+    rows.forEach(r => { picked[r.id] = true; });
+    setMovePicked(picked);
+    setMoveTarget('');
+    setMovingFrom(loc);
+  };
+
+  const runMove = async () => {
+    if (!movingFrom || !moveTarget || moveBusy) return;
+    const ids = Object.keys(movePicked).filter(k => movePicked[k]);
+    if (!ids.length) { alert('Pick at least one item to move.'); return; }
+    setMoveBusy(true);
+    try {
+      const res = await DB.moveLocationContents(formatLocation(movingFrom), moveTarget, ids);
+      setMovingFrom(null);
+      await loadData();
+      alert(
+        `Moved ${res.movedItems} item${res.movedItems === 1 ? '' : 's'} ` +
+        `(${res.movedUnits} units)\n${res.from}  →  ${res.to}` +
+        (res.mergedInto ? `\n\n${res.mergedInto} merged with stock already there.` : '')
+      );
+    } catch (e) {
+      alert('Move failed: ' + (e.message || e));
+    }
+    setMoveBusy(false);
   };
 
   const viewLocation = (loc) => {
@@ -1162,6 +1196,16 @@ W2,2,C,3`;
                       >
                         🖨️ Items
                       </button>
+                      {canEdit && getCurrentQty(loc) > 0 && (
+                        <button
+                          className="btn btn-sm"
+                          onClick={() => openMove(loc)}
+                          title="Move this shelf's contents to another location"
+                          style={{ background: '#6b7f3e', color: 'var(--text-on-dark)' }}
+                        >
+                          ➡️ Move
+                        </button>
+                      )}
                       <button 
                         className="btn btn-primary btn-sm"
                         onClick={() => viewLocation(loc)}
@@ -1203,6 +1247,89 @@ W2,2,C,3`;
 
       {/* View Location Modal */}
       {/* View Location Popup */}
+      {/* Move a shelf's contents elsewhere */}
+      {movingFrom && (() => {
+        const rows = getLocationItems(movingFrom).filter(r => (parseInt(r.quantity) || 0) > 0);
+        const chosen = rows.filter(r => movePicked[r.id]);
+        const units = chosen.reduce((sum, r) => sum + (parseInt(r.quantity) || 0), 0);
+        const fromCode = formatLocation(movingFrom);
+        const options = locations
+          .map(l => formatLocation(l))
+          .filter(c => c && c !== fromCode)
+          .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+            onClick={() => !moveBusy && setMovingFrom(null)}>
+            <div onClick={e => e.stopPropagation()} style={{
+              background: 'var(--bg-surface)', borderRadius: 10, width: 'min(560px, 96vw)',
+              maxHeight: '86vh', display: 'flex', flexDirection: 'column',
+              boxShadow: '0 10px 40px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+
+              <div style={{ background: '#4a5d23', color: '#fff', padding: '14px 18px' }}>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>➡️ Move contents of {fromCode}</div>
+                <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>
+                  {rows.length} item{rows.length === 1 ? '' : 's'} on this shelf
+                </div>
+              </div>
+
+              <div style={{ padding: 16, overflowY: 'auto' }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, marginBottom: 5,
+                  textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--text-muted)' }}>
+                  Move to
+                </label>
+                <select value={moveTarget} onChange={e => setMoveTarget(e.target.value)}
+                  style={{ width: '100%', padding: 9, borderRadius: 6, border: '1px solid var(--border)',
+                    background: 'var(--bg-input)', color: 'var(--text-primary)', marginBottom: 14 }}>
+                  <option value="">— choose a destination —</option>
+                  {options.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <strong style={{ fontSize: 13 }}>Items to move</strong>
+                  <button onClick={() => { const p = {}; rows.forEach(r => { p[r.id] = true; }); setMovePicked(p); }}
+                    style={{ fontSize: 11, padding: '2px 8px', border: '1px solid var(--border)',
+                      borderRadius: 4, background: '#fff', cursor: 'pointer', fontWeight: 700 }}>All</button>
+                  <button onClick={() => setMovePicked({})}
+                    style={{ fontSize: 11, padding: '2px 8px', border: '1px solid var(--border)',
+                      borderRadius: 4, background: '#fff', cursor: 'pointer', fontWeight: 700 }}>None</button>
+                  <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-muted)' }}>
+                    {chosen.length} selected · {units} units
+                  </span>
+                </div>
+
+                <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+                  {rows.map(r => (
+                    <label key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '7px 10px', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontSize: 13 }}>
+                      <input type="checkbox" checked={!!movePicked[r.id]}
+                        onChange={e => setMovePicked(p => ({ ...p, [r.id]: e.target.checked }))} />
+                      <span style={{ color: 'var(--text-muted)', fontSize: 12, minWidth: 46 }}>{r.partNumber}</span>
+                      <span style={{ flex: 1 }}>{r.name}</span>
+                      <strong>{r.quantity}</strong>
+                    </label>
+                  ))}
+                </div>
+
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>
+                  Quantities don't change — this only moves where the stock sits. Anything already
+                  at the destination is added to.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 10, padding: '0 16px 16px', justifyContent: 'flex-end' }}>
+                <button className="btn" disabled={moveBusy} onClick={() => setMovingFrom(null)}>Cancel</button>
+                <button className="btn" disabled={moveBusy || !moveTarget || !chosen.length}
+                  onClick={runMove}
+                  style={{ background: (!moveTarget || !chosen.length) ? '#b9c0ab' : '#4a5d23', color: '#fff' }}>
+                  {moveBusy ? 'Moving…' : `Move ${chosen.length} item${chosen.length === 1 ? '' : 's'}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {viewingLocation && (
         <div 
           style={{

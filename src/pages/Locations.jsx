@@ -581,6 +581,161 @@ W2,2,C,3`;
     }
   };
 
+  // ── Print an entire column: one 4x6 sheet per shelf, max 6 items a sheet ──
+  const printColumn = async () => {
+    const wh = filters.warehouse, rk = filters.rack, col = filters.letter;
+    if (!wh || !rk || !col) {
+      alert('Choose a Warehouse, Rack and Letter above, then print the column.');
+      return;
+    }
+
+    // Shelves in this column, in natural order (1, 2, 10 — not 1, 10, 2)
+    const shelves = locations
+      .filter(l => l.warehouse === wh && l.rack === rk && l.letter === col)
+      .sort((a, b) => String(a.shelf).localeCompare(String(b.shelf), undefined, { numeric: true }));
+
+    if (!shelves.length) { alert(`No shelves found in ${wh}-R${rk}-${col}.`); return; }
+
+    const PER_SHEET = 6;
+    const sheets = [];
+
+    for (const loc of shelves) {
+      const rows = getLocationItems(loc).filter(r => (parseInt(r.quantity) || 0) > 0);
+      if (!rows.length) continue;                    // empty shelves are skipped
+      const code = formatLocation(loc);
+      const totalQty = rows.reduce((sum, r) => sum + (parseInt(r.quantity) || 0), 0);
+      const chunks = [];
+      for (let i = 0; i < rows.length; i += PER_SHEET) chunks.push(rows.slice(i, i + PER_SHEET));
+      chunks.forEach((chunk, idx) => {
+        sheets.push({
+          code, rows: chunk, itemCount: rows.length, totalQty,
+          part: idx + 1, parts: chunks.length
+        });
+      });
+    }
+
+    if (!sheets.length) { alert(`Nothing stored in column ${wh}-R${rk}-${col}.`); return; }
+
+    // QR per item, sized to how it will be printed
+    for (const sheet of sheets) {
+      for (const r of sheet.rows) {
+        const data = r.partNumber || r.id;
+        r.qr = await QRCode.toDataURL(data, { width: sheet.rows.length === 1 ? 600 : 220, margin: 1 });
+      }
+    }
+
+    const printed = new Date().toLocaleDateString();
+    const win = window.open('', '_blank');
+    win.document.write(`
+      <html>
+        <head>
+          <title>Column ${wh}-R${rk}-${col}</title>
+          <style>
+              @page { size: 4in 6in; margin: 0; }
+              * { box-sizing: border-box; }
+              body {
+                margin: 0; padding: 0;
+                font-family: Arial, Helvetica, sans-serif;
+                -webkit-print-color-adjust: exact;
+              }
+              .label {
+                width: 4in; height: 6in;
+                padding: 0.18in 0.16in;
+                display: flex; flex-direction: column;
+                align-items: center; justify-content: flex-start;
+                text-align: center;
+                page-break-after: always;
+                break-after: page;
+                overflow: hidden;
+              }
+              .label:last-child { page-break-after: auto; break-after: auto; }
+              .l-loc {
+                font-size: 30px; font-weight: 900; letter-spacing: .02em;
+                line-height: 1.05; margin-bottom: 2px; word-break: break-word;
+              }
+              .l-name {
+                font-size: 15px; font-weight: 700; line-height: 1.15;
+                margin: 2px 0 6px; max-height: 0.62in; overflow: hidden;
+              }
+              .l-qr { width: 2.5in; height: 2.5in; display: block; margin: 2px auto; }
+              .l-sku { font-size: 22px; font-weight: 800; margin-top: 4px; letter-spacing: .04em; }
+              .l-qty {
+                font-size: 40px; font-weight: 900; line-height: 1;
+                margin-top: 6px; padding: 3px 0;
+                border-top: 3px solid #000; border-bottom: 3px solid #000;
+                width: 100%;
+              }
+              .l-qty span { font-size: 15px; font-weight: 700; vertical-align: middle; }
+              .l-meta { font-size: 13px; font-weight: 600; margin-top: 6px; line-height: 1.25; }
+              .l-foot { font-size: 11px; margin-top: auto; padding-top: 4px; }
+              .screen-only { text-align: center; padding: 14px; }
+              @media print { .screen-only { display: none; } }
+            .l-head { font-size:11px; font-weight:800; text-align:center; letter-spacing:.05em; margin-top:2px; }
+            .l-div { border-top:3px solid #000; width:100%; margin:7px 0 4px; }
+            .rows { flex:1; width:100%; display:flex; flex-direction:column; }
+            .row { display:flex; align-items:center; gap:8px; padding:2px 0;
+                   border-bottom:1px dashed #777; }
+            .row:last-child { border-bottom:none; }
+            .row img { width:0.66in; height:0.66in; flex-shrink:0; }
+            .row .t { flex:1; min-width:0; text-align:left; }
+            .row .n { font-size:10.5px; font-weight:700; line-height:1.1;
+                      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+            .row .s { font-size:14px; font-weight:800; letter-spacing:.03em; }
+            .row .q { font-size:22px; font-weight:900; text-align:right; min-width:0.6in; }
+            .row .q i { font-size:9px; font-style:normal; font-weight:700; display:block; }
+          </style>
+        </head>
+        <body>
+          <div class="screen-only">
+            <button onclick="window.print()" style="padding:10px 30px;font-size:16px;cursor:pointer;">
+              🖨️ Print ${sheets.length} sheet${sheets.length === 1 ? '' : 's'} — column ${wh}-R${rk}-${col} (4×6)
+            </button>
+          </div>
+          ${sheets.map(sh => {
+            const single = sh.rows.length === 1 && sh.parts === 1;
+            const sub = sh.parts > 1
+              ? `${sh.itemCount} ITEMS · SHEET ${sh.part} OF ${sh.parts}`
+              : `${sh.itemCount} ITEM${sh.itemCount === 1 ? '' : 'S'} · ${sh.totalQty} UNITS`;
+            if (single) {
+              const r = sh.rows[0];
+              return `
+                <div class="label">
+                  <div class="l-loc">${sh.code}</div>
+                  <div class="l-head">${sub}</div>
+                  <div class="l-div"></div>
+                  <div class="l-name">${r.name || ''}</div>
+                  <img class="l-qr" src="${r.qr}" />
+                  <div class="l-sku">${r.partNumber || '—'}</div>
+                  <div class="l-qty">${r.quantity}<span> UNITS</span></div>
+                  <div class="l-meta">${r.grade ? 'Condition: ' + r.grade : ''}</div>
+                  <div class="l-foot">${printed}</div>
+                </div>`;
+            }
+            return `
+              <div class="label">
+                <div class="l-loc">${sh.code}</div>
+                <div class="l-head">${sub}</div>
+                <div class="l-div"></div>
+                <div class="rows">
+                  ${sh.rows.map(r => `
+                    <div class="row">
+                      <img src="${r.qr}" />
+                      <div class="t">
+                        <div class="n">${r.name || ''}</div>
+                        <div class="s">${r.partNumber || '—'}</div>
+                      </div>
+                      <div class="q">${r.quantity}<i>UNITS</i></div>
+                    </div>`).join('')}
+                </div>
+                <div class="l-foot">${printed}${sh.part < sh.parts ? ' · continues →' : ''}</div>
+              </div>`;
+          }).join('')}
+        </body>
+      </html>
+    `);
+    win.document.close();
+  };
+
   const printLocationQRCodes = async (location) => {
     try {
       // Get all items in this location.
@@ -844,6 +999,17 @@ W2,2,C,3`;
             ))}
           </select>
           
+          {filters.warehouse && filters.rack && filters.letter && (
+            <button
+              className="btn"
+              onClick={printColumn}
+              title={`Print every shelf in column ${filters.warehouse}-R${filters.rack}-${filters.letter} — one 4×6 sheet per shelf`}
+              style={{ background: '#6b7f3e', color: 'var(--text-on-dark)', whiteSpace: 'nowrap' }}
+            >
+              🖨️ Print column {filters.warehouse}-R{filters.rack}-{filters.letter}
+            </button>
+          )}
+
           {(filters.warehouse || filters.rack || filters.letter || filters.search) && (
             <button
               onClick={() => setFilters({ warehouse: '', rack: '', letter: '', search: '' })}

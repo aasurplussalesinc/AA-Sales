@@ -504,13 +504,13 @@ export default function PickLists() {
       <table>
         <thead>
           <tr>
-            <th style="width: 40px">#</th>
+            <th style="width: 26px">#</th>
             <th>Item</th>
-            <th class="text-center" style="width: 70px">Grade</th>
-            <th class="text-center" style="width: 100px">Location</th>
-            <th class="text-center" style="width: 80px">Requested</th>
-            <th class="text-center" style="width: 80px">Picked</th>
-            <th class="text-center" style="width: 60px">✓</th>
+            <th class="text-center col-grade" style="width: 52px">Grade</th>
+            <th class="text-center col-loc" style="width: 104px">Location</th>
+            <th class="text-center" style="width: 62px">Req</th>
+            <th class="text-center" style="width: 62px">Picked</th>
+            <th class="text-center" style="width: 38px">✓</th>
           </tr>
         </thead>
         <tbody>
@@ -522,8 +522,8 @@ export default function PickLists() {
                 <div class="sku">${item.partNumber || ''}</div>
                 ${item.notes ? `<div style="font-size:9px;color:#795548;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}
               </td>
-              <td class="text-center"><strong>${gradeOf(item) || '-'}</strong></td>
-              <td class="text-center"><strong>${item.location || '-'}</strong></td>
+              <td class="text-center col-grade"><strong>${gradeOf(item) || '-'}</strong></td>
+              <td class="text-center col-loc"><strong>${item.location || '-'}</strong></td>
               <td class="text-center"><strong>${item.requestedQty}</strong></td>
               <td class="text-center">${list.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>'}</td>
               <td class="text-center">${list.status === 'completed' ? (item.pickedQty >= item.requestedQty ? '✅' : '⚠️') : '☐'}</td>
@@ -548,7 +548,7 @@ export default function PickLists() {
 
   // Shared styles for both single and bulk printing.
   const pickListPrintStyles = (list) => `
-    body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
+    body { font-family: Arial, sans-serif; padding: 28px; max-width: 980px; margin: 0 auto; }
     .pl-page { page-break-after: always; }
     .pl-page:last-child { page-break-after: auto; }
     .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #2d5f3f; padding-bottom: 15px; }
@@ -556,8 +556,12 @@ export default function PickLists() {
     .meta { text-align: right; color: #666; font-size: 14px; }
     .status { display: inline-block; padding: 4px 12px; border-radius: 4px; font-size: 12px; font-weight: bold; background: ${getStatusColor(list?.status)}; color: white; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    th { background: #2d5f3f; color: white; padding: 12px; text-align: left; }
-    td { padding: 12px; border-bottom: 1px solid #ddd; }
+    th { background: #2d5f3f; color: white; padding: 9px 6px; text-align: left; font-size: 13px; }
+    td { padding: 9px 6px; border-bottom: 1px solid #ddd; vertical-align: top; }
+    /* Location codes must stay on one line — they were wrapping and becoming
+       unreadable once the Grade column was added. */
+    .col-loc { white-space: nowrap; font-size: 13px; letter-spacing: .02em; }
+    .col-grade { white-space: nowrap; font-size: 12px; text-transform: uppercase; }
     .text-center { text-align: center; }
     .location { font-size: 12px; color: #2d5f3f; margin-top: 4px; }
     .sku { font-size: 12px; color: #666; }

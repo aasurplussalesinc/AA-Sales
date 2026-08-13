@@ -141,6 +141,19 @@ export default function PurchaseOrders() {
     setSearchCustomer('');
   };
 
+  // Grade for a line. Older orders didn't store it, so fall back to inventory
+  // by item id, then by SKU.
+  const lineGrade = (line) => {
+    if (!line) return '';
+    if (line.grade) return line.grade;
+    const byId = line.itemId && (items || []).find(i => i.id === line.itemId);
+    if (byId?.grade) return byId.grade;
+    const sku = String(line.partNumber || '').trim().toLowerCase();
+    if (!sku) return '';
+    const bySku = (items || []).find(i => String(i.partNumber || '').trim().toLowerCase() === sku);
+    return bySku?.grade || '';
+  };
+
   const addItemToPO = (item) => {
     const unitPrice = parseFloat(item.price) || 0;
     const lineId = `line_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1749,6 +1762,15 @@ ${labelsHtml}
                             ) : (
                               <>
                                 <strong>{item.itemName}</strong>
+                                {(() => { const g = lineGrade(item); return g ? (
+                                  <span style={{
+                                    marginLeft: 8, padding: '1px 7px', borderRadius: 9, fontSize: 10,
+                                    fontWeight: 800, letterSpacing: '.03em', textTransform: 'uppercase',
+                                    background: /new/i.test(g) ? '#e8f5e9' : '#fff3e0',
+                                    color: /new/i.test(g) ? '#2e7d32' : '#e65100',
+                                    border: '1px solid ' + (/new/i.test(g) ? '#a5d6a7' : '#ffcc80')
+                                  }}>{g}</span>
+                                ) : null; })()}
                                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.partNumber}</div>
                               </>
                             )}
@@ -1919,6 +1941,15 @@ ${labelsHtml}
                     <tr key={idx} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td style={{ padding: 10 }}>
                         {item.itemName}
+                        {(() => { const g = lineGrade(item); return g ? (
+                          <span style={{
+                            marginLeft: 8, padding: '1px 7px', borderRadius: 9, fontSize: 10,
+                            fontWeight: 800, letterSpacing: '.03em', textTransform: 'uppercase',
+                            background: /new/i.test(g) ? '#e8f5e9' : '#fff3e0',
+                            color: /new/i.test(g) ? '#2e7d32' : '#e65100',
+                            border: '1px solid ' + (/new/i.test(g) ? '#a5d6a7' : '#ffcc80')
+                          }}>{g}</span>
+                        ) : null; })()}
                         <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{item.partNumber}</div>
                         {item.boxNumber && <div style={{ fontSize: 11, color: 'var(--text-badge-purple)' }}>📦 Box {item.boxNumber}</div>}
                         {item.notes && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3, fontStyle: 'italic', background: 'var(--bg-badge-orange)', padding: '2px 6px', borderRadius: 4, display: 'inline-block' }}>📝 {item.notes}</div>}

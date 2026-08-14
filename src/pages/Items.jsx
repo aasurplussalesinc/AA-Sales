@@ -801,7 +801,8 @@ export default function Items() {
     const template = `SKU,Item Name,Grade,Category,Quantity,Price,Location,Low Stock Threshold,Reorder Point
 PART-001,Example Widget,A,Electronics,100,29.99,W1-R1-A1,10,20
 PART-002,Sample Gadget,B,Hardware,50,49.99,W1-R1-A2,5,15
-PART-003,Test Component,New,Parts,200,9.99,,10,25`;
+PART-003,Test Component,New,Parts,200,9.99,,10,25
+PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
 
     const blob = new Blob([template], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -909,6 +910,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         // Parse data rows and group by SKU for multi-location support
         const itemsBySku = new Map();
         const locationInventory = []; // Track location assignments
+        const locationClears = [];    // SKUs whose Location cell said NONE/CLEAR
 
         // Auto-SKU assignment for rows that have a name but no SKU.
         // Mirrors the Add Item form: start from the org's configured series start,
@@ -951,9 +953,14 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           const qty = rawStock !== '' ? (parseInt(rawStock) || 0) : 0;
           const price = rawPrice !== '' ? (parseFloat(rawPrice.replace(/[^0-9.-]/g, '')) || 0) : 0;
           const rawLocation = columnIndices.location !== undefined ? values[columnIndices.location]?.trim() : '';
+          // An explicit word in the Location column means "remove this item's
+          // location". A BLANK cell still means "leave it alone", so an export
+          // with empty locations can't accidentally wipe anything.
+          const CLEAR_WORDS = ['none', 'clear', 'no location', 'nolocation', 'remove', '-', '--'];
+          const clearLocation = CLEAR_WORDS.includes(String(rawLocation).toLowerCase());
           // Normalize on import so "W4R1M2" becomes "W4-R1-M2" and matches
           // location records / the rest of the system consistently.
-          const location = rawLocation ? DB.canonicalLocationCode(rawLocation) : '';
+          const location = (rawLocation && !clearLocation) ? DB.canonicalLocationCode(rawLocation) : '';
 
           // Which fields this row actually supplied a non-blank value for.
           // Blank cells are NOT recorded, so the upsert leaves them untouched.
@@ -1027,6 +1034,8 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
               quantity: qty,
               hasQty: provided.stock
             });
+          } else if (clearLocation) {
+            locationClears.push(key);
           }
         }
 
@@ -1225,6 +1234,36 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           const more = unmatchedLocationCodes.size > 10 ? ` (+${unmatchedLocationCodes.size - 10} more)` : '';
           successMsg += `\n\n⚠️ ${locationsOnlyOnItem} item${locationsOnlyOnItem === 1 ? '' : 's'} had a location set on the item record, but the location code didn't match any existing Locations entry — so they aren't tracked in that location's inventory map.\n\nUnmatched codes: ${codes}${more}\n\nFix: either create those Locations entries in the Locations page, or correct the CSV location codes to match existing ones (e.g. W3-R3-E2).`;
         }
+        // ---- Location clears (Location cell said NONE / CLEAR / -) ----
+        let cleared = 0;
+        const clearKept = [];
+        if (locationClears.length > 0) {
+          const fresh = await DB.getItems();
+          for (const key of locationClears) {
+            const k = String(key).trim().toLowerCase();
+            const it = fresh.find(i =>
+              String(i.partNumber || '').trim().toLowerCase() === k ||
+              String(i.name || '').trim().toLowerCase() === k);
+            if (!it) continue;
+            const spots = DB.itemLocations(it);
+            const live = spots.reduce((sum, e) => sum + e.qty, 0) || (parseInt(it.stock) || 0);
+            if (live > 0) {
+              // An item holding stock has to live somewhere — don't vaporise it.
+              clearKept.push(`${it.partNumber || it.name} (${live})`);
+              continue;
+            }
+            await DB.setItemLocations(it.id, []);
+            cleared++;
+          }
+          if (cleared) successMsg += `\n\n🚫 ${cleared} item(s) had their location cleared.`;
+          if (clearKept.length) {
+            successMsg += `\n\n⚠️ ${clearKept.length} item(s) kept their location because they still hold stock:\n` +
+              clearKept.slice(0, 8).join('\n') +
+              (clearKept.length > 8 ? `\n…and ${clearKept.length - 8} more` : '') +
+              `\nSet the Quantity to 0 in the same row to clear them.`;
+          }
+        }
+
         toast(successMsg);
         
         await loadData(); // Refresh the list

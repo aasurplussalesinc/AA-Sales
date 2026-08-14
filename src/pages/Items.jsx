@@ -53,6 +53,7 @@ export default function Items() {
   const [items, setItems] = useState([]);
   const [originalItems, setOriginalItems] = useState([]);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null); // item pending delete
+  const [pendingImport, setPendingImport] = useState(null); // { summary, apply }
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -1108,11 +1109,10 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         }
         confirmMsg += '\n\nProceed?';
 
-        if (!confirmStep('bulkimport')) {
-          setImporting(false);
-          return;
-        }
-
+        // A file-input change can't be clicked twice, so a two-step confirm here
+        // could never complete — the import silently aborted every time. Show a
+        // real modal with the summary instead and run the work when it's accepted.
+        const applyImport = async () => {
         // Apply updates (preserves doc IDs, so pick lists / orders keep working)
         let updated = 0;
         for (const u of toUpdate) {
@@ -1227,7 +1227,14 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
         }
         toast(successMsg);
         
-        loadData(); // Refresh the list
+        await loadData(); // Refresh the list
+        };  // ← end applyImport
+
+        // Hand the summary to the modal; the work runs only if it's accepted.
+        setPendingImport({ summary: confirmMsg.replace(/\n\nProceed\?$/, ''), apply: applyImport });
+        setImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
       } catch (error) {
         console.error('Import error:', error);
         toast('Failed to import CSV: ' + error.message);
@@ -3022,6 +3029,43 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           </div>
         )}
       </div>
+
+      {/* CSV import confirmation — shows what will change before anything is written */}
+      {pendingImport && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => !importing && setPendingImport(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'var(--bg-surface)', borderRadius: 10, width: 'min(560px, 96vw)',
+            maxHeight: '86vh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+            <div style={{ background: '#17a2b8', color: '#fff', padding: '14px 18px',
+              fontWeight: 800, fontSize: 16 }}>
+              📤 Import CSV — review before applying
+            </div>
+            <div style={{ padding: 18, overflowY: 'auto', whiteSpace: 'pre-wrap',
+              fontSize: 13, lineHeight: 1.55 }}>
+              {pendingImport.summary}
+            </div>
+            <div style={{ display: 'flex', gap: 10, padding: '0 18px 18px', justifyContent: 'flex-end' }}>
+              <button className="btn" disabled={importing}
+                onClick={() => setPendingImport(null)}>Cancel</button>
+              <button className="btn" disabled={importing}
+                style={{ background: '#17a2b8', color: '#fff' }}
+                onClick={async () => {
+                  const job = pendingImport;
+                  setImporting(true);
+                  try { await job.apply(); }
+                  catch (e) { toast('Import failed: ' + (e.message || e)); }
+                  setImporting(false);
+                  setPendingImport(null);
+                }}>
+                {importing ? 'Importing…' : 'Import'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete confirmation */}
       {confirmDeleteItem && (

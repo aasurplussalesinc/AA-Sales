@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from '../utils/toast';
 import QRCode from 'qrcode';
 import { OrgDB as DB } from '../orgDb';
@@ -1634,6 +1634,9 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
   };
 
   const selectAllFiltered = () => setSelectedItems(sortedItems.map(i => i.id));
+  // Membership set: comparing COUNTS made the header tick look checked on page 2
+  // when page 1 was the one actually selected.
+  const selectedItemSet = useMemo(() => new Set(selectedItems), [selectedItems]);
   const clearSelection = () => setSelectedItems([]);
 
   // Apply category to all selected items
@@ -2680,8 +2683,20 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
               <th style={{ width: 40 }}>
                 <input
                   type="checkbox"
-                  checked={selectedItems.length === paginatedItems.length && paginatedItems.length > 0}
-                  onChange={(e) => e.target.checked ? setSelectedItems(paginatedItems.map(i => i.id)) : clearSelection()}
+                  checked={paginatedItems.length > 0 && paginatedItems.every(i => selectedItemSet.has(i.id))}
+                  title="Selects only the items visible on this page"
+                  onChange={(e) => {
+                    const pageIds = paginatedItems.map(i => i.id);
+                    if (e.target.checked) {
+                      // add this page, keep anything picked on other pages
+                      setSelectedItems(prev => [...new Set([...prev, ...pageIds])]);
+                    } else {
+                      // remove only THIS page — unchecking used to wipe the whole
+                      // selection, including items chosen on other pages
+                      const drop = new Set(pageIds);
+                      setSelectedItems(prev => prev.filter(id => !drop.has(id)));
+                    }
+                  }}
                 />
               </th>
               <th style={{ width: 80 }}>SKU</th>
@@ -2701,11 +2716,11 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
           </thead>
           <tbody>
             {paginatedItems.map(item => (
-              <tr key={item.id} style={{ background: selectedItems.includes(item.id) ? 'var(--bg-selected)' : 'transparent', height: 52 }}>
+              <tr key={item.id} style={{ background: selectedItemSet.has(item.id) ? 'var(--bg-selected)' : 'transparent', height: 52 }}>
                 <td>
                   <input
                     type="checkbox"
-                    checked={selectedItems.includes(item.id)}
+                    checked={selectedItemSet.has(item.id)}
                     onChange={() => toggleSelectItem(item.id)}
                   />
                 </td>

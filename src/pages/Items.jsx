@@ -1301,6 +1301,7 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     try {
       let changeCount = 0;
       const skippedLocation = [];
+      const stillStocked = [];
       const skippedStock = [];
       
       // Find items that were deleted (in original but not in current)
@@ -1347,7 +1348,21 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
             const isMulti = spots.length > 1;
             const stockChanged = String(item.stock || 0) !== String(original.stock || 0);
 
-            if (isMulti) {
+            const clearingLocation = locationChanged && !itemLocation;
+            const liveStock = spots.reduce((sum, e) => sum + e.qty, 0) || (parseInt(item.stock) || 0);
+
+            if (clearingLocation) {
+              // Clearing is unambiguous even for a split item — every shelf goes.
+              // But an item holding stock must live somewhere, so refuse to
+              // silently vaporise a count; the user zeroes it or moves it first.
+              if (liveStock > 0) {
+                await DB.updateItem(item.id, base);
+                stillStocked.push(`${item.name || item.partNumber} (${liveStock})`);
+              } else {
+                await DB.updateItem(item.id, { ...base, stock: 0 });
+                await DB.setItemLocations(item.id, []);
+              }
+            } else if (isMulti) {
               // NEVER pass `location` (or a raw stock) for a split item:
               // updateItemWithSync collapses every shelf into ONE holding the
               // full quantity, silently destroying the split. Grid edits here
@@ -1383,7 +1398,14 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
       // got them rewritten on the next save.
       await loadData();
 
-      if (skippedLocation.length || skippedStock.length) {
+      if (stillStocked.length) {
+        toast(
+          `Saved, but ${stillStocked.length} item(s) kept their location because they still hold stock:\n\n` +
+          `${[...new Set(stillStocked)].slice(0, 8).join('\n')}` +
+          `${stillStocked.length > 8 ? `\n…and ${stillStocked.length - 8} more` : ''}` +
+          `\n\nSet the quantity to 0 first, or move the stock to another shelf.`
+        );
+      } else if (skippedLocation.length || skippedStock.length) {
         const parts = [];
         if (skippedLocation.length) parts.push(`Location not changed for: ${[...new Set(skippedLocation)].join(', ')}`);
         if (skippedStock.length) parts.push(`Quantity not changed for: ${[...new Set(skippedStock)].join(', ')}`);
@@ -1669,10 +1691,10 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     
     console.log('Applying batch location:', batchLocation, 'to', selectedItems.length, 'items');
     
+    const target = batchLocation === '__CLEAR__' ? '' : batchLocation;
     const updatedItems = items.map(item => {
       if (selectedItems.includes(item.id)) {
-        console.log('Updating item:', item.id, item.name, 'from', item.location, 'to', batchLocation);
-        return { ...item, location: batchLocation };
+        return { ...item, location: target };
       }
       return item;
     });
@@ -1681,7 +1703,12 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
     setHasChanges(true);
     setShowBatchLocation(false);
     setBatchLocation('');
-    toast(`Location "${batchLocation || '(cleared)'}" applied to ${selectedItems.length} items.\n\n⚠️ Click the green "Save Changes" button to save to database!`);
+    toast(
+      (batchLocation === '__CLEAR__'
+        ? `Location cleared on ${selectedItems.length} item(s).`
+        : `Location "${batchLocation}" applied to ${selectedItems.length} item(s).`) +
+      `\n\n⚠️ Click the green "Save Changes" button to save to database!`
+    );
   };
 
   // Apply price to all selected items
@@ -2183,12 +2210,15 @@ PART-003,Test Component,New,Parts,200,9.99,,10,25`;
                 style={{ width: '100%', marginBottom: 10 }}
               >
                 <option value="">-- Select Location --</option>
+                <option value="__CLEAR__">🚫 Clear location (leave them nowhere)</option>
                 {locationOptions.map(loc => (
                   <option key={loc} value={loc}>{loc}</option>
                 ))}
               </select>
               <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                Select a location to assign to all selected items
+                Assign a location to the selected items, or clear it so they sit nowhere.
+                Clearing only works on items with zero stock — anything still holding
+                units keeps its shelf and is listed after saving.
               </p>
             </div>
             

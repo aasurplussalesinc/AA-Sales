@@ -155,6 +155,33 @@ export default function PurchaseOrders() {
   };
 
   const searchInputRef = useRef(null);
+  const [pickedForOrder, setPickedForOrder] = useState({}); // itemId -> true
+
+  // Build one order line from an inventory item.
+  const buildLineFromItem = (item) => ({
+    lineId: `line_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    itemId: item.id, itemName: item.name, partNumber: item.partNumber,
+    location: item.location || '', grade: item.grade || '',
+    quantity: '', qtyShipped: '', unitPrice: parseFloat(item.price) || 0,
+    estTotal: 0, lineTotal: 0,
+    source: 'inventory', contractId: '', contractNumber: '', costPerLb: 0,
+    weightPerItem: item.weight || '', itemCost: item.cost || 0
+  });
+
+  // Add every ticked result in one go, then close the dropdown.
+  const addSelectedToPO = () => {
+    const ids = Object.keys(pickedForOrder).filter(k => pickedForOrder[k]);
+    if (!ids.length) return;
+    const chosen = ids
+      .map(id => (items || []).find(i => i.id === id))
+      .filter(Boolean);
+    if (!chosen.length) return;
+    // One state write for the whole batch — calling the single-add in a loop
+    // would read stale newPO.items each time and drop lines.
+    updatePOTotals([...newPO.items, ...chosen.map(buildLineFromItem)]);
+    setPickedForOrder({});
+    setSearchItem('');
+  };
 
   const addItemToPO = (item) => {
     const unitPrice = parseFloat(item.price) || 0;
@@ -169,9 +196,8 @@ export default function PurchaseOrders() {
     };
     const updatedItems = [...newPO.items, newItem];
     updatePOTotals(updatedItems);
-    // Keep the search open so several variants (sizes, conditions) can be
-    // picked from one search instead of retyping for each.
-    if (searchInputRef.current) searchInputRef.current.focus();
+    // Only the one-off-item flow uses this now; the search dropdown adds in
+    // batches via addSelectedToPO.
   };
 
   // Add a free-text charge/service line (e.g. Shipping, Handling, Fee). Not tied to
@@ -438,6 +464,7 @@ export default function PurchaseOrders() {
 
   const resetForm = () => {
     setSearchItem('');   // don't carry a stale search into the next order
+    setPickedForOrder({});
     setNewPO({ customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
       shipToAddress: '', shipToCompany: '', useShipTo: false,
       dueDate: '', invoiceDate: '', customerPO: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, credit: 0, discount: 0, estTotal: 0, total: 0 });
@@ -1615,7 +1642,7 @@ ${labelsHtml}
     <div className="container" style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h2 style={{ margin: 0 }}>🧾 Purchase Orders</h2>
-        {canEdit && <button className="btn btn-primary" onClick={() => { setSearchItem(''); setShowCreate(true); }}>+ New Order</button>}
+        {canEdit && <button className="btn btn-primary" onClick={() => { setSearchItem(''); setPickedForOrder({}); setShowCreate(true); }}>+ New Order</button>}
       </div>
 
       {/* Create/Edit Modal */}
@@ -1717,7 +1744,7 @@ ${labelsHtml}
                     style={{ width: '100%', padding: 10, paddingRight: 34, borderRadius: 4,
                       border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
                   {searchItem && (
-                    <button type="button" onClick={() => setSearchItem('')}
+                    <button type="button" onClick={() => { setSearchItem(''); setPickedForOrder({}); }}
                       title="Clear search"
                       style={{ position: 'absolute', right: 8, top: 'calc(50% - 11px)', width: 22, height: 22,
                         border: 'none', background: 'var(--border)', borderRadius: '50%', cursor: 'pointer',
@@ -1730,43 +1757,89 @@ ${labelsHtml}
                     No items match “{searchItem}”. Every word has to appear somewhere in the name, SKU, grade or category.
                   </div>
                 )}
-                {filteredItems.length > 0 && (
-                  <div style={{ border: '1px solid var(--border)', borderRadius: 4, maxHeight: 260, overflow: 'auto', marginTop: 5 }}>
-                    <div style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
-                      background: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border)', letterSpacing: '.04em' }}>
-                      {filteredItems.length} MATCH{filteredItems.length === 1 ? '' : 'ES'} — CLICK EACH ONE YOU NEED
-                      {filteredItems.length > 25 ? ' · showing first 25, keep typing to narrow' : ''}
+                {filteredItems.length > 0 && (() => {
+                  const pickedIds = Object.keys(pickedForOrder).filter(k => pickedForOrder[k]);
+                  const shown = filteredItems.slice(0, 25);
+                  const allShownPicked = shown.length > 0 && shown.every(i => pickedForOrder[i.id]);
+                  return (
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 4, marginTop: 5, overflow: 'hidden' }}>
+                    <div style={{ padding: '6px 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
+                      background: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border)',
+                      letterSpacing: '.04em', display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span>
+                        {filteredItems.length} MATCH{filteredItems.length === 1 ? '' : 'ES'}
+                        {filteredItems.length > 25 ? ' · showing first 25' : ''}
+                      </span>
+                      <button type="button"
+                        onClick={() => {
+                          if (allShownPicked) {
+                            setPickedForOrder(p => { const n = { ...p }; shown.forEach(i => delete n[i.id]); return n; });
+                          } else {
+                            setPickedForOrder(p => { const n = { ...p }; shown.forEach(i => { n[i.id] = true; }); return n; });
+                          }
+                        }}
+                        style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, padding: '2px 8px',
+                          border: '1px solid var(--border)', borderRadius: 4, background: '#fff', cursor: 'pointer' }}>
+                        {allShownPicked ? 'Clear all' : 'Select all'}
+                      </button>
                     </div>
-                    {filteredItems.slice(0, 25).map(item => {
-                      const addedCount = (newPO.items || []).filter(l => l.itemId === item.id).length;
-                      return (
-                      <div key={item.id} onClick={() => addItemToPO(item)}
-                        title={addedCount ? 'Already on this order — click to add another line' : 'Click to add'}
-                        style={{ padding: 10, borderBottom: '1px solid var(--border)', cursor: 'pointer',
-                          background: addedCount ? 'var(--bg-badge-green, #e8f5e9)' : 'transparent',
-                          display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
-                        {addedCount > 0 && (
-                          <span style={{ marginRight: 8, fontWeight: 800, fontSize: 12, color: '#2e7d32' }}>
-                            ✓{addedCount > 1 ? ` ×${addedCount}` : ''}
-                          </span>
-                        )}
-                        <strong>{item.name}</strong>
-                        {item.grade && (
-                          <span style={{
-                            marginLeft: 10, padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
-                            textTransform: 'uppercase', letterSpacing: '0.03em',
-                            background: /new/i.test(item.grade) ? '#e8f5e9' : '#fff3e0',
-                            color: /new/i.test(item.grade) ? '#2e7d32' : '#e65100',
-                            border: '1px solid ' + (/new/i.test(item.grade) ? '#a5d6a7' : '#ffcc80')
-                          }}>{item.grade}</span>
-                        )}
-                        <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>{item.partNumber}</span>
-                        <span style={{ color: 'var(--accent)', marginLeft: 10 }}>Stock: {item.stock || 0}</span>
+
+                    <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                      {shown.map(item => {
+                        const picked = !!pickedForOrder[item.id];
+                        const onOrder = (newPO.items || []).filter(l => l.itemId === item.id).length;
+                        return (
+                          <div key={item.id}
+                            onClick={() => setPickedForOrder(p => ({ ...p, [item.id]: !p[item.id] }))}
+                            style={{ padding: '8px 10px', borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                              display: 'flex', alignItems: 'center', gap: 10,
+                              background: picked ? 'var(--bg-selected, #e3f2fd)' : 'transparent' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <strong>{item.name}</strong>
+                              {item.grade && (
+                                <span style={{
+                                  marginLeft: 8, padding: '1px 8px', borderRadius: 10, fontSize: 11, fontWeight: 700,
+                                  textTransform: 'uppercase', letterSpacing: '0.03em',
+                                  background: /new/i.test(item.grade) ? '#e8f5e9' : '#fff3e0',
+                                  color: /new/i.test(item.grade) ? '#2e7d32' : '#e65100',
+                                  border: '1px solid ' + (/new/i.test(item.grade) ? '#a5d6a7' : '#ffcc80')
+                                }}>{item.grade}</span>
+                              )}
+                              {onOrder > 0 && (
+                                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: '#2e7d32' }}>
+                                  ✓ already on order{onOrder > 1 ? ` ×${onOrder}` : ''}
+                                </span>
+                              )}
+                              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                                {item.partNumber}
+                                <span style={{ color: 'var(--accent)', marginLeft: 10 }}>Stock: {item.stock || 0}</span>
+                              </div>
+                            </div>
+                            {/* selector bubble, right-aligned */}
+                            <span aria-hidden="true" style={{
+                              width: 22, height: 22, flexShrink: 0, borderRadius: '50%',
+                              border: '2px solid ' + (picked ? '#1565c0' : 'var(--border)'),
+                              background: picked ? '#1565c0' : 'transparent',
+                              color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: 13, fontWeight: 900, lineHeight: 1
+                            }}>{picked ? '✓' : ''}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {pickedIds.length > 0 && (
+                      <div style={{ padding: 8, borderTop: '1px solid var(--border)', background: 'var(--bg-surface-2)' }}>
+                        <button type="button" onClick={addSelectedToPO}
+                          style={{ width: '100%', padding: '10px', border: 'none', borderRadius: 5,
+                            background: '#2e7d32', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                          ➕ Add {pickedIds.length} selected item{pickedIds.length === 1 ? '' : 's'} to order
+                        </button>
                       </div>
-                      );
-                    })}
+                    )}
                   </div>
-                )}
+                  );
+                })()}
               </div>
 
               {/* Line Items Table */}

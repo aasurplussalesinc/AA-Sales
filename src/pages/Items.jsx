@@ -1035,7 +1035,9 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
               hasQty: provided.stock
             });
           } else if (clearLocation) {
-            locationClears.push(key);
+            // Remember the quantity the FILE asked for — that's the authority,
+            // not whatever the item's shelves currently say.
+            locationClears.push({ key, csvQty: provided.stock ? qty : null });
           }
         }
 
@@ -1239,16 +1241,25 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
         const clearKept = [];
         if (locationClears.length > 0) {
           const fresh = await DB.getItems();
-          for (const key of locationClears) {
+          for (const entry of locationClears) {
+            const key = entry.key;
             const k = String(key).trim().toLowerCase();
             const it = fresh.find(i =>
               String(i.partNumber || '').trim().toLowerCase() === k ||
               String(i.name || '').trim().toLowerCase() === k);
             if (!it) continue;
+
+            // THE FILE WINS. If the row supplied a Quantity, that is the truth —
+            // the item's existing shelf entries are stale by definition, since
+            // the quantity update above doesn't rewrite them. Only fall back to
+            // the stored quantity when the row left Quantity blank.
             const spots = DB.itemLocations(it);
-            const live = spots.reduce((sum, e) => sum + e.qty, 0) || (parseInt(it.stock) || 0);
+            const stored = spots.reduce((sum, e) => sum + e.qty, 0) || (parseInt(it.stock) || 0);
+            const live = entry.csvQty !== null && entry.csvQty !== undefined ? entry.csvQty : stored;
+
             if (live > 0) {
-              // An item holding stock has to live somewhere — don't vaporise it.
+              // Row says it still holds stock but names no shelf — keep the
+              // shelf rather than silently losing the count.
               clearKept.push(`${it.partNumber || it.name} (${live})`);
               continue;
             }
@@ -1260,7 +1271,7 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
             successMsg += `\n\n⚠️ ${clearKept.length} item(s) kept their location because they still hold stock:\n` +
               clearKept.slice(0, 8).join('\n') +
               (clearKept.length > 8 ? `\n…and ${clearKept.length - 8} more` : '') +
-              `\nSet the Quantity to 0 in the same row to clear them.`;
+              `\nThese rows named no location but still show stock — put 0 in the Quantity column to clear them.`;
           }
         }
 

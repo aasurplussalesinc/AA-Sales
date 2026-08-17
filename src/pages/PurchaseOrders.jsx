@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
@@ -154,6 +154,8 @@ export default function PurchaseOrders() {
     return bySku?.grade || '';
   };
 
+  const searchInputRef = useRef(null);
+
   const addItemToPO = (item) => {
     const unitPrice = parseFloat(item.price) || 0;
     const lineId = `line_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -167,7 +169,9 @@ export default function PurchaseOrders() {
     };
     const updatedItems = [...newPO.items, newItem];
     updatePOTotals(updatedItems);
-    setSearchItem('');
+    // Keep the search open so several variants (sizes, conditions) can be
+    // picked from one search instead of retyping for each.
+    if (searchInputRef.current) searchInputRef.current.focus();
   };
 
   // Add a free-text charge/service line (e.g. Shipping, Handling, Fee). Not tied to
@@ -433,6 +437,7 @@ export default function PurchaseOrders() {
   };
 
   const resetForm = () => {
+    setSearchItem('');   // don't carry a stale search into the next order
     setNewPO({ customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
       shipToAddress: '', shipToCompany: '', useShipTo: false,
       dueDate: '', invoiceDate: '', customerPO: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, credit: 0, discount: 0, estTotal: 0, total: 0 });
@@ -1610,7 +1615,7 @@ ${labelsHtml}
     <div className="container" style={{ padding: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <h2 style={{ margin: 0 }}>🧾 Purchase Orders</h2>
-        {canEdit && <button className="btn btn-primary" onClick={() => setShowCreate(true)}>+ New Order</button>}
+        {canEdit && <button className="btn btn-primary" onClick={() => { setSearchItem(''); setShowCreate(true); }}>+ New Order</button>}
       </div>
 
       {/* Create/Edit Modal */}
@@ -1705,8 +1710,20 @@ ${labelsHtml}
                     </button>
                   </div>
                 </div>
-                <input type="text" placeholder="Search items..." value={searchItem} onChange={e => setSearchItem(e.target.value)}
-                  style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+                <div style={{ position: 'relative' }}>
+                  <input type="text" ref={searchInputRef}
+                    placeholder="Search items — click several results to add them all"
+                    value={searchItem} onChange={e => setSearchItem(e.target.value)}
+                    style={{ width: '100%', padding: 10, paddingRight: 34, borderRadius: 4,
+                      border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+                  {searchItem && (
+                    <button type="button" onClick={() => setSearchItem('')}
+                      title="Clear search"
+                      style={{ position: 'absolute', right: 8, top: 'calc(50% - 11px)', width: 22, height: 22,
+                        border: 'none', background: 'var(--border)', borderRadius: '50%', cursor: 'pointer',
+                        fontSize: 14, lineHeight: 1, fontWeight: 700, padding: 0 }}>×</button>
+                  )}
+                </div>
                 {searchItem && filteredItems.length === 0 && (
                   <div style={{ marginTop: 5, padding: 10, border: '1px solid var(--border)', borderRadius: 4,
                     fontSize: 13, color: 'var(--text-muted)' }}>
@@ -1717,11 +1734,22 @@ ${labelsHtml}
                   <div style={{ border: '1px solid var(--border)', borderRadius: 4, maxHeight: 260, overflow: 'auto', marginTop: 5 }}>
                     <div style={{ padding: '5px 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
                       background: 'var(--bg-surface-2)', borderBottom: '1px solid var(--border)', letterSpacing: '.04em' }}>
-                      {filteredItems.length} MATCH{filteredItems.length === 1 ? '' : 'ES'}
-                      {filteredItems.length > 25 ? ' — showing first 25, keep typing to narrow' : ''}
+                      {filteredItems.length} MATCH{filteredItems.length === 1 ? '' : 'ES'} — CLICK EACH ONE YOU NEED
+                      {filteredItems.length > 25 ? ' · showing first 25, keep typing to narrow' : ''}
                     </div>
-                    {filteredItems.slice(0, 25).map(item => (
-                      <div key={item.id} onClick={() => addItemToPO(item)} style={{ padding: 10, borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+                    {filteredItems.slice(0, 25).map(item => {
+                      const addedCount = (newPO.items || []).filter(l => l.itemId === item.id).length;
+                      return (
+                      <div key={item.id} onClick={() => addItemToPO(item)}
+                        title={addedCount ? 'Already on this order — click to add another line' : 'Click to add'}
+                        style={{ padding: 10, borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                          background: addedCount ? 'var(--bg-badge-green, #e8f5e9)' : 'transparent',
+                          display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+                        {addedCount > 0 && (
+                          <span style={{ marginRight: 8, fontWeight: 800, fontSize: 12, color: '#2e7d32' }}>
+                            ✓{addedCount > 1 ? ` ×${addedCount}` : ''}
+                          </span>
+                        )}
                         <strong>{item.name}</strong>
                         {item.grade && (
                           <span style={{
@@ -1735,7 +1763,8 @@ ${labelsHtml}
                         <span style={{ color: 'var(--text-muted)', marginLeft: 10 }}>{item.partNumber}</span>
                         <span style={{ color: 'var(--accent)', marginLeft: 10 }}>Stock: {item.stock || 0}</span>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

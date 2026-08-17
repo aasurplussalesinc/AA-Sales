@@ -1401,6 +1401,12 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                 await DB.updateItem(item.id, { ...base, stock: 0 });
                 await DB.setItemLocations(item.id, []);
               }
+            } else if (locationChanged && liveStock === 0) {
+              // Zero-stock item being GIVEN a location: there's no quantity to
+              // place, so record it as the item's home shelf only. Locations and
+              // the Map stay accurate (nothing is physically there), but the
+              // Items tab remembers where it belongs.
+              await DB.updateItem(item.id, { ...base, stock: 0, location: itemLocation });
             } else if (isMulti) {
               // NEVER pass `location` (or a raw stock) for a split item:
               // updateItemWithSync collapses every shelf into ONE holding the

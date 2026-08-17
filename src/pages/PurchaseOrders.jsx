@@ -917,6 +917,9 @@ export default function PurchaseOrders() {
             .text-center { text-align: center; }
             .location { font-size: 12px; color: #2d5f3f; margin-top: 4px; }
             .sku { font-size: 12px; color: #666; }
+            /* Location codes must never wrap; grade stays compact. */
+            .col-loc { white-space: nowrap; font-size: 13px; letter-spacing: .02em; }
+            .col-grade { white-space: nowrap; font-size: 12px; text-transform: uppercase; }
             .pick-box { width: 50px; height: 30px; border: 2px solid #333; display: inline-block; }
             .notes { margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px; }
             .footer { margin-top: 40px; text-align: center; color: #666; font-size: 12px; }
@@ -939,12 +942,13 @@ export default function PurchaseOrders() {
           <table>
             <thead>
               <tr>
-                <th style="width: 40px">#</th>
+                <th style="width: 26px">#</th>
                 <th>Item</th>
-                <th class="text-center" style="width: 100px">Location</th>
-                <th class="text-center" style="width: 80px">Requested</th>
-                <th class="text-center" style="width: 80px">Picked</th>
-                <th class="text-center" style="width: 60px">✓</th>
+                <th class="text-center col-grade" style="width: 52px">Grade</th>
+                <th class="text-center col-loc" style="width: 104px">Location</th>
+                <th class="text-center" style="width: 62px">Req</th>
+                <th class="text-center" style="width: 62px">Picked</th>
+                <th class="text-center" style="width: 38px">✓</th>
               </tr>
             </thead>
             <tbody>
@@ -955,7 +959,8 @@ export default function PurchaseOrders() {
                     <strong>${item.itemName}</strong>
                     <div class="sku">${item.partNumber || ''}</div>
                   </td>
-                  <td class="text-center"><strong>${item.location || '-'}</strong></td>
+                  <td class="text-center col-grade"><strong>${lineGrade(item) || '-'}</strong></td>
+                  <td class="text-center col-loc"><strong>${item.location || '-'}</strong></td>
                   <td class="text-center"><strong>${item.requestedQty}</strong></td>
                   <td class="text-center">${pickList.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>'}</td>
                   <td class="text-center">${pickList.status === 'completed' ? (item.pickedQty >= item.requestedQty ? '✅' : '⚠️') : '☐'}</td>

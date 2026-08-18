@@ -306,7 +306,7 @@ export default function Reports() {
       const shipping = parseFloat(o.shipping) || 0;
       const discount = parseFloat(o.discount) || 0;
       return {
-        id: o.id, when, po: o.poNumber || '', customer: o.customerName || '',
+        id: o.id, when, po: o.poNumber || '', customerPO: o.customerPO || '', customer: o.customerName || '',
         customerId: o.customerId || '', status: o.status,
         payment: o.paymentMethod || '', lines, units,
         subtotal, tax, shipping, discount, cogs,
@@ -371,9 +371,9 @@ export default function Reports() {
 
   const exportSales = () => {
     exportToCSV(salesOrders, `sales-${salesPeriod}`,
-      ['Date', 'Order #', 'Customer', 'Status', 'Payment', 'Units', 'Subtotal', 'Discount', 'Tax', 'Shipping', 'Total'],
+      ['Date', 'Customer PO', 'Order #', 'Customer', 'Status', 'Payment', 'Units', 'Subtotal', 'Discount', 'Tax', 'Shipping', 'Total'],
       (o) => [
-        o.when ? new Date(o.when).toLocaleDateString() : '', o.po, o.customer, o.status, o.payment,
+        o.when ? new Date(o.when).toLocaleDateString() : '', o.customerPO, o.po, o.customer, o.status, o.payment,
         o.units, o.subtotal.toFixed(2), o.discount.toFixed(2), o.tax.toFixed(2), o.shipping.toFixed(2), o.total.toFixed(2)
       ]);
   };

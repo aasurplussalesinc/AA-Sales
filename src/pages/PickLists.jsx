@@ -336,6 +336,17 @@ export default function PickLists() {
 
     try {
       await DB.updatePickList(list.id, { status: 'completed', completedBy, completedAt: Date.now() });
+      // This step has already pulled the stock, so flag the linked order —
+      // otherwise marking it shipped later would deduct the same units again.
+      if (list.purchaseOrderId) {
+        try {
+          await DB.updatePurchaseOrder(list.purchaseOrderId, {
+            stockDeducted: true, stockDeductedAt: Date.now()
+          });
+        } catch (e) {
+          console.warn('could not flag order as stock-deducted:', e.message);
+        }
+      }
     } catch (e) {
       console.error('updatePickList failed:', e.message);
       alert('Failed to mark pick list complete: ' + e.message);
@@ -458,12 +469,20 @@ export default function PickLists() {
   
   const getDisplayStatus = (list) => {
     const linkedOrder = getLinkedOrder(list);
-    // If picked list is completed, check the linked order for packing/shipping/paid status
-    if (list.status === 'completed' && linkedOrder) {
+    if (linkedOrder) {
+      // The ORDER's progress wins. You can't pack, ship or get paid for an
+      // order that wasn't picked — so if the order has moved on, this list is
+      // done, whether or not anyone remembered to press "Complete" on it.
+      // Previously these states were only honoured when the list had already
+      // been marked completed, so directly-shipped orders left their pick list
+      // sitting in Pending forever.
       if (linkedOrder.status === 'paid') return 'paid';
       if (linkedOrder.status === 'shipped') return 'shipped';
       if (linkedOrder.status === 'packed' || linkedOrder.packingComplete) return 'packed';
-      if (linkedOrder.status === 'packing' || linkedOrder.packingDraft) return 'packing';
+      // "packing" is still in progress, so only reflect it once the list itself
+      // has been completed — otherwise an untouched list would look started.
+      if (list.status === 'completed' &&
+          (linkedOrder.status === 'packing' || linkedOrder.packingDraft)) return 'packing';
     }
     return list.status || 'pending';
   };

@@ -660,27 +660,15 @@ export default function PurchaseOrders() {
     );
 
   const markShipped = async (order) => {
-    for (const item of order.items || []) {
-      const qtyShipped = parseInt(item.qtyShipped) || 0;
-      if (qtyShipped <= 0) continue;
-      if (item.source === 'inventory' || item.source === 'inventory_contract') {
-        const currentItem = items.find(i => i.id === item.itemId);
-        if (currentItem) {
-          const newStock = Math.max(0, (currentItem.stock || 0) - qtyShipped);
-          await DB.updateItem(item.itemId, { stock: newStock });
-          // Also pull the units out of the location's inventory map so per-location
-          // counts stay in step with total stock. The pick-list path already did this;
-          // shipping directly used to skip it, which drifted the location totals.
-          const fromLoc = item.location || currentItem.location || '';
-          if (fromLoc) {
-            try {
-              await DB.decrementLocationInventory(fromLoc, item.itemId, qtyShipped);
-            } catch (e) {
-              console.warn('decrementLocationInventory failed for', item.itemName, e.message);
-            }
-          }
-        }
+    // One guarded deduction handles the quantity fallback (picked → packed →
+    // ordered) and refuses to run twice for the same order.
+    try {
+      const res = await DB.deductOrderStock(order.id);
+      if (res.skipped === 'already-deducted') {
+        console.log('Stock already deducted for', order.poNumber);
       }
+    } catch (e) {
+      console.warn('deductOrderStock failed:', e.message);
     }
     await DB.markPOShipped(order.id); loadData(); closeOrderModal();
   };
@@ -696,27 +684,15 @@ export default function PurchaseOrders() {
     setPendingShip(null);
     setProcessingOrder(prev => ({ ...prev, [order.id]: true }));
     try {
-      for (const item of order.items || []) {
-        const qtyShipped = parseInt(item.qtyShipped) || 0;
-        if (qtyShipped <= 0) continue;
-        if (item.source === 'inventory' || item.source === 'inventory_contract') {
-          const currentItem = items.find(i => i.id === item.itemId);
-          if (currentItem) {
-            const newStock = Math.max(0, (currentItem.stock || 0) - qtyShipped);
-            await DB.updateItem(item.itemId, { stock: newStock });
-            // Also pull the units out of the location's inventory map so per-location
-            // counts stay in step with total stock. The pick-list path already did this;
-            // shipping directly used to skip it, which drifted the location totals.
-            const fromLoc = item.location || currentItem.location || '';
-            if (fromLoc) {
-              try {
-                await DB.decrementLocationInventory(fromLoc, item.itemId, qtyShipped);
-              } catch (e) {
-                console.warn('decrementLocationInventory failed for', item.itemName, e.message);
-              }
-            }
-          }
+      // One guarded deduction handles the quantity fallback (picked → packed →
+      // ordered) and refuses to run twice for the same order.
+      try {
+        const res = await DB.deductOrderStock(order.id);
+        if (res.skipped === 'already-deducted') {
+          console.log('Stock already deducted for', order.poNumber);
         }
+      } catch (e) {
+        console.warn('deductOrderStock failed:', e.message);
       }
       await DB.markPOShipped(order.id);
       await loadData();
@@ -908,6 +884,44 @@ export default function PurchaseOrders() {
     switch(source) { case 'inventory': return 'Inventory'; case 'inventory_contract': return 'Inv (Contract)'; case 'direct_contract': return 'Direct'; default: return 'Inventory'; }
   };
 
+  // ── Document reference block ────────────────────────────────────────────
+  // The customer's own PO number is what THEY file and search by, so it leads
+  // on every document. Our order number always travels with it as "Our Ref"
+  // so the two can never be confused.
+  // An order is ready to ship once it's confirmed, being picked, or packed —
+  // by boxes OR triwalls. The row button used to require exactly 'packed', so
+  // triwall orders that never went through the box-packing modal had no way to
+  // be shipped from the list.
+  const readyToShip = (o) => !!o && (
+    o.status === 'confirmed' || o.status === 'picking' ||
+    o.status === 'packed' || o.packingComplete ||
+    (o.packingMode === 'triwalls' && (o.triwalls || []).length > 0)
+  );
+
+  const refHtml = (order, opts = {}) => {
+    const cpo = (order.customerPO || '').trim();
+    const mine = order.poNumber || '';
+    const size = opts.size || 'lg';   // 'lg' = document header, 'sm' = label
+    if (!cpo) {
+      return `<div class="ref-main ref-${size}">${mine}</div>`;
+    }
+    return `
+      <div class="ref-block">
+        <div class="ref-label">CUSTOMER PO</div>
+        <div class="ref-main ref-${size}">${cpo}</div>
+        <div class="ref-ours">Our Ref: ${mine}</div>
+      </div>`;
+  };
+
+  const refStyles = `
+    .ref-block { line-height: 1.15; }
+    .ref-label { font-size: 9px; letter-spacing: .12em; font-weight: 800; color: #777; text-transform: uppercase; }
+    .ref-main { font-weight: 800; letter-spacing: .02em; }
+    .ref-main.ref-lg { font-size: 22px; }
+    .ref-main.ref-sm { font-size: 15px; }
+    .ref-ours { font-size: 11px; color: #666; font-weight: 600; margin-top: 1px; }
+  `;
+
   const printPickList = (order) => {
     // Find the linked pick list for this order
     const pickList = pickLists.find(pl => pl.purchaseOrderId === order.id);
@@ -937,7 +951,7 @@ export default function PurchaseOrders() {
       <html>
         <head>
           <title>Pick List - ${pickList.name}</title>
-          <style>
+          <style>${refStyles}
             body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
             .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #2d5f3f; padding-bottom: 15px; }
             .title { font-size: 24px; font-weight: bold; color: #2d5f3f; }
@@ -965,7 +979,7 @@ export default function PurchaseOrders() {
             <div class="title">📋 PICK LIST: ${pickList.name}</div>
             <div class="meta">
               <div class="status">${pickList.status?.toUpperCase()}</div>
-              <div style="margin-top: 8px;">PO: ${order.poNumber}</div>
+              <div style="margin-top: 8px;">${refHtml(order, { size: 'sm' })}</div>
               <div>Customer: ${order.customerName}</div>
               <div style="margin-top: 8px;">Created: ${formatDate(pickList.createdAt)}</div>
             </div>
@@ -1090,7 +1104,7 @@ export default function PurchaseOrders() {
     const containerLabel = isTriwallMode ? 'Triwalls' : 'Boxes';
     
     const printContent = `<!DOCTYPE html><html><head><title>Packing List - ${order.poNumber}</title>
-      <style>
+      <style>${refStyles}
         *{margin:0;padding:0;box-sizing:border-box}
         body{font-family:Arial,sans-serif;padding:15px;max-width:800px;margin:0 auto;font-size:11px}
         .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:2px solid #333;padding-bottom:10px}
@@ -1112,7 +1126,7 @@ export default function PurchaseOrders() {
         @media print{body{padding:10px}@page{margin:0.4in}}
       </style></head><body>
       <div class="header">
-        <div>${DB.brandingHtml(organization).logo}<h1>PACKING LIST</h1><div style="color:#666;font-size:12px">${order.poNumber}</div></div>
+        <div>${DB.brandingHtml(organization).logo}<h1>PACKING LIST</h1><div>${refHtml(order, { size: 'sm' })}</div></div>
         <div style="text-align:right;font-size:10px;color:#666"><strong>${organization?.name || ''}</strong><br>${organization?.address || ''}<br>${organization?.phone || ''}</div>
       </div>
       <div class="info-row">
@@ -1288,7 +1302,7 @@ export default function PurchaseOrders() {
     }
     
     const printContent = `<!DOCTYPE html><html><head><title>INTERNAL - ${order.poNumber}</title>
-      <style>
+      <style>${refStyles}
         body{font-family:Arial,sans-serif;padding:12px;max-width:900px;margin:0 auto;font-size:9px}
         .header{background:#ff9800;color:white;padding:8px 12px;margin-bottom:10px;border-radius:4px}
         .header h1{margin:0;font-size:14px}
@@ -1318,7 +1332,7 @@ export default function PurchaseOrders() {
         .src-dc{background:#fce4ec;color:#c2185b}
         @media print{body{padding:8px}@page{margin:0.4in}}
       </style></head><body>
-      <div class="header"><h1>⚠️ INTERNAL - COST ANALYSIS</h1><span>${order.poNumber} | ${order.customerName}</span></div>
+      <div class="header"><h1>⚠️ INTERNAL - COST ANALYSIS</h1><span>${order.customerPO ? 'Customer PO ' + order.customerPO + ' · ' : ''}${order.poNumber} | ${order.customerName}</span></div>
       <div class="warning">DO NOT SHARE WITH CUSTOMER</div>
       <div class="info-row">
         <div class="info-box"><h3>Order</h3><div class="value">${order.poNumber}</div>${formatDate(order.createdAt)}</div>
@@ -1367,7 +1381,7 @@ export default function PurchaseOrders() {
     // Use invoiceDate if set, otherwise use createdAt
     const displayDate = order.invoiceDate ? formatFullDate(order.invoiceDate) : formatFullDate(order.createdAt);
     const printContent = `<!DOCTYPE html><html><head><title>${isEstimate ? 'Estimate' : 'Invoice'} - ${order.poNumber}</title>
-      <style>
+      <style>${refStyles}
         *{margin:0;padding:0;box-sizing:border-box}
         body{font-family:'Segoe UI',Arial,sans-serif;padding:20px 25px;max-width:800px;margin:0 auto;color:#333;line-height:1.3;font-size:11px}
         .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;padding-bottom:10px;border-bottom:2px solid ${accentColor}}
@@ -1394,7 +1408,7 @@ export default function PurchaseOrders() {
         @media print{body{padding:15px}@page{margin:0.3in}}
       </style></head><body>
       <div class="header"><div>${DB.brandingHtml(organization, { accent: accentColor }).logo}</div><div class="company-details">${DB.brandingHtml(organization, { accent: accentColor }).details}</div></div>
-      <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${order.poNumber}</div>
+      <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${refHtml(order)}</div>
       <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${order.customerName}</p>${order.customerContact ? '<p>Attn: ' + order.customerContact + '</p>' : ''}${order.customerAddress ? '<p>' + order.customerAddress + '</p>' : ''}${order.customerPhone ? '<p>' + order.customerPhone + '</p>' : ''}${order.customerEmail ? '<p>' + order.customerEmail + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3>' + (order.shipToCompany ? '<p class="highlight">' + order.shipToCompany + '</p>' : '') + '<p>' + order.shipToAddress.replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${displayDate}</p><p><strong>Terms:</strong> ${order.terms || 'Net 30'}</p>${order.customerPO ? '<p><strong>Customer PO:</strong> ' + order.customerPO + '</p>' : ''}</div></div>
       <table><thead><tr><th style="width:60px">SKU</th><th>Description</th>${isEstimate ? '<th style="text-align:center;width:50px">Qty</th>' : '<th style="text-align:center;width:50px">Ord</th><th style="text-align:center;width:50px">Ship</th>'}<th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${lineItems.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + (item.partNumber || '-') + '</td><td style="font-weight:500">' + item.itemName + (item.resolvedGrade ? '<div style="font-size:9px;color:' + accentColor + ';font-weight:600;margin-top:1px">Condition: ' + item.resolvedGrade + '</div>' : '') + (item.notes ? '<div style="font-size:9px;color:#666;font-style:italic">' + item.notes + '</div>' : '') + '</td>' + (isEstimate ? '<td style="text-align:center">' + (item.quantity || 0) + '</td>' : '<td style="text-align:center">' + (item.quantity || 0) + '</td><td style="text-align:center;font-weight:bold">' + (item.qtyShipped || 0) + '</td>') + '<td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
       <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : (order.shippingBilledToCustomer ? '<div class="totals-row" style="color:#555;font-size:0.9em"><span>Shipping</span><span>Billed to your carrier account</span></div>' : '')}${credit > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Credit</span><span>-$' + credit.toFixed(2) + '</span></div>' : ''}${discount > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Discount</span><span>-$' + discount.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
@@ -1443,7 +1457,7 @@ ${organization?.email || ''}
     
     const printContent = `<!DOCTYPE html>
 <html><head><title>Shipping Label - ${order.poNumber}</title>
-<style>
+<style>${refStyles}
   @page { size: landscape; margin: 0.5in; }
   body { 
     font-family: Arial, sans-serif; 
@@ -1488,6 +1502,7 @@ ${organization?.email || ''}
   }
   .box-count { font-size: 48px; font-weight: bold; }
   .po-number { font-size: 20px; }
+    .our-ref { font-size: 13px; font-weight: 600; color: #444; margin-top: 2px; }
   .dimensions { font-size: 16px; color: #666; }
   @media print {
     body { padding: 20px; }
@@ -1512,7 +1527,9 @@ ${organization?.email || ''}
   
   <div class="footer">
     <div>
-      <div class="po-number">PO: ${order.poNumber}</div>
+      ${order.customerPO
+        ? `<div class="po-number">PO: ${order.customerPO}</div><div class="our-ref">Our Ref: ${order.poNumber}</div>`
+        : `<div class="po-number">PO: ${order.poNumber}</div>`}
       ${triwall.length && triwall.width && triwall.height ? 
         `<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}"${displayWeight ? ' | ' + displayWeight + ' lbs' : ''}</div>` : 
         (displayWeight ? `<div class="dimensions">Weight: ${displayWeight} lbs</div>` : '')}
@@ -1561,7 +1578,9 @@ ${organization?.email || ''}
   
   <div class="footer">
     <div>
-      <div class="po-number">PO: ${order.poNumber}</div>
+      ${order.customerPO
+        ? `<div class="po-number">PO: ${order.customerPO}</div><div class="our-ref">Our Ref: ${order.poNumber}</div>`
+        : `<div class="po-number">PO: ${order.poNumber}</div>`}
       ${triwall.length && triwall.width && triwall.height ? 
         `<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}"${displayWeight ? ' | ' + displayWeight + ' lbs' : ''}</div>` : 
         (displayWeight ? `<div class="dimensions">Weight: ${displayWeight} lbs</div>` : '')}
@@ -1573,7 +1592,7 @@ ${organization?.email || ''}
     
     const printContent = `<!DOCTYPE html>
 <html><head><title>Shipping Labels - ${order.poNumber}</title>
-<style>
+<style>${refStyles}
   @page { size: landscape; margin: 0.5in; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { 
@@ -1620,6 +1639,7 @@ ${organization?.email || ''}
   }
   .box-count { font-size: 48px; font-weight: bold; }
   .po-number { font-size: 20px; }
+    .our-ref { font-size: 13px; font-weight: 600; color: #444; margin-top: 2px; }
   .dimensions { font-size: 16px; color: #666; }
   @media print {
     body { padding: 0; }
@@ -2157,7 +2177,7 @@ ${labelsHtml}
                   {selectedOrder.packingComplete && canEdit && (
                     <button className="btn" onClick={() => openPackOrder(selectedOrder)} style={{ background: '#9c27b0', color: 'white', fontSize: 12 }}>📦 Edit Packing</button>
                   )}
-                  {canEdit && (selectedOrder.status === 'confirmed' || selectedOrder.status === 'picking' || selectedOrder.packingComplete) && (
+                  {canEdit && readyToShip(selectedOrder) && (
                     <button className="btn" onClick={() => markShipped(selectedOrder)} style={{ background: pendingShip === selectedOrder.id ? '#d98a1f' : '#2e7d32', color: 'white', fontSize: 12 }}>{pendingShip === selectedOrder.id ? 'Click again to confirm' : '🚚 Mark Shipped'}</button>
                   )}
                   {canEdit && selectedOrder.status === 'shipped' && (
@@ -2539,7 +2559,7 @@ ${labelsHtml}
                   </td>
                   <td style={{ padding: 12, textAlign: 'center' }}><button className="btn btn-primary" onClick={() => setSelectedOrder(order)} style={{ padding: '4px 12px', fontSize: 12 }}>View</button></td>
                   <td style={{ padding: 12, textAlign: 'center' }}>
-                    {order.status === 'packed' ? (
+                    {readyToShip(order) && order.status !== 'shipped' && order.status !== 'paid' ? (
                       <button
                         onClick={() => markShippedInline(order)}
                         disabled={!!processingOrder[order.id]}

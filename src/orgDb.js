@@ -1584,6 +1584,69 @@ export const OrgDB = {
     return pickListId;
   },
 
+  // ── Single, guarded inventory deduction for an order ────────────────────
+  // Two bugs this replaces:
+  //  1. Shipping used ONLY item.qtyShipped, which the packing step fills in.
+  //     Ship an unpacked order (triwalls, or straight from confirmed) and every
+  //     line was skipped — the order shipped and stock never moved.
+  //  2. Nothing recorded that stock had been taken, so completing a pick list
+  //     AND then marking the order shipped deducted the same units twice.
+  // The order now carries a stockDeducted flag, so this runs at most once
+  // however it's triggered.
+  async deductOrderStock(orderId, opts = {}) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const order = await this.getPurchaseOrder(orderId);
+    if (!order) return { skipped: 'no-order', deducted: 0 };
+    if (order.stockDeducted && !opts.force) {
+      return { skipped: 'already-deducted', deducted: 0, at: order.stockDeductedAt || null };
+    }
+
+    let deducted = 0, units = 0;
+    const report = [];
+
+    for (const line of order.items || []) {
+      if (line.source !== 'inventory' && line.source !== 'inventory_contract') continue;
+      // What was actually taken: what the picker counted, else what was packed,
+      // else what was ordered.
+      const qty = parseInt(line.pickedQty) || parseInt(line.qtyShipped) || parseInt(line.quantity) || 0;
+      if (qty <= 0 || !line.itemId) continue;
+
+      const from = line.pickedFrom || line.location || '';
+      let moved = null;
+      try {
+        moved = await this.removeStockAtLocation(line.itemId, from, qty);
+      } catch (e) {
+        console.warn('removeStockAtLocation failed for', line.itemName, e.message);
+      }
+
+      if (!moved) {
+        // Item has no shelf entries at all — fall back to a plain stock write so
+        // the count still moves.
+        try {
+          const snap = await getDoc(doc(db, 'items', line.itemId));
+          if (snap.exists()) {
+            const cur = parseInt(snap.data().stock) || 0;
+            await updateDoc(doc(db, 'items', line.itemId), {
+              stock: Math.max(0, cur - qty), updatedAt: Date.now()
+            });
+          }
+        } catch (e) {
+          console.warn('stock fallback failed for', line.itemName, e.message);
+          continue;
+        }
+      }
+      deducted++; units += qty;
+      report.push(`${line.partNumber || ''} ${line.itemName}: -${qty}`);
+    }
+
+    await this.updatePurchaseOrder(orderId, {
+      stockDeducted: true,
+      stockDeductedAt: Date.now()
+    });
+
+    return { deducted, units, report };
+  },
+
   async markPOShipped(poId) {
     await this.updatePurchaseOrder(poId, {
       status: 'shipped',

@@ -1593,6 +1593,71 @@ export const OrgDB = {
   //     AND then marking the order shipped deducted the same units twice.
   // The order now carries a stockDeducted flag, so this runs at most once
   // however it's triggered.
+  // ── Recover multi-location breakdowns flattened by a CSV round-trip ──────
+  // The unify migration READ the old location.inventory maps but never cleared
+  // them, so they still hold each item's shelf split as it stood back then.
+  // This compares that snapshot against what an item has now and reports any
+  // that used to be split but are now on a single shelf.
+  // READ-ONLY unless apply is true.
+  async recoverSplitLocations(apply) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const items = await this.getItems();
+    const locations = await this.getLocations();
+
+    // itemId -> [{code, qty}] from the retired maps
+    const legacy = {};
+    locations.forEach(l => {
+      const code = this.canonicalLocationCode(
+        l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`);
+      const inv = l.inventory || {};
+      Object.keys(inv).forEach(id => {
+        const q = parseInt(inv[id]) || 0;
+        if (q > 0 && code) (legacy[id] = legacy[id] || []).push({ code, qty: q });
+      });
+    });
+
+    const flattened = [], restored = [], noSnapshot = [];
+
+    for (const it of items) {
+      const now = this.itemLocations(it);
+      const was = legacy[it.id] || [];
+      if (was.length < 2) continue;             // wasn't split back then
+      if (now.length > 1) continue;             // still split — nothing lost
+
+      const legacyTotal = was.reduce((s, e) => s + e.qty, 0);
+      const nowTotal = now.reduce((s, e) => s + e.qty, 0) || (parseInt(it.stock) || 0);
+
+      const row = {
+        id: it.id, sku: it.partNumber, name: it.name,
+        nowAt: now.map(e => `${e.code}:${e.qty}`).join(', ') || '(none)',
+        nowTotal,
+        wasAt: was.map(e => `${e.code}:${e.qty}`).join(', '),
+        wasTotal: legacyTotal
+      };
+
+      if (!apply) { flattened.push(row); continue; }
+
+      // Restore the OLD proportions against the CURRENT total, so sales since
+      // the snapshot aren't undone.
+      let remaining = nowTotal;
+      const rebuilt = [];
+      was.forEach((e, idx) => {
+        const share = idx === was.length - 1
+          ? remaining
+          : Math.round(nowTotal * (e.qty / legacyTotal));
+        if (share > 0) { rebuilt.push({ code: e.code, qty: share }); remaining -= share; }
+      });
+      if (rebuilt.length > 1 && rebuilt.reduce((s, e) => s + e.qty, 0) === nowTotal) {
+        await this.setItemLocations(it.id, rebuilt);
+        restored.push({ ...row, rebuiltAs: rebuilt.map(e => `${e.code}:${e.qty}`).join(', ') });
+      } else {
+        noSnapshot.push(row);
+      }
+    }
+
+    return { flattened, restored, noSnapshot, apply: !!apply };
+  },
+
   async deductOrderStock(orderId, opts = {}) {
     if (!currentOrgId) throw new Error('No organization selected');
     const order = await this.getPurchaseOrder(orderId);

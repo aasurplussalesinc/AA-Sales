@@ -911,6 +911,8 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
         const itemsBySku = new Map();
         const locationInventory = []; // Track location assignments
         const locationClears = [];    // SKUs whose Location cell said NONE/CLEAR
+        const multiLocationPreserved = [];
+        const multiLocationSkipped = [];
 
         // Auto-SKU assignment for rows that have a name but no SKU.
         // Mirrors the Add Item form: start from the org's configured series start,
@@ -1183,11 +1185,29 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
             const totalStock = anyQty ? entries.reduce((s, e) => s + e.qty, 0) : (item.stock || 0);
 
             if (entries.length === 1) {
-              // ── Single location: keep the original authoritative behavior ──
               const e = entries[0];
               const qtyToSet = e.hasQty ? e.qty : (item.stock || 0);
+
+              // GUARD: the export writes ONE row per item carrying only the
+              // primary location. Re-importing that file used to collapse a
+              // split item onto that single shelf and destroy the breakdown.
+              // A single CSV row is not an instruction to un-split an item, so
+              // leave the shelves alone and report it.
+              const existingSpots = DB.itemLocations(item);
+              if (existingSpots.length > 1) {
+                const sameShelf = existingSpots.some(sp => sp.code === DB.canonicalLocationCode(e.code));
+                const total = existingSpots.reduce((sum, sp) => sum + sp.qty, 0);
+                if (sameShelf && (!e.hasQty || qtyToSet === total)) {
+                  // Round-tripped export row — nothing is actually being changed.
+                  multiLocationPreserved.push(`${item.partNumber || item.name} (${existingSpots.length} shelves)`);
+                  continue;
+                }
+                // A genuine but ambiguous change: which shelf should move?
+                multiLocationSkipped.push(`${item.partNumber || item.name} (${existingSpots.length} shelves)`);
+                continue;
+              }
+
               if (e.loc) {
-                // Write item.location AND sync the location's inventory map (clears stale locations).
                 await DB.updateItemWithSync(item.id, { location: e.code, stock: qtyToSet });
                 locationAssignments++;
               } else {
@@ -1273,6 +1293,17 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
               (clearKept.length > 8 ? `\n…and ${clearKept.length - 8} more` : '') +
               `\nThese rows named no location but still show stock — put 0 in the Quantity column to clear them.`;
           }
+        }
+
+        if (multiLocationPreserved.length) {
+          successMsg += `\n\n🔒 ${multiLocationPreserved.length} split item(s) kept their multi-location breakdown ` +
+            `(the file only carried their primary shelf).`;
+        }
+        if (multiLocationSkipped.length) {
+          successMsg += `\n\n⚠️ ${multiLocationSkipped.length} split item(s) were NOT moved — a single row can't say ` +
+            `which shelf to change:\n` + multiLocationSkipped.slice(0, 6).join('\n') +
+            (multiLocationSkipped.length > 6 ? `\n…and ${multiLocationSkipped.length - 6} more` : '') +
+            `\nUse Actions → Edit on those items to change where their stock sits.`;
         }
 
         toast(successMsg);

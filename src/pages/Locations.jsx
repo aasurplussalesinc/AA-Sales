@@ -148,6 +148,39 @@ export default function Locations() {
 
   // One-time cleanup: canonicalise every location code and merge duplicates.
   const [repairing, setRepairing] = useState(false);
+  const runSplitRecovery = async (apply) => {
+    if (repairing) return;
+    setRepairing(true);
+    try {
+      const r = await DB.recoverSplitLocations(apply);
+      const fmt = (arr, n) => arr.slice(0, n).map(x =>
+        `  ${x.sku || ''} ${x.name}\n     now: ${x.nowAt} (total ${x.nowTotal})\n     was: ${x.wasAt}` +
+        (x.rebuiltAs ? `\n     restored to: ${x.rebuiltAs}` : '')).join('\n');
+      if (!apply) {
+        alert(
+          'SPLIT-LOCATION RECOVERY (read-only)\n\n' +
+          (r.flattened.length === 0
+            ? '✅ No flattened items found — nothing to restore.'
+            : `🔴 ${r.flattened.length} item(s) used to be split across shelves and are now on one:\n\n` +
+              fmt(r.flattened, 10) +
+              (r.flattened.length > 10 ? `\n…and ${r.flattened.length - 10} more` : '') +
+              `\n\nRestoring keeps each item's CURRENT total and rebuilds the old\nproportions across its shelves.`)
+        );
+      } else {
+        alert(
+          'Done.\n\n' +
+          `✅ Restored: ${r.restored.length}\n` +
+          `⚠️ Could not rebuild: ${r.noSnapshot.length}\n\n` +
+          (r.restored.length ? fmt(r.restored, 10) : '')
+        );
+        loadData();
+      }
+    } catch (e) {
+      alert('Recovery failed: ' + (e.message || e));
+    }
+    setRepairing(false);
+  };
+
   const runAudit = async () => {
     if (repairing) return;
     setRepairing(true);
@@ -906,6 +939,16 @@ W2,2,C,3`;
         </button>
         {userRole === 'admin' && (
           <>
+            <button className="btn" onClick={() => runSplitRecovery(false)} disabled={repairing}
+              title="Read-only: find items that used to be split across shelves and are now on one"
+              style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>
+              {repairing ? '⏳…' : '🔍 Find flattened splits'}
+            </button>
+            <button className="btn" onClick={() => runSplitRecovery(true)} disabled={repairing}
+              title="Rebuild the old shelf split using each item's current total"
+              style={{ background: '#c62828', color: '#fff' }}>
+              {repairing ? '⏳…' : '♻️ Restore splits'}
+            </button>
             <button className="btn" onClick={runAudit} disabled={repairing}
               title="Read-only: shows where each item's stock actually sits vs where its location field claims"
               style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>

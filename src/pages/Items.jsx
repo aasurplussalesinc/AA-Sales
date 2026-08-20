@@ -430,8 +430,14 @@ export default function Items() {
         // no location at all, OR an incomplete code — anything that needs placing
         if (loc === 'STAGING') return false;
         if (hasLoc && isComplete) return false;
-      } else if (item.location !== filters.location) {
-        return false;
+      } else {
+        // Match ANY shelf the item sits on, not just its primary. An item split
+        // across shelves has one primary only, so filtering by a secondary
+        // shelf used to hide it — the Map showed it, the Items tab didn't.
+        const target = DB.canonicalLocationCode(filters.location);
+        const onShelf = DB.itemLocations(item).some(e => e.code === target)
+          || DB.canonicalLocationCode(item.location || '') === target;
+        if (!onShelf) return false;
       }
     }
     
@@ -2962,6 +2968,25 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                         padding: '4px 6px'
                       }}
                     />
+                    {/* When filtering to one shelf, the box above still shows the
+                        item's TOTAL. Show what's actually on THIS shelf so the
+                        number can't be misread as shelf stock. */}
+                    {(() => {
+                      const f = filters.location;
+                      if (!f || f.startsWith('__')) return null;
+                      const target = DB.canonicalLocationCode(f);
+                      const spots = DB.itemLocations(item);
+                      if (spots.length < 2) return null;
+                      const here = spots.find(e => e.code === target);
+                      if (!here) return null;
+                      return (
+                        <span title={`${here.qty} of ${item.stock} are on ${target}`}
+                          style={{ marginLeft: 6, fontSize: 11, fontWeight: 800,
+                            color: 'var(--accent)', whiteSpace: 'nowrap' }}>
+                          {here.qty} here
+                        </span>
+                      );
+                    })()}
                     <button
                       onClick={() => setAdjustingItem({ ...item, adjustQty: 1, adjustType: 'add' })}
                       style={{

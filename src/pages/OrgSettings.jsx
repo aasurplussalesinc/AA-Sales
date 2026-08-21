@@ -66,6 +66,7 @@ export default function OrgSettings() {
   const [shipPercent, setShipPercent] = useState('');
   const [shipFlat, setShipFlat] = useState('');
   const [shipRoundUp, setShipRoundUp] = useState(false);
+  const [autoMaxPerBox, setAutoMaxPerBox] = useState('');
   const [logoUploading, setLogoUploading] = useState(false);
   
   // Employee management state
@@ -100,6 +101,7 @@ export default function OrgSettings() {
       setShipPercent(sm.percent != null ? String(sm.percent) : '');
       setShipFlat(sm.flat != null ? String(sm.flat) : '');
       setShipRoundUp(!!sm.roundUp);
+      setAutoMaxPerBox(organization.autoPurchaseMaxPerBox != null ? String(organization.autoPurchaseMaxPerBox) : '');
       
       // Load employees (default to Alan, Nancy, Gustavo if none set)
       const empList = organization.employees || [];
@@ -155,7 +157,8 @@ export default function OrgSettings() {
           percent: parseFloat(shipPercent) || 0,
           flat: parseFloat(shipFlat) || 0,
           roundUp: !!shipRoundUp
-        }
+        },
+        autoPurchaseMaxPerBox: autoMaxPerBox === '' ? null : (parseFloat(autoMaxPerBox) || 0)
       });
       await refreshOrganization();
       setEditing(false);
@@ -360,6 +363,35 @@ export default function OrgSettings() {
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 6 }}>
                 Used on invoices, packing lists and statements. Save to apply.
               </p>
+            </div>
+
+            {/* Auto-purchase spending guard */}
+            <div style={{ marginBottom: 15 }}>
+              <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>
+                Auto-purchase limit (per box)
+              </label>
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 8 }}>
+                Batch auto-purchase refuses any label costing more than this per box, so a
+                mispriced or oversized shipment can&rsquo;t quietly spend real money. Those orders
+                are listed after the run so you can buy them manually. Leave blank for the
+                default of $45, or enter 0 to turn the guard off.
+              </p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontWeight: 700 }}>$</span>
+                <input
+                  type="number" min="0" step="1"
+                  value={autoMaxPerBox}
+                  onChange={e => setAutoMaxPerBox(e.target.value)}
+                  placeholder="45"
+                  style={{ width: 110, padding: '7px 9px', borderRadius: 6,
+                    border: '1px solid var(--border)', background: 'var(--bg-input)',
+                    color: 'var(--text-primary)' }}
+                />
+                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  per box &middot; a 3-box order would be capped at
+                  ${((parseFloat(autoMaxPerBox) || 45) * 3).toFixed(2)}
+                </span>
+              </div>
             </div>
 
             {/* Shipping Markup — auto-fills the invoice shipping line when a label is bought */}

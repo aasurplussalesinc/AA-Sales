@@ -561,10 +561,14 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     // $45 x (number of boxes). Catches mispriced/oversized shipments before
     // any money is spent; the user buys these manually if they're legitimate.
     var boxCount = parcelsUPS.length || 1;
-    var perBoxLimit = 45;
+    // Configurable in Settings → Shipping. Falls back to $45 so existing orgs
+    // behave exactly as before; 0 or blank disables the guard entirely.
+    var configured = parseFloat(orgSettings.autoPurchaseMaxPerBox);
+    var perBoxLimit = isFinite(configured) && configured > 0 ? configured : 45;
     var maxAllowed = perBoxLimit * boxCount;
     var rateAmount = parseFloat(selectedRate.amount) || 0;
-    if (rateAmount > maxAllowed) {
+    var capDisabled = isFinite(configured) && configured === 0;
+    if (!capDisabled && rateAmount > maxAllowed) {
       throw new Error('Rate $' + rateAmount.toFixed(2) + ' exceeds the $' + perBoxLimit + '/box limit ($' + maxAllowed.toFixed(2) + ' for ' + boxCount + ' box' + (boxCount === 1 ? '' : 'es') + '). Purchase this label manually if it is correct.');
     }
     // mapRates() stores Shippo's rate id under `rateId` (not `object_id`), so read
@@ -663,7 +667,7 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
     var orgDoc = await db.collection('organizations').doc(orgId).get();
     var orgData = orgDoc.data(); var apiKey = getOrgShippoKey(orgData);
     if (!apiKey) throw new functions.https.HttpsError('failed-precondition', 'Shippo API key not configured.');
-    var orgSettings = { shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null, preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups', autoPurchaseLabels: !!rateId, preferredService: '' };
+    var orgSettings = { shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null, preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups', autoPurchaseLabels: !!rateId, preferredService: '' , autoPurchaseMaxPerBox: orgData.autoPurchaseMaxPerBox};
 
     if (rateId) {
       var transaction = await purchaseLabel(apiKey, rateId);
@@ -722,7 +726,7 @@ exports.batchGenerateLabels = functions.runWith({ timeoutSeconds: 300, memory: '
     if (!orgDoc.exists) throw new functions.https.HttpsError('not-found', 'Org not found');
     var orgData = orgDoc.data(); var apiKey = getOrgShippoKey(orgData);
     if (!apiKey) throw new functions.https.HttpsError('failed-precondition', 'Shippo API key not configured.');
-    var orgSettings = { shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null, preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups', autoPurchaseLabels: !!autoPurchase, preferredService: '' };
+    var orgSettings = { shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null, preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups', autoPurchaseLabels: !!autoPurchase, preferredService: '' , autoPurchaseMaxPerBox: orgData.autoPurchaseMaxPerBox};
 
     var results = { success: [], failed: [], total: orderIds.length };
     for (var i = 0; i < orderIds.length; i++) {
@@ -833,7 +837,7 @@ exports.getShippingRates = functions.https.onCall(async function(data, context) 
     var orgDoc = await db.collection('organizations').doc(data.orgId).get();
     var orgData = orgDoc.data(); var apiKey = getOrgShippoKey(orgData);
     if (!apiKey) throw new Error('Shippo API key not configured.');
-    var orgSettings = { shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null, preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups', autoPurchaseLabels: false, preferredService: '' };
+    var orgSettings = { shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null, preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups', autoPurchaseLabels: false, preferredService: '' , autoPurchaseMaxPerBox: orgData.autoPurchaseMaxPerBox};
     var result = await processPackedOrder(apiKey, order, orgSettings);
     await db.collection('purchaseOrders').doc(data.orderId).update({ shippingLabel: result, shippingStatus: 'rates_ready', updatedAt: Date.now() });
     return result;

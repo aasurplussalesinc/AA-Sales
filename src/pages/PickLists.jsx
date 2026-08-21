@@ -725,19 +725,20 @@ export default function PickLists() {
       !order.items?.some(poItem => (poItem.lineId || poItem.itemId) === getLineKey(item))
     );
     
-    // Confirm with user
-    let message = 'Sync pick list from PO?\n\n';
+    // Syncing is non-destructive — picked quantities are preserved and nothing
+    // is deleted — so it runs on the first click and reports what changed.
+    // (This used to build a summary that was never displayed, then sit behind a
+    // two-step confirm, so the first click appeared to do nothing.)
+    let message = '';
     if (newItems.length > 0) {
-      message += `➕ ${newItems.length} new item(s) will be added\n`;
+      message += `➕ ${newItems.length} new item(s) added\n`;
     }
     if (removedItems.length > 0) {
-      message += `➖ ${removedItems.length} item(s) no longer on PO (will keep with current picked qty)\n`;
+      message += `➖ ${removedItems.length} item(s) no longer on the PO — kept with their current picked qty\n`;
     }
     if (newItems.length === 0 && removedItems.length === 0) {
-      message += 'No new items found. Quantities will be updated if changed.';
+      message = 'Already up to date. Quantities refreshed from the order.';
     }
-    
-    if (!confirmStep('plmsg')) return;
     
     // Update the pick list
     await DB.updatePickList(pickList.id, { items: updatedItems });
@@ -752,8 +753,8 @@ export default function PickLists() {
     });
     setLocalPickedQty(updatedQty);
     
-    loadData();
-    alert(`Synced! ${newItems.length} new item(s) added.`);
+    await loadData();
+    alert('✅ Synced from ' + (order.poNumber || 'the order') + '\n\n' + message);
   };
 
   const openPackOrder = (pickList) => {
@@ -2176,8 +2177,9 @@ export default function PickLists() {
                     <button 
                       className="btn btn-danger btn-sm"
                       onClick={() => deletePickList(list)}
+                      title={armed('delpl:' + list.id) ? 'Click again to delete' : 'Delete this pick list'}
                     >
-                      Delete
+                      {armed('delpl:' + list.id) ? 'Click again' : 'Delete'}
                     </button>
                   </div>
                 </td>
@@ -2701,7 +2703,7 @@ export default function PickLists() {
                   cursor: 'pointer'
                 }}
               >
-                🔄 Reset from Pick List
+                {armed('resetpack') ? 'Click again to reset' : '🔄 Reset from Pick List'}
               </button>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <select

@@ -2184,7 +2184,7 @@ ${labelsHtml}
                     <button className="btn" onClick={() => markPaid(selectedOrder)} style={{ background: '#1565c0', color: 'white', fontSize: 12 }}>💰 Mark Paid</button>
                   )}
                   {canEdit && (selectedOrder.status === 'paid' || selectedOrder.paymentMethod) && (
-                    <button className="btn" onClick={() => markUnpaid(selectedOrder)} style={{ background: '#d84315', color: 'white', fontSize: 12 }}>↩️ Mark Unpaid</button>
+                    <button className="btn" onClick={() => markUnpaid(selectedOrder)} style={{ background: armed('revpay:' + selectedOrder.id) ? '#d98a1f' : '#d84315', color: 'white', fontSize: 12 }}>{armed('revpay:' + selectedOrder.id) ? 'Click again to confirm' : '↩️ Mark Unpaid'}</button>
                   )}
                 </div>
 
@@ -2194,7 +2194,7 @@ ${labelsHtml}
                     <button className="btn" onClick={() => openCancelOrder(selectedOrder)} style={{ background: '#ff9800', color: 'white', fontSize: 12 }}>⊘ Cancel Order</button>
                   )}
                   {canEdit && selectedOrder.status === 'cancelled' && (
-                    <button className="btn" onClick={() => restoreCancelledOrder(selectedOrder)} style={{ background: '#1976d2', color: 'white', fontSize: 12 }}>↺ Restore Order</button>
+                    <button className="btn" onClick={() => restoreCancelledOrder(selectedOrder)} style={{ background: armed('draft:' + selectedOrder.id) ? '#d98a1f' : '#1976d2', color: 'white', fontSize: 12 }}>{armed('draft:' + selectedOrder.id) ? 'Click again to confirm' : '↺ Restore Order'}</button>
                   )}
                   {canEdit && (
                     <button className="btn" onClick={() => deleteOrder(selectedOrder)} style={{ background: '#f44336', color: 'white', fontSize: 12 }}>🗑️ Delete</button>
@@ -2563,15 +2563,18 @@ ${labelsHtml}
                       <button
                         onClick={() => markShippedInline(order)}
                         disabled={!!processingOrder[order.id]}
-                        title="Mark as Shipped"
+                        title={pendingShip === order.id ? 'Click again to confirm shipping' : 'Mark as Shipped'}
                         style={{
-                          padding: '5px 12px', background: processingOrder[order.id] ? '#ccc' : '#388e3c',
+                          padding: '5px 12px',
+                          background: processingOrder[order.id] ? '#ccc'
+                            : pendingShip === order.id ? '#d98a1f' : '#388e3c',
                           color: 'var(--text-on-dark)', border: 'none', borderRadius: 6,
                           cursor: processingOrder[order.id] ? 'not-allowed' : 'pointer',
                           fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap'
                         }}
                       >
-                        {processingOrder[order.id] ? '...' : '🚚 Ship'}
+                        {processingOrder[order.id] ? '...'
+                          : pendingShip === order.id ? 'Click again' : '🚚 Ship'}
                       </button>
                     ) : order.status === 'shipped' ? (
                       <button

@@ -1972,9 +1972,9 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
               className="btn"
               onClick={discardChanges}
               disabled={saving}
-              style={{ background: '#f44336', color: 'var(--text-on-dark)' }}
+              style={{ background: armed('discard') ? '#d98a1f' : '#f44336', color: 'var(--text-on-dark)' }}
             >
-              ↩️ Discard
+              {armed('discard') ? 'Click again to discard' : '↩️ Discard'}
             </button>
           </>
         )}
@@ -4004,13 +4004,16 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                     padding: '10px',
                     border: 'none',
                     borderRadius: 6,
-                    background: adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336',
+                    background: armed('adjust:' + (adjustingItem?.id || 'x')) ? '#d98a1f'
+                      : adjustingItem.adjustType === 'add' ? '#4CAF50' : '#f44336',
                     color: 'var(--text-on-dark)',
                     cursor: 'pointer',
                     fontWeight: 'bold'
                   }}
                 >
-                  {adjustingItem.adjustType === 'add' ? 'Add' : 'Remove'}
+                  {armed('adjust:' + (adjustingItem?.id || 'x'))
+                    ? 'Click again to confirm'
+                    : (adjustingItem.adjustType === 'add' ? 'Add' : 'Remove')}
                 </button>
               </div>
             </div>

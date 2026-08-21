@@ -69,9 +69,14 @@
   --btn-primary-bg:       #0d7a52;
   --btn-primary-color:    #ffffff;
   --btn-primary-hover:    #0a6444;
-  --btn-secondary-bg:     #f1f3f5;
-  --btn-secondary-color:  #1a1d23;
-  --btn-secondary-hover:  #e2e5ea;
+  /* Was #f1f3f5 — near-white on a white page, so utility buttons like
+     "Download Template" read as disabled rather than clickable. Deeper fill
+     plus a defined border makes them legible without competing with the
+     primary green. */
+  --btn-secondary-bg:     #dfe3e8;
+  --btn-secondary-color:  #12151a;
+  --btn-secondary-hover:  #cbd2da;
+  --btn-secondary-border: #a8b2bd;
   --btn-danger-bg:        #dc3545;
   --btn-danger-color:     #ffffff;
 
@@ -144,9 +149,11 @@
   --btn-primary-bg:       #34d399;
   --btn-primary-color:    #0a0a0a;
   --btn-primary-hover:    #2dbe87;
-  --btn-secondary-bg:     #1e1e1e;
-  --btn-secondary-color:  #f0f0f0;
-  --btn-secondary-hover:  #252525;
+  /* Was #1e1e1e — nearly the page background, so these vanished. */
+  --btn-secondary-bg:     #33383f;
+  --btn-secondary-color:  #ffffff;
+  --btn-secondary-hover:  #414751;
+  --btn-secondary-border: #5b636e;
   --btn-danger-bg:        #f87171;
   --btn-danger-color:     #0a0a0a;
 
@@ -324,6 +331,7 @@ body {
   font-family: inherit;
   background: var(--btn-secondary-bg);
   color: var(--btn-secondary-color);
+  border: 1px solid var(--btn-secondary-border, transparent);
   transition: all var(--transition);
   letter-spacing: 0.2px;
 }

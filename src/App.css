@@ -70,13 +70,14 @@
   --btn-primary-color:    #ffffff;
   --btn-primary-hover:    #0a6444;
   /* Was #f1f3f5 — near-white on a white page, so utility buttons like
-     "Download Template" read as disabled rather than clickable. Deeper fill
-     plus a defined border makes them legible without competing with the
-     primary green. */
-  --btn-secondary-bg:     #dfe3e8;
-  --btn-secondary-color:  #12151a;
-  --btn-secondary-hover:  #cbd2da;
-  --btn-secondary-border: #a8b2bd;
+     "Download Template" read as disabled rather than clickable. Grey with an
+     outline still looked out of place next to the coloured actions, so these
+     are now slate blue: a real button colour, distinct from the teal import,
+     green primary, orange warnings and red destructive actions. */
+  --btn-secondary-bg:     #4f6180;
+  --btn-secondary-color:  #ffffff;
+  --btn-secondary-hover:  #3f4f6a;
+  --btn-secondary-border: #3b4a63;
   --btn-danger-bg:        #dc3545;
   --btn-danger-color:     #ffffff;
 
@@ -150,10 +151,10 @@
   --btn-primary-color:    #0a0a0a;
   --btn-primary-hover:    #2dbe87;
   /* Was #1e1e1e — nearly the page background, so these vanished. */
-  --btn-secondary-bg:     #33383f;
+  --btn-secondary-bg:     #5a6f96;
   --btn-secondary-color:  #ffffff;
-  --btn-secondary-hover:  #414751;
-  --btn-secondary-border: #5b636e;
+  --btn-secondary-hover:  #6b81aa;
+  --btn-secondary-border: #7387ac;
   --btn-danger-bg:        #f87171;
   --btn-danger-color:     #0a0a0a;
 

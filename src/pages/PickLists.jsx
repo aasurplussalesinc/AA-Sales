@@ -1786,10 +1786,16 @@ export default function PickLists() {
                 <button 
                   className="btn"
                   onClick={async () => {
-                    if (confirmStep('reopen:' + list.id)) {
+                    // Was `list.id` — `list` doesn't exist in this scope, so the
+                    // handler threw a ReferenceError before doing anything. The
+                    // variable here is `selectedList`. Reopening is also easy to
+                    // undo (just complete it again), so no confirm step.
+                    try {
                       await DB.updatePickList(selectedList.id, { status: 'in_progress' });
                       setSelectedList(prev => ({ ...prev, status: 'in_progress' }));
-                      loadData();
+                      await loadData();
+                    } catch (e) {
+                      alert('Could not reopen this pick list: ' + (e.message || e));
                     }
                   }}
                   style={{ background: '#2196F3', color: 'var(--text-on-dark)' }}

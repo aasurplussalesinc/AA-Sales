@@ -338,7 +338,7 @@ export default function LandingPage() {
                 fontSize: 11, fontWeight: 800, letterSpacing: 2, color: '#34d399',
                 textTransform: 'uppercase', marginBottom: 6
               }}>
-                ⭐ Founding Customer Program — first 10 accounts
+                ⭐ Founding Customer Program
               </div>
               <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
                 <strong style={{ color: '#fff' }}>40% off for 24 months</strong>, locked in — plus
@@ -346,7 +346,7 @@ export default function LandingPage() {
                 In exchange we&rsquo;ll ask for a short case study once you&rsquo;re up and running.
               </div>
               <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>
-                Ends after 10 signups or 90 days, whichever comes first. Month-to-month · 30-day money-back guarantee.
+                Month-to-month · 30-day money-back guarantee.
               </div>
             </div>
 

@@ -180,6 +180,7 @@ export default function Items() {
     sortBy: 'sku' // default sort by SKU
   });
   const [showFilters, setShowFilters] = useState(false);
+
   
   // Lock filtered items when editing - prevents items from disappearing mid-edit
   const [lockedItemIds, setLockedItemIds] = useState(new Set());
@@ -1657,6 +1658,26 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
 
   // Bulk QR Label Printing
   const [selectedItems, setSelectedItems] = useState([]);
+  // Drop the selection whenever the visible set changes.
+  // Selecting rows, then searching for something else, used to leave those
+  // rows selected but off-screen — and the batch category / location / price
+  // actions would silently apply to them. Sorting is excluded: it reorders the
+  // same rows rather than changing which ones you're looking at.
+  const filterFingerprint = [
+    filters.sku, filters.name, filters.category, filters.grade,
+    filters.quantity, filters.location, filters.stockStatus
+  ].join('\u0000');
+  const prevFingerprint = useRef(filterFingerprint);
+  useEffect(() => {
+    if (prevFingerprint.current === filterFingerprint) return;
+    prevFingerprint.current = filterFingerprint;
+    setSelectedItems(prev => {
+      if (prev.length === 0) return prev;   // nothing to clear, stay quiet
+      toast(`Selection cleared (${prev.length} item${prev.length === 1 ? '' : 's'}) — the filter changed.`);
+      return [];
+    });
+    setLockedItemIds(new Set());
+  }, [filterFingerprint]);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [labelSize, setLabelSize] = useState('medium');
 

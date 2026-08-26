@@ -83,10 +83,12 @@ function buildTableHtml(groups, branding, options) {
   const showSku = options.showSku !== false;
   const showCondition = options.showCondition !== false;
   const showStock = options.showStock !== false;
-  // columns: checkbox + [sku] + item + [cond] + [qty] + price
-  const colCount = 1 + (showSku ? 1 : 0) + 1 + (showCondition ? 1 : 0) + (showStock ? 1 : 0) + 1;
+  // columns: checkbox + ON-HAND (screen only) + [sku] + item + [cond] + [qty] + price
+  // The on-hand column is for whoever is building the catalog — it shows real
+  // stock while you decide what to grey out, and never prints.
+  const colCount = 2 + (showSku ? 1 : 0) + 1 + (showCondition ? 1 : 0) + (showStock ? 1 : 0) + 1;
 
-  const head = ['<th class="chkcol"></th>'];
+  const head = ['<th class="chkcol"></th>', '<th class="onhand" title="Your current stock — never printed">ON HAND</th>'];
   if (showSku) head.push('<th class="c-inv">INV</th>');
   head.push('<th class="c-item">ITEM</th>');
   if (showCondition) head.push('<th class="c-cond">COND</th>');
@@ -95,9 +97,14 @@ function buildTableHtml(groups, branding, options) {
 
   let body = '';
   groups.forEach(group => {
-    body += `<tr class="catrow"><td class="chkcol"></td><td colspan="${colCount - 1}" style="background:${escapeHtml(accent)}">${escapeHtml(group.category)}</td></tr>`;
+    body += `<tr class="catrow"><td class="chkcol"></td><td class="onhand"></td><td colspan="${colCount - 2}" style="background:${escapeHtml(accent)}">${escapeHtml(group.category)}</td></tr>`;
     group.items.forEach(item => {
-      const cells = ['<td class="chkcol"><input type="checkbox" checked onchange="tog(this)"></td>'];
+      const qty = parseInt(item.stock) || 0;
+      const lowFlag = qty <= 2 ? ' low' : '';
+      const cells = [
+        '<td class="chkcol"><input type="checkbox" checked onchange="tog(this)"></td>',
+        `<td class="onhand${lowFlag}">${qty}</td>`
+      ];
       if (showSku) cells.push(`<td class="c-inv">${escapeHtml(item.partNumber || '')}</td>`);
       cells.push(`<td class="c-item">${escapeHtml(item.name || '')}</td>`);
       if (showCondition) cells.push(`<td class="c-cond">${escapeHtml(item.grade || '')}</td>`);
@@ -156,12 +163,18 @@ export function buildCatalogHtml(items, branding, options) {
   tr.catrow td { color: #fff; font-weight: bold; font-size: 13px; letter-spacing: 0.5px;
     padding: 6px 8px; border-bottom: none; text-transform: uppercase; }
   .chkcol { width: 26px; text-align: center; }
+  /* Internal-only stock column. Styled to look obviously different from the
+     customer-facing columns so it can't be mistaken for part of the catalog. */
+  .onhand { width: 0.6in; text-align: right; font-weight: 700; font-size: 11px;
+    color: #1565c0; background: #eef4fb; border-right: 2px solid #c7dbf2; }
+  th.onhand { background: #1565c0 !important; color: #fff !important; }
+  .onhand.low { color: #c62828; background: #fdecea; }
   .c-inv { width: 0.6in; color: #888; }
   .c-cond { width: 0.7in; color: #555; }
   .c-qty { width: 0.55in; text-align: right; color: #444; }
   .c-price { width: 0.75in; text-align: right; white-space: nowrap; font-weight: bold; }
   tr.item { page-break-inside: avoid; }
-  tr.item.x td:not(.chkcol) { opacity: 0.3; text-decoration: line-through; }
+  tr.item.x td:not(.chkcol):not(.onhand) { opacity: 0.3; text-decoration: line-through; }
   .foot { margin-top: 10px; font-size: 10px; color: #777; text-align: center; }
 
   @media screen {
@@ -174,6 +187,7 @@ export function buildCatalogHtml(items, branding, options) {
   @media print {
     .toolbar { display: none !important; }
     .chkcol { display: none !important; }
+    .onhand { display: none !important; }
     tr.item.x { display: none !important; }
     tr.catrow.x { display: none !important; }
     @page { margin: 0.5in 0.45in; }

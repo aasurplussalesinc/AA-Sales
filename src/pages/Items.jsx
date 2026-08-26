@@ -487,6 +487,20 @@ export default function Items() {
         return (parseFloat(a.price) || 0) - (parseFloat(b.price) || 0);
       case 'price-desc':
         return (parseFloat(b.price) || 0) - (parseFloat(a.price) || 0);
+      case 'grade-asc':
+      case 'grade-desc': {
+        // Grade is free text (NEW, USED, #1, #2, A, B...). Sort naturally so
+        // #2 lands before #10, keep blanks last either way, and fall back to
+        // SKU so items sharing a grade stay in a stable, predictable order.
+        const ga = String(a.grade || '').trim();
+        const gb = String(b.grade || '').trim();
+        if (!ga && !gb) return (a.partNumber || '').localeCompare(b.partNumber || '');
+        if (!ga) return 1;
+        if (!gb) return -1;
+        const cmp = ga.localeCompare(gb, undefined, { numeric: true, sensitivity: 'base' });
+        if (cmp !== 0) return filters.sortBy === 'grade-desc' ? -cmp : cmp;
+        return (a.partNumber || '').localeCompare(b.partNumber || '');
+      }
       case 'sku-desc':
         return (b.partNumber || '').localeCompare(a.partNumber || '');
       case 'sku':
@@ -2720,6 +2734,8 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                 <option value="sku-desc">SKU (Z-A)</option>
                 <option value="name-asc">Item Name (A-Z)</option>
                 <option value="name-desc">Item Name (Z-A)</option>
+                <option value="grade-asc">Grade (A-Z)</option>
+                <option value="grade-desc">Grade (Z-A)</option>
                 <option value="stock-desc">Stock (High to Low)</option>
                 <option value="stock-asc">Stock (Low to High)</option>
                 <option value="price-desc">Price (High to Low)</option>

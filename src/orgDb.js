@@ -787,6 +787,66 @@ export const OrgDB = {
   },
 
   // ══════════════════════════════════════════════════════════════════════
+  // API KEYS — let a subscriber's own agent read/write their data.
+  // The key is shown ONCE at creation and only its SHA-256 hash is stored,
+  // so a database leak can't be replayed against the API. Every key is bound
+  // to exactly one org; the API layer scopes every query by that org id and
+  // never accepts an org id from the caller.
+  // ══════════════════════════════════════════════════════════════════════
+
+  async _sha256(text) {
+    const buf = new TextEncoder().encode(text);
+    const digest = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(digest))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+  },
+
+  async createApiKey({ label, scope = 'read' }) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    if (!['read', 'write'].includes(scope)) throw new Error('Scope must be read or write');
+
+    // 32 random bytes -> 64 hex chars, prefixed so it's recognisable in logs.
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const secret = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    const key = `sk_${scope === 'write' ? 'rw' : 'ro'}_${secret}`;
+    const hash = await this._sha256(key);
+
+    const ref = await addDoc(collection(db, 'apiKeys'), {
+      orgId: currentOrgId,
+      label: label || 'Untitled key',
+      scope,
+      keyHash: hash,
+      preview: key.slice(0, 12) + '…' + key.slice(-4),
+      createdAt: Date.now(),
+      createdBy: auth.currentUser?.email || '',
+      lastUsedAt: null,
+      callCount: 0,
+      revoked: false
+    });
+    await this.logActivity('API_KEY_CREATED', { id: ref.id, label, scope });
+
+    // The only time the full key is ever available.
+    return { id: ref.id, key, scope, label };
+  },
+
+  async getApiKeys() {
+    if (!currentOrgId) return [];
+    const q = query(collection(db, 'apiKeys'), where('orgId', '==', currentOrgId));
+    const snap = await getDocs(q);
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .filter(k => !k.revoked)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  },
+
+  async revokeApiKey(id) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    await updateDoc(doc(db, 'apiKeys', id), { revoked: true, revokedAt: Date.now() });
+    await this.logActivity('API_KEY_REVOKED', { id });
+  },
+
+  // ══════════════════════════════════════════════════════════════════════
   // EXPENSES — money going out. Receipts/invoices/bills with photo capture.
   // Tracks spend only; it never pays anyone.
   // ══════════════════════════════════════════════════════════════════════

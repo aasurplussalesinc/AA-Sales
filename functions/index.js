@@ -2692,3 +2692,233 @@ exports.parseReceipt = functions
     var p = parseReceiptText(text);
     return { engine: 'vision', vendor: p.vendor, date: p.date, total: p.total, tax: p.tax, reference: '', text: text.slice(0, 4000) };
   });
+
+// ════════════════════════════════════════════════════════════════════
+// PUBLIC API — lets a subscriber's own agent read and write their data.
+//
+// SECURITY MODEL (the part that matters):
+//   • Auth is an API key sent as `Authorization: Bearer sk_...`.
+//   • Only the SHA-256 hash of a key is stored, so a DB leak isn't replayable.
+//   • The org id is derived FROM THE KEY and never read from the request.
+//     Every query is scoped to that org, so one tenant can't reach another's
+//     data even by guessing document ids.
+//   • Read keys (sk_ro_) cannot write. Write access is checked per route.
+//   • Rate limited per key.
+// ════════════════════════════════════════════════════════════════════
+
+var crypto = require('crypto');
+
+function sha256Hex(text) {
+  return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+// Resolve a bearer token to its org. Returns null if unknown or revoked.
+async function resolveApiKey(authHeader) {
+  if (!authHeader || authHeader.indexOf('Bearer ') !== 0) return null;
+  var raw = authHeader.slice(7).trim();
+  if (!raw) return null;
+
+  var snap = await db.collection('apiKeys')
+    .where('keyHash', '==', sha256Hex(raw))
+    .limit(1).get();
+  if (snap.empty) return null;
+
+  var docSnap = snap.docs[0];
+  var data = docSnap.data();
+  if (data.revoked) return null;
+
+  // Fire-and-forget usage stamp; never block the request on it.
+  docSnap.ref.update({
+    lastUsedAt: Date.now(),
+    callCount: (data.callCount || 0) + 1
+  }).catch(function () {});
+
+  return { orgId: data.orgId, scope: data.scope || 'read', keyId: docSnap.id, label: data.label };
+}
+
+function apiError(res, code, message) {
+  return res.status(code).json({ error: message });
+}
+
+// Only the fields an agent has any business seeing.
+function publicItem(id, d) {
+  return {
+    id: id,
+    sku: d.partNumber || '',
+    name: d.name || '',
+    grade: d.grade || '',
+    category: d.category || '',
+    quantity: parseInt(d.stock) || 0,
+    price: parseFloat(d.price) || 0,
+    location: d.location || '',
+    locations: Array.isArray(d.locations) ? d.locations : [],
+    lowStockThreshold: parseInt(d.lowStockThreshold) || 0,
+    updatedAt: d.updatedAt || null
+  };
+}
+
+exports.api = functions
+  .runWith({ timeoutSeconds: 60, memory: '512MB' })
+  .https.onRequest(async function (req, res) {
+    // CORS — agents often call from a browser context.
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    if (req.method === 'OPTIONS') return res.status(204).send('');
+
+    var auth;
+    try {
+      auth = await resolveApiKey(req.get('Authorization'));
+    } catch (e) {
+      console.error('API key lookup failed:', e.message);
+      return apiError(res, 500, 'Authentication failed');
+    }
+    if (!auth) return apiError(res, 401, 'Invalid or missing API key');
+
+    if (!checkRateLimit('api_' + auth.keyId, 300, 60 * 1000)) {
+      return apiError(res, 429, 'Rate limit exceeded — 300 requests per minute');
+    }
+
+    // Route: everything after /api
+    var path = (req.path || '/').replace(/\/+$/, '') || '/';
+    var needsWrite = req.method === 'POST';
+    if (needsWrite && auth.scope !== 'write') {
+      return apiError(res, 403, 'This key is read-only');
+    }
+
+    try {
+      // ---- GET /items ---------------------------------------------------
+      if (req.method === 'GET' && (path === '/' || path === '/items')) {
+        var limitN = Math.min(parseInt(req.query.limit) || 100, 500);
+        var search = (req.query.search || '').toLowerCase().trim();
+        var snap = await db.collection('items').where('orgId', '==', auth.orgId).get();
+        var items = snap.docs.map(function (d) { return publicItem(d.id, d.data()); });
+
+        if (search) {
+          var tokens = search.split(/[^a-z0-9#]+/).filter(Boolean);
+          items = items.filter(function (it) {
+            var hay = (it.sku + ' ' + it.name + ' ' + it.grade + ' ' + it.category).toLowerCase();
+            return tokens.every(function (t) { return hay.indexOf(t) !== -1; });
+          });
+        }
+        if (req.query.location) {
+          var want = String(req.query.location).toUpperCase();
+          items = items.filter(function (it) {
+            return (it.location || '').toUpperCase() === want ||
+              (it.locations || []).some(function (e) {
+                return String(e.code || '').toUpperCase() === want;
+              });
+          });
+        }
+        if (req.query.lowStock === 'true') {
+          items = items.filter(function (it) {
+            return it.lowStockThreshold > 0 && it.quantity <= it.lowStockThreshold;
+          });
+        }
+        return res.json({ count: items.length, items: items.slice(0, limitN) });
+      }
+
+      // ---- GET /items/:id -----------------------------------------------
+      var mItem = path.match(/^\/items\/([A-Za-z0-9_-]+)$/);
+      if (req.method === 'GET' && mItem) {
+        var docRef = await db.collection('items').doc(mItem[1]).get();
+        if (!docRef.exists) return apiError(res, 404, 'Item not found');
+        var dd = docRef.data();
+        // Never leak another org's document, even with a valid id.
+        if (dd.orgId !== auth.orgId) return apiError(res, 404, 'Item not found');
+        return res.json(publicItem(docRef.id, dd));
+      }
+
+      // ---- GET /locations -------------------------------------------------
+      if (req.method === 'GET' && path === '/locations') {
+        var lsnap = await db.collection('locations').where('orgId', '==', auth.orgId).get();
+        var isnap = await db.collection('items').where('orgId', '==', auth.orgId).get();
+
+        var totals = {};
+        isnap.docs.forEach(function (d) {
+          var it = d.data();
+          var entries = Array.isArray(it.locations) ? it.locations : [];
+          entries.forEach(function (e) {
+            var c = String(e.code || '').toUpperCase();
+            var q = parseInt(e.qty) || 0;
+            if (!c || q <= 0) return;
+            if (!totals[c]) totals[c] = { total: 0, items: 0 };
+            totals[c].total += q;
+            totals[c].items += 1;
+          });
+        });
+
+        var locs = lsnap.docs.map(function (d) {
+          var l = d.data();
+          var code = (l.locationCode || '').toUpperCase();
+          var t = totals[code] || { total: 0, items: 0 };
+          return {
+            id: d.id, code: l.locationCode || '', warehouse: l.warehouse || '',
+            rack: l.rack || '', bay: l.letter || '', shelf: l.shelf || '',
+            totalUnits: t.total, itemCount: t.items
+          };
+        });
+        return res.json({ count: locs.length, locations: locs });
+      }
+
+      // ---- GET /orders ----------------------------------------------------
+      if (req.method === 'GET' && path === '/orders') {
+        var limitO = Math.min(parseInt(req.query.limit) || 50, 200);
+        var osnap = await db.collection('purchaseOrders').where('orgId', '==', auth.orgId).get();
+        var orders = osnap.docs.map(function (d) {
+          var o = d.data();
+          return {
+            id: d.id, orderNumber: o.poNumber || '', customerPO: o.customerPO || '',
+            customer: o.customerName || '', status: o.status || '',
+            createdAt: o.createdAt || null, total: parseFloat(o.total) || 0,
+            itemCount: (o.items || []).length
+          };
+        });
+        if (req.query.status) {
+          orders = orders.filter(function (o) { return o.status === req.query.status; });
+        }
+        orders.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+        return res.json({ count: orders.length, orders: orders.slice(0, limitO) });
+      }
+
+      // ---- POST /items/:id/adjust  { delta | quantity, reason } ------------
+      var mAdj = path.match(/^\/items\/([A-Za-z0-9_-]+)\/adjust$/);
+      if (req.method === 'POST' && mAdj) {
+        var ref = db.collection('items').doc(mAdj[1]);
+        var cur = await ref.get();
+        if (!cur.exists) return apiError(res, 404, 'Item not found');
+        var c = cur.data();
+        if (c.orgId !== auth.orgId) return apiError(res, 404, 'Item not found');
+
+        var body = req.body || {};
+        var currentQty = parseInt(c.stock) || 0;
+        var newQty;
+        if (body.quantity !== undefined) newQty = parseInt(body.quantity);
+        else if (body.delta !== undefined) newQty = currentQty + parseInt(body.delta);
+        else return apiError(res, 400, 'Provide either "quantity" or "delta"');
+
+        if (!isFinite(newQty) || newQty < 0) return apiError(res, 400, 'Resulting quantity must be 0 or more');
+
+        await ref.update({ stock: newQty, updatedAt: Date.now() });
+        await db.collection('activityLog').add({
+          orgId: auth.orgId, action: 'ITEM_UPDATED',
+          details: { itemId: ref.id, updates: { stock: newQty }, before: { stock: currentQty },
+                     source: 'api', apiKey: auth.label, reason: body.reason || '' },
+          userEmail: 'API: ' + (auth.label || auth.keyId),
+          timestamp: Date.now(), createdAt: new Date().toISOString()
+        });
+
+        return res.json({ id: ref.id, previousQuantity: currentQty, quantity: newQty });
+      }
+
+      // ---- GET /  (discovery) ---------------------------------------------
+      if (req.method === 'GET' && path === '/ping') {
+        return res.json({ ok: true, org: auth.orgId, scope: auth.scope });
+      }
+
+      return apiError(res, 404, 'Unknown endpoint: ' + req.method + ' ' + path);
+    } catch (err) {
+      console.error('API error:', err);
+      return apiError(res, 500, 'Internal error');
+    }
+  });

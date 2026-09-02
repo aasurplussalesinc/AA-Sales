@@ -67,6 +67,37 @@ export default function OrgSettings() {
   const [shipFlat, setShipFlat] = useState('');
   const [shipRoundUp, setShipRoundUp] = useState(false);
   const [autoMaxPerBox, setAutoMaxPerBox] = useState('');
+  // ---- API keys ----
+  const [apiKeys, setApiKeys] = useState([]);
+  const [newKeyLabel, setNewKeyLabel] = useState('');
+  const [newKeyScope, setNewKeyScope] = useState('read');
+  const [freshKey, setFreshKey] = useState(null);   // shown once, then gone
+  const [keyBusy, setKeyBusy] = useState(false);
+
+  const loadApiKeys = async () => {
+    try { setApiKeys(await OrgDB.getApiKeys()); } catch (e) { console.warn(e); }
+  };
+  useEffect(() => { loadApiKeys(); }, [organization?.id]);
+
+  const makeApiKey = async () => {
+    if (keyBusy) return;
+    setKeyBusy(true);
+    try {
+      const res = await OrgDB.createApiKey({ label: newKeyLabel.trim(), scope: newKeyScope });
+      setFreshKey(res);
+      setNewKeyLabel('');
+      await loadApiKeys();
+    } catch (e) { alert('Could not create key: ' + (e.message || e)); }
+    setKeyBusy(false);
+  };
+
+  const killApiKey = async (k) => {
+    if (keyBusy) return;
+    setKeyBusy(true);
+    try { await OrgDB.revokeApiKey(k.id); await loadApiKeys(); }
+    catch (e) { alert('Could not revoke: ' + (e.message || e)); }
+    setKeyBusy(false);
+  };
   const [logoUploading, setLogoUploading] = useState(false);
   
   // Employee management state
@@ -364,6 +395,95 @@ export default function OrgSettings() {
                 Used on invoices, packing lists and statements. Save to apply.
               </p>
             </div>
+
+            {/* ── API access for the customer's own AI agent ── */}
+            {userRole === 'admin' && (
+              <div style={{ marginBottom: 24, padding: 16, border: '1px solid var(--border)',
+                borderRadius: 8, background: 'var(--bg-surface-2)' }}>
+                <label style={{ display: 'block', fontWeight: 700, marginBottom: 4, fontSize: 15 }}>
+                  🔌 API Access
+                </label>
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 12 }}>
+                  Create a key so your own AI agent can read (and optionally update) your
+                  inventory. Keys only ever reach <strong>your</strong> data. The key is shown
+                  once when created &mdash; store it somewhere safe, because it can&rsquo;t be
+                  displayed again. Revoke any key instantly below.
+                </p>
+
+                {freshKey && (
+                  <div style={{ padding: 12, marginBottom: 12, borderRadius: 6,
+                    background: '#e8f5e9', border: '1px solid #a5d6a7' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#2e7d32', marginBottom: 6 }}>
+                      ✅ Key created — copy it now, it won&rsquo;t be shown again
+                    </div>
+                    <code style={{ display: 'block', wordBreak: 'break-all', fontSize: 12,
+                      background: '#fff', padding: 8, borderRadius: 4, border: '1px solid #c8e6c9' }}>
+                      {freshKey.key}
+                    </code>
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button className="btn btn-sm"
+                        onClick={() => { navigator.clipboard?.writeText(freshKey.key); }}
+                        style={{ background: '#2e7d32', color: '#fff' }}>Copy</button>
+                      <button className="btn btn-sm" onClick={() => setFreshKey(null)}>Done</button>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
+                  <div style={{ flex: '1 1 200px' }}>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4,
+                      color: 'var(--text-muted)', textTransform: 'uppercase' }}>Name</label>
+                    <input value={newKeyLabel} onChange={e => setNewKeyLabel(e.target.value)}
+                      placeholder="e.g. Warehouse assistant"
+                      style={{ width: '100%', padding: '7px 9px', borderRadius: 6,
+                        border: '1px solid var(--border)', background: 'var(--bg-input)',
+                        color: 'var(--text-primary)' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4,
+                      color: 'var(--text-muted)', textTransform: 'uppercase' }}>Access</label>
+                    <select value={newKeyScope} onChange={e => setNewKeyScope(e.target.value)}
+                      style={{ padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)',
+                        background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
+                      <option value="read">Read only</option>
+                      <option value="write">Read &amp; write</option>
+                    </select>
+                  </div>
+                  <button className="btn" onClick={makeApiKey} disabled={keyBusy}
+                    style={{ background: '#4f6180', color: '#fff' }}>
+                    {keyBusy ? 'Working…' : '+ Create key'}
+                  </button>
+                </div>
+
+                {apiKeys.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>No API keys yet.</div>
+                ) : (
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+                    {apiKeys.map(k => (
+                      <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '8px 10px', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <strong>{k.label}</strong>
+                          <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 800, padding: '1px 7px',
+                            borderRadius: 9, textTransform: 'uppercase',
+                            background: k.scope === 'write' ? '#fff3e0' : '#e8f5e9',
+                            color: k.scope === 'write' ? '#e65100' : '#2e7d32' }}>
+                            {k.scope === 'write' ? 'read & write' : 'read only'}
+                          </span>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                            <code>{k.preview}</code>
+                            {' · '}{k.callCount || 0} calls
+                            {k.lastUsedAt ? ` · last used ${new Date(k.lastUsedAt).toLocaleDateString()}` : ' · never used'}
+                          </div>
+                        </div>
+                        <button className="btn btn-sm" onClick={() => killApiKey(k)}
+                          style={{ background: '#c62828', color: '#fff' }}>Revoke</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Auto-purchase spending guard */}
             <div style={{ marginBottom: 15 }}>

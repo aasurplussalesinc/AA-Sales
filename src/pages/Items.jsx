@@ -54,6 +54,21 @@ export default function Items() {
   const [originalItems, setOriginalItems] = useState([]);
   const [confirmDeleteItem, setConfirmDeleteItem] = useState(null); // item pending delete
   const [pendingImport, setPendingImport] = useState(null); // { summary, apply }
+  const [priceHistoryItem, setPriceHistoryItem] = useState(null);
+  const [priceHistory, setPriceHistory] = useState([]);
+  const [priceHistoryLoading, setPriceHistoryLoading] = useState(false);
+
+  const openPriceHistory = async (item) => {
+    setPriceHistoryItem(item);
+    setPriceHistory([]);
+    setPriceHistoryLoading(true);
+    try {
+      setPriceHistory(await DB.getItemPriceHistory(item.id));
+    } catch (e) {
+      toast('Could not load price history: ' + (e.message || e));
+    }
+    setPriceHistoryLoading(false);
+  };
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
@@ -3181,6 +3196,11 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                           onClick={() => { loadItemHistory(item); setOpenActionMenu(null); }}
                         />
                         <DropdownItem
+                          icon="💲" label="Price History"
+                          color="#2e7d32"
+                          onClick={() => { openPriceHistory(item); setOpenActionMenu(null); }}
+                        />
+                        <DropdownItem
                           icon="🖨️" label="Print QR"
                           color="var(--accent)"
                           onClick={() => { printQR(item); setOpenActionMenu(null); }}
@@ -3256,6 +3276,91 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                 }}>
                 {importing ? 'Importing…' : 'Import'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Price history */}
+      {priceHistoryItem && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 10000,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+          onClick={() => setPriceHistoryItem(null)}>
+          <div onClick={e => e.stopPropagation()} style={{
+            background: 'var(--bg-surface)', borderRadius: 10, width: 'min(600px, 96vw)',
+            maxHeight: '86vh', display: 'flex', flexDirection: 'column',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.3)', overflow: 'hidden' }}>
+
+            <div style={{ background: '#2e7d32', color: '#fff', padding: '14px 18px' }}>
+              <div style={{ fontWeight: 800, fontSize: 16 }}>💲 Price History</div>
+              <div style={{ fontSize: 13, opacity: 0.9, marginTop: 2 }}>
+                {priceHistoryItem.partNumber} · {priceHistoryItem.name}
+                {' '}· now ${(parseFloat(priceHistoryItem.price) || 0).toFixed(2)}
+              </div>
+            </div>
+
+            <div style={{ overflowY: 'auto' }}>
+              {priceHistoryLoading ? (
+                <div style={{ padding: 28, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
+              ) : priceHistory.length === 0 ? (
+                <div style={{ padding: 28, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+                  No price changes recorded for this item.<br />
+                  <span style={{ fontSize: 12 }}>
+                    Only changes made through the app are logged — a price set when the
+                    item was created or imported won&rsquo;t appear here.
+                  </span>
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ background: 'var(--bg-surface-2)', textAlign: 'left' }}>
+                      {['When', 'Changed by', 'From', 'To'].map(h => (
+                        <th key={h} style={{ padding: '8px 12px', borderBottom: '2px solid var(--border)',
+                          fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em',
+                          color: 'var(--text-muted)' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {priceHistory.map((h, i) => {
+                      const up = h.from != null && h.to > h.from;
+                      const down = h.from != null && h.to < h.from;
+                      return (
+                        <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                            {new Date(h.at).toLocaleDateString()}
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                              {new Date(h.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          </td>
+                          <td style={{ padding: '8px 12px' }}>{h.by}</td>
+                          <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>
+                            {h.from != null ? `$${h.from.toFixed(2)}` : '—'}
+                            {h.inferred && (
+                              <span title="Inferred from the previous logged price — the original value wasn't recorded at the time"
+                                style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#a8791a' }}>≈</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 12px', fontWeight: 800,
+                            color: up ? '#2e7d32' : down ? '#c62828' : 'var(--text-primary)' }}>
+                            ${h.to.toFixed(2)}
+                            {up && <span style={{ marginLeft: 4, fontSize: 11 }}>▲</span>}
+                            {down && <span style={{ marginLeft: 4, fontSize: 11 }}>▼</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', gap: 10, padding: 16, justifyContent: 'space-between',
+              alignItems: 'center', borderTop: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                ≈ means the previous price was inferred from earlier log entries
+              </span>
+              <button className="btn" onClick={() => setPriceHistoryItem(null)}>Close</button>
             </div>
           </div>
         </div>

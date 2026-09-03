@@ -516,14 +516,19 @@ export const OrgDB = {
       collection(db, 'activityLog'),
       where('orgId', '==', currentOrgId),
       where('action', '==', 'ITEM_UPDATED'),
-      orderBy('timestamp', 'asc'),
       limit(2000)
     );
     const snap = await getDocs(q);
 
+    // Sorted here rather than with orderBy: combining two equality filters
+    // with an orderBy forces a composite index, and equality-only queries
+    // don't need one. Same result, no index to create.
+    const docsAsc = snap.docs.slice()
+      .sort((x, y) => (x.data().timestamp || 0) - (y.data().timestamp || 0));
+
     const rows = [];
     let previous = null;
-    snap.docs.forEach(d => {
+    docsAsc.forEach(d => {
       const e = d.data();
       const det = e.details || {};
       if (det.itemId !== itemId) return;
@@ -557,7 +562,6 @@ export const OrgDB = {
       collection(db, 'activityLog'),
       where('orgId', '==', currentOrgId),
       where('action', '==', 'ITEM_UPDATED'),
-      orderBy('timestamp', 'asc'),
       limit(5000)
     );
     const snap = await getDocs(q);
@@ -567,7 +571,11 @@ export const OrgDB = {
 
     const lastSeen = {};
     const out = [];
-    snap.docs.forEach(d => {
+    // Chronological order matters — each change is chained to the previous
+    // price for that item. Sorted in memory to avoid a composite index.
+    const ordered = snap.docs.slice()
+      .sort((x, y) => (x.data().timestamp || 0) - (y.data().timestamp || 0));
+    ordered.forEach(d => {
       const e = d.data();
       const det = e.details || {};
       const u = det.updates || {};

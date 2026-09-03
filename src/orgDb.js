@@ -1,3 +1,4 @@
+import { brandingFrom as sharedBrandingFrom, brandingHtml as sharedBrandingHtml } from '../functions/orderDocument.mjs';
 import { collection, addDoc, getDocs, getDoc, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc, setDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
@@ -927,6 +928,12 @@ export const OrgDB = {
   // Canonicalize a location code to W#-R#-<BAY><SHELF>, ALWAYS — even when a
   // custom schema is set. Used by reconciliation, where the whole point is to
   // clean up messy imported strings (dashless, mixed case) so they match.
+  // The shelf code used for stock that has been received but not put away.
+  // Referenced by getOrCreateStagingLocation, addStockAtLocation and the
+  // reconciliation helpers; it was previously read but never defined, so a
+  // receive with no shelf resolved to `undefined` and the entry was dropped.
+  STAGING_CODE: 'STAGING',
+
   canonicalLocationCode(code) {
     if (!code) return '';
     code = String(code).trim();
@@ -948,7 +955,10 @@ export const OrgDB = {
         return `${w}-R${r}-${ls[1].toUpperCase()}${ls[2]}`;
       }
     }
-    return code; // not a parseable shelf code (e.g. "W4" alone)
+    // Not a parseable shelf code (e.g. "W4" or "STAGING") — still upper-case
+    // it so the same shelf typed two ways can never become two entries. The
+    // backend (functions/inventory.js) does exactly this; keep them identical.
+    return code.toUpperCase();
   },
 
   // ── One-time migration: canonicalise location codes + merge duplicates ────
@@ -1184,13 +1194,20 @@ export const OrgDB = {
     });
     const stock = clean.reduce((s, e) => s + e.qty, 0);
     const primary = clean.slice().sort((a, b) => b.qty - a.qty)[0];
+    // Flat list of shelf codes, kept in step with `locations` on every write.
+    // Firestore can't index inside an array of objects, so without this a
+    // "what's on shelf X" query has to read the whole collection and filter
+    // in memory. With it, that's one indexed array-contains query — and it
+    // finds split holdings, which a query on the primary `location` misses.
+    const locationCodes = clean.map(e => e.code);
     await updateDoc(doc(db, 'items', itemId), {
       locations: clean,
+      locationCodes,
       stock,
       location: primary ? primary.code : '',
       updatedAt: Date.now()
     });
-    return { locations: clean, stock, location: primary ? primary.code : '' };
+    return { locations: clean, locationCodes, stock, location: primary ? primary.code : '' };
   },
 
   // Add qty at a shelf (receiving). Blank code routes to staging.
@@ -1447,37 +1464,11 @@ export const OrgDB = {
   // Returns only what THIS organization has configured. Anything missing comes
   // back empty so documents stay blank rather than borrowing another company's
   // identity. Never falls back to a built-in logo or address.
-  brandingFrom(org) {
-    const o = org || currentOrgData || {};
-    const addressLines = [];
-    if (o.address) String(o.address).split('\n').forEach(l => { if (l.trim()) addressLines.push(l.trim()); });
-    const cityLine = [o.city, o.state, o.zip].filter(Boolean).join(', ');
-    if (cityLine) addressLines.push(cityLine);
-    return {
-      name: o.name || '',
-      logoUrl: o.logoUrl || '',
-      phone: o.phone || '',
-      email: o.email || '',
-      addressLines
-    };
-  },
+  // Canonical copy lives in functions/orderDocument.mjs (shared with the backend).
+  brandingFrom(org) { return sharedBrandingFrom(org || currentOrgData || {}); },
 
   // Small HTML block for document headers (empty string when nothing is set).
-  brandingHtml(org, opts) {
-    const b = this.brandingFrom(org);
-    const accent = (opts && opts.accent) || '#333';
-    const esc = s => String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-    const logo = b.logoUrl
-      ? '<img src="' + esc(b.logoUrl) + '" class="logo" alt="" />'
-      : (b.name ? '<div style="font-size:18px;font-weight:bold;color:' + esc(accent) + '">' + esc(b.name) + '</div>' : '');
-    const details = [];
-    if (b.name) details.push('<strong>' + esc(b.name) + '</strong>');
-    if (b.addressLines.length) details.push(b.addressLines.map(esc).join('<br>'));
-    if (b.phone) details.push(esc(b.phone));
-    return { logo, details: details.join('<br>') };
-  },
+  brandingHtml(org, opts) { return sharedBrandingHtml(org || currentOrgData || {}, opts); },
 
 
   // The default schema reproduces the classic W1-R1-A1 format exactly.

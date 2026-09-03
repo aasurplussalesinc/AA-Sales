@@ -45,6 +45,14 @@ export default function Reports() {
   const [phPaidOnly, setPhPaidOnly] = useState(false);
   const [phView, setPhView] = useState('detail');
   const [salesPeriod, setSalesPeriod] = useState('ytd');
+  // ---- price change log ----
+  const [pcPeriod, setPcPeriod] = useState('last90');
+  const [pcFrom, setPcFrom] = useState('');
+  const [pcTo, setPcTo] = useState('');
+  const [pcRows, setPcRows] = useState([]);
+  const [pcLoading, setPcLoading] = useState(false);
+  const [pcSearch, setPcSearch] = useState('');
+  const [pcLoaded, setPcLoaded] = useState(false);
   const [salesFrom, setSalesFrom] = useState('');
   const [salesTo, setSalesTo] = useState('');
   const [salesGroup, setSalesGroup] = useState('month');
@@ -257,6 +265,7 @@ export default function Reports() {
     { id: 'sales', label: '💵 Sales' },
     { id: 'expenses', label: '🧾 Expenses' },
     { id: 'purchases', label: '🧾 Customer Purchases' },
+    { id: 'pricechanges', label: '💲 Price Changes' },
     { id: 'custom', label: '📋 Custom' }
   ];
 
@@ -287,6 +296,65 @@ export default function Reports() {
       default: return { from: 0, to: endOfDay(now), label: 'All time' };
     }
   })();
+
+  // ── Price change log ────────────────────────────────────────────────────
+  const pcRange = (() => {
+    const now = new Date();
+    const y = now.getFullYear(), m = now.getMonth();
+    const startOf = (yy, mm, dd) => new Date(yy, mm, dd || 1).getTime();
+    const endOfDay = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x.getTime(); };
+    switch (pcPeriod) {
+      case 'mtd':      return { from: startOf(y, m), to: endOfDay(now), label: 'Month to date' };
+      case 'lastmonth':return { from: startOf(y, m - 1), to: startOf(y, m) - 1, label: 'Last month' };
+      case 'ytd':      return { from: startOf(y, 0), to: endOfDay(now), label: 'Year to date' };
+      case 'lastyear': return { from: startOf(y - 1, 0), to: startOf(y, 0) - 1, label: `${y - 1}` };
+      case 'last30':   return { from: now.getTime() - 30 * 864e5, to: endOfDay(now), label: 'Last 30 days' };
+      case 'last90':   return { from: now.getTime() - 90 * 864e5, to: endOfDay(now), label: 'Last 90 days' };
+      case 'all':      return { from: 0, to: endOfDay(now), label: 'All time' };
+      case 'custom':   return {
+        from: pcFrom ? new Date(pcFrom + 'T00:00:00').getTime() : 0,
+        to:   pcTo   ? endOfDay(new Date(pcTo + 'T00:00:00')) : endOfDay(now),
+        label: `${pcFrom || 'start'} → ${pcTo || 'today'}`
+      };
+      default: return { from: 0, to: endOfDay(now), label: 'All time' };
+    }
+  })();
+
+  // Pulled once and filtered client-side — the whole log is read to chain
+  // each change back to its previous price, so re-querying per period would
+  // just re-read the same documents.
+  const loadPriceChanges = async () => {
+    if (pcLoading) return;
+    setPcLoading(true);
+    try {
+      setPcRows(await DB.getPriceChangeLog());
+      setPcLoaded(true);
+    } catch (e) {
+      alert('Could not load price changes: ' + (e.message || e));
+    }
+    setPcLoading(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'pricechanges' && !pcLoaded) loadPriceChanges();
+    // eslint-disable-next-line
+  }, [activeTab]);
+
+  const pcFiltered = (pcRows || []).filter(r => {
+    if (r.at < pcRange.from || r.at > pcRange.to) return false;
+    const q = pcSearch.trim().toLowerCase();
+    if (!q) return true;
+    return q.split(/\s+/).every(t =>
+      `${r.sku} ${r.name} ${r.by}`.toLowerCase().includes(t));
+  });
+
+  const pcStats = pcFiltered.reduce((a, r) => {
+    a.total++;
+    if (r.from != null && r.to > r.from) a.up++;
+    else if (r.from != null && r.to < r.from) a.down++;
+    a.items.add(r.itemId);
+    return a;
+  }, { total: 0, up: 0, down: 0, items: new Set() });
 
   // Every qualifying order in the window, with its computed totals.
   const salesOrders = (orders || [])
@@ -1498,6 +1566,150 @@ export default function Reports() {
               </tbody>
             </table>
           </div>
+          )}
+        </div>
+      )}
+
+      {/* Price Changes Tab */}
+      {activeTab === 'pricechanges' && (
+        <div>
+          <h3 style={{ marginTop: 0 }}>💲 Price Changes</h3>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: -6 }}>
+            Every price change recorded in the activity log. Showing <strong>{pcRange.label}</strong>.
+          </p>
+
+          {/* period selector */}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+            {[
+              ['mtd', 'Month to date'], ['lastmonth', 'Last month'],
+              ['ytd', 'Year to date'], ['lastyear', 'Last year'],
+              ['last30', 'Last 30 days'], ['last90', 'Last 90 days'],
+              ['all', 'All time'], ['custom', 'Custom…']
+            ].map(([id, label]) => (
+              <button key={id} onClick={() => setPcPeriod(id)}
+                style={{
+                  padding: '6px 13px', borderRadius: 16, cursor: 'pointer', fontSize: 12, fontWeight: 700,
+                  border: pcPeriod === id ? '1px solid #4a5d23' : '1px solid var(--border)',
+                  background: pcPeriod === id ? '#4a5d23' : 'transparent',
+                  color: pcPeriod === id ? '#fff' : 'var(--text-secondary)'
+                }}>{label}</button>
+            ))}
+          </div>
+
+          {pcPeriod === 'custom' && (
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14 }}>
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>From</label>
+              <input type="date" value={pcFrom} onChange={e => setPcFrom(e.target.value)}
+                style={{ padding: 6, borderRadius: 6, border: '1px solid var(--border)',
+                  background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+              <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>To</label>
+              <input type="date" value={pcTo} onChange={e => setPcTo(e.target.value)}
+                style={{ padding: 6, borderRadius: 6, border: '1px solid var(--border)',
+                  background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
+            <input value={pcSearch} onChange={e => setPcSearch(e.target.value)}
+              placeholder="Filter by SKU, item name or who changed it…"
+              style={{ flex: '1 1 260px', padding: '8px 10px', borderRadius: 6,
+                border: '1px solid var(--border)', background: 'var(--bg-input)',
+                color: 'var(--text-primary)' }} />
+            <button className="btn btn-sm" onClick={loadPriceChanges} disabled={pcLoading}>
+              {pcLoading ? '⏳ Loading…' : '↻ Refresh'}
+            </button>
+            <button className="btn btn-sm btn-primary"
+              disabled={pcFiltered.length === 0}
+              onClick={() => exportToCSV(
+                pcFiltered,
+                `price-changes-${pcPeriod}`,
+                ['Date', 'SKU', 'Item', 'From', 'To', 'Change', 'Changed By'],
+                // 4th arg is a MAPPER returning a row array, not a key list.
+                r => [
+                  new Date(r.at).toLocaleString(),
+                  r.sku || '',
+                  r.name || '',
+                  r.from != null ? r.from.toFixed(2) : '',
+                  r.to.toFixed(2),
+                  r.from != null ? (r.to - r.from).toFixed(2) : '',
+                  r.by || ''
+                ]
+              )}>
+              📥 Export CSV
+            </button>
+          </div>
+
+          {/* KPIs */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+            gap: 12, marginBottom: 18 }}>
+            {[
+              ['Changes', pcStats.total, 'var(--text-primary)'],
+              ['Items affected', pcStats.items.size, '#1565c0'],
+              ['Increases', pcStats.up, '#2e7d32'],
+              ['Decreases', pcStats.down, '#c62828']
+            ].map(([label, val, color]) => (
+              <div key={label} style={{ padding: 14, borderRadius: 8, background: 'var(--bg-surface)',
+                border: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.05em',
+                  textTransform: 'uppercase', color: 'var(--text-muted)' }}>{label}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color }}>{val}</div>
+              </div>
+            ))}
+          </div>
+
+          {pcLoading ? (
+            <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)' }}>Loading…</div>
+          ) : pcFiltered.length === 0 ? (
+            <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              No price changes in this period.<br />
+              <span style={{ fontSize: 12 }}>
+                Only changes made through the app are logged — a price set when an item
+                was created or imported won&rsquo;t appear.
+              </span>
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: 8 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ background: 'var(--bg-surface-2)', textAlign: 'left' }}>
+                    {['When', 'SKU', 'Item', 'From', 'To', 'Change', 'Changed by'].map(h => (
+                      <th key={h} style={{ padding: '9px 12px', borderBottom: '2px solid var(--border)',
+                        fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em',
+                        color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pcFiltered.map((r, i) => {
+                    const diff = r.from != null ? r.to - r.from : null;
+                    const up = diff != null && diff > 0;
+                    const down = diff != null && diff < 0;
+                    return (
+                      <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
+                          {new Date(r.at).toLocaleDateString()}
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                            {new Date(r.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700 }}>{r.sku || '—'}</td>
+                        <td style={{ padding: '8px 12px' }}>{r.name}</td>
+                        <td style={{ padding: '8px 12px', color: 'var(--text-muted)' }}>
+                          {r.from != null ? `$${r.from.toFixed(2)}` : '—'}
+                        </td>
+                        <td style={{ padding: '8px 12px', fontWeight: 800 }}>${r.to.toFixed(2)}</td>
+                        <td style={{ padding: '8px 12px', fontWeight: 700,
+                          color: up ? '#2e7d32' : down ? '#c62828' : 'var(--text-muted)' }}>
+                          {diff == null ? '—' : `${up ? '+' : ''}$${diff.toFixed(2)}`}
+                          {up && ' ▲'}{down && ' ▼'}
+                        </td>
+                        <td style={{ padding: '8px 12px', fontSize: 12 }}>{r.by}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

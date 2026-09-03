@@ -505,6 +505,202 @@ export const OrgDB = {
     }
   },
   
+  // ── Price history for one item ───────────────────────────────────────────
+  // Reads the activity log, which has recorded every ITEM_UPDATED since day
+  // one with the new value, who made it and when. Older entries didn't store
+  // the OLD value, so it's inferred from the previous logged price for that
+  // item. Newer entries carry `before` and are exact.
+  async getItemPriceHistory(itemId) {
+    if (!currentOrgId || !itemId) return [];
+    const q = query(
+      collection(db, 'activityLog'),
+      where('orgId', '==', currentOrgId),
+      where('action', '==', 'ITEM_UPDATED'),
+      orderBy('timestamp', 'asc'),
+      limit(2000)
+    );
+    const snap = await getDocs(q);
+
+    const rows = [];
+    let previous = null;
+    snap.docs.forEach(d => {
+      const e = d.data();
+      const det = e.details || {};
+      if (det.itemId !== itemId) return;
+      const u = det.updates || {};
+      if (!Object.prototype.hasOwnProperty.call(u, 'price')) return;
+
+      const to = parseFloat(u.price);
+      if (!isFinite(to)) return;
+      if (previous !== null && to === previous) return;
+
+      const recorded = det.before && det.before.price != null
+        ? parseFloat(det.before.price) : null;
+
+      rows.push({
+        at: e.timestamp,
+        by: e.userEmail || 'Unknown',
+        from: recorded != null ? recorded : previous,
+        to,
+        inferred: recorded == null && previous !== null
+      });
+      previous = to;
+    });
+
+    return rows.reverse();
+  },
+
+  // Every price change across the org, newest first.
+  async getPriceChangeLog(sinceTs) {
+    if (!currentOrgId) return [];
+    const q = query(
+      collection(db, 'activityLog'),
+      where('orgId', '==', currentOrgId),
+      where('action', '==', 'ITEM_UPDATED'),
+      orderBy('timestamp', 'asc'),
+      limit(5000)
+    );
+    const snap = await getDocs(q);
+    const items = await this.getItems();
+    const byId = {};
+    items.forEach(i => { byId[i.id] = i; });
+
+    const lastSeen = {};
+    const out = [];
+    snap.docs.forEach(d => {
+      const e = d.data();
+      const det = e.details || {};
+      const u = det.updates || {};
+      const id = det.itemId;
+      if (!id || !Object.prototype.hasOwnProperty.call(u, 'price')) return;
+      const to = parseFloat(u.price);
+      if (!isFinite(to)) return;
+      const recorded = det.before && det.before.price != null
+        ? parseFloat(det.before.price) : null;
+      const from = recorded != null ? recorded
+        : (lastSeen[id] !== undefined ? lastSeen[id] : null);
+      lastSeen[id] = to;
+      if (from !== null && from === to) return;
+      if (sinceTs && e.timestamp < sinceTs) return;
+      const it = byId[id] || {};
+      out.push({
+        at: e.timestamp, by: e.userEmail || 'Unknown',
+        itemId: id, sku: it.partNumber || '', name: it.name || '(deleted item)',
+        from, to
+      });
+    });
+    return out.reverse();
+  },
+
+  // ── Reports helpers that were being called but never existed ────────────
+  // Dead Stock and Turnover both threw "not a function" when opened.
+
+  formatLocation(loc) {
+    if (!loc) return '';
+    if (loc.locationCode) return loc.locationCode;
+    const w = loc.warehouse || '', r = loc.rack || '', l = loc.letter || '', sh = loc.shelf || '';
+    if (!w) return '';
+    return `${w}-R${r}-${l}${sh}`;
+  },
+
+  async getDeadStock(days = 90) {
+    if (!currentOrgId) return [];
+    const cutoff = Date.now() - (parseInt(days) || 90) * 864e5;
+    const items = await this.getItems();
+    const movements = await this.getMovements(20000);
+
+    const lastByItem = {};
+    (movements || []).forEach(m => {
+      if (!m.itemId) return;
+      const t = m.timestamp || 0;
+      if (!lastByItem[m.itemId] || t > lastByItem[m.itemId]) lastByItem[m.itemId] = t;
+    });
+
+    return items
+      .filter(i => (parseInt(i.stock) || 0) > 0)
+      .map(i => {
+        const last = lastByItem[i.id] || null;
+        return {
+          id: i.id, partNumber: i.partNumber || '', name: i.name || '',
+          category: i.category || '', stock: parseInt(i.stock) || 0,
+          price: parseFloat(i.price) || 0,
+          lastMovement: last,
+          daysSinceMovement: last ? Math.floor((Date.now() - last) / 864e5) : null
+        };
+      })
+      .filter(i => i.lastMovement === null || i.lastMovement < cutoff)
+      .sort((a, b) => {
+        // never-moved first, then oldest
+        if (a.lastMovement === null && b.lastMovement !== null) return -1;
+        if (b.lastMovement === null && a.lastMovement !== null) return 1;
+        return (a.lastMovement || 0) - (b.lastMovement || 0);
+      });
+  },
+
+  async getInventoryTurnover(days = 90) {
+    if (!currentOrgId) return [];
+    const cutoff = Date.now() - (parseInt(days) || 90) * 864e5;
+    const items = await this.getItems();
+    const movements = await this.getMovements(20000);
+
+    const agg = {};
+    (movements || []).forEach(m => {
+      if (!m.itemId || (m.timestamp || 0) < cutoff) return;
+      const a = agg[m.itemId] || (agg[m.itemId] = { count: 0, added: 0, picked: 0, moved: 0 });
+      const q = parseInt(m.quantity) || 0;
+      a.count++;
+      const t = String(m.type || '').toUpperCase();
+      if (t === 'RECEIVE') a.added += q;
+      else if (t === 'PICK') a.picked += q;
+      else if (t === 'MOVE') a.moved += q;
+    });
+
+    return items
+      .map(i => {
+        const a = agg[i.id] || { count: 0, added: 0, picked: 0, moved: 0 };
+        return {
+          id: i.id, partNumber: i.partNumber || '', name: i.name || '',
+          stock: parseInt(i.stock) || 0,
+          movementCount: a.count, totalAdded: a.added,
+          totalPicked: a.picked, totalMoved: a.moved
+        };
+      })
+      .sort((a, b) => b.movementCount - a.movementCount || b.totalPicked - a.totalPicked);
+  },
+
+  // Used when a cancelled order restores stock.
+  async adjustItemStock(itemId, delta, opts = {}) {
+    if (!currentOrgId || !itemId) return null;
+    const amount = parseInt(delta) || 0;
+    if (amount === 0) return null;
+
+    const ref = doc(db, 'items', itemId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) return null;
+    const cur = parseInt(snap.data().stock) || 0;
+    const next = Math.max(0, cur + amount);
+
+    // Put it back where it came from when a shelf is known, so the totals stay
+    // derived from the shelves rather than drifting apart.
+    const code = this.canonicalLocationCode(opts.location || '');
+    if (code && amount > 0) {
+      await this.addStockAtLocation(itemId, code, amount);
+    } else if (code && amount < 0) {
+      await this.removeStockAtLocation(itemId, code, Math.abs(amount));
+    } else {
+      await updateDoc(ref, { stock: next, updatedAt: Date.now() });
+    }
+
+    await this.logMovement({
+      itemId, itemName: snap.data().name || '', quantity: Math.abs(amount),
+      type: amount > 0 ? 'RECEIVE' : 'PICK',
+      toLocation: amount > 0 ? (code || '') : '',
+      fromLocation: amount < 0 ? (code || '') : '',
+      note: opts.reason || opts.note || 'Stock adjustment'
+    });
+    return { previous: cur, stock: next };
+  },
+
   async getItemHistory(itemId) {
     if (!currentOrgId) return [];
     
@@ -581,11 +777,30 @@ export const OrgDB = {
 
   async updateItem(itemId, updates) {
     const ref = doc(db, 'items', itemId);
+
+    // Capture the fields we're about to overwrite so the activity log holds a
+    // real before/after rather than only the new value.
+    let before = null;
+    if (updates && (updates.price !== undefined || updates.cost !== undefined ||
+                    updates.grade !== undefined || updates.name !== undefined ||
+                    updates.category !== undefined)) {
+      try {
+        const snapBefore = await getDoc(ref);
+        if (snapBefore.exists()) {
+          const d = snapBefore.data();
+          before = {};
+          ['price', 'cost', 'grade', 'name', 'category'].forEach(k => {
+            if (updates[k] !== undefined) before[k] = d[k] ?? null;
+          });
+        }
+      } catch (e) { /* logging must never block the write */ }
+    }
+
     await updateDoc(ref, {
       ...updates,
       updatedAt: Date.now()
     });
-    await this.logActivity('ITEM_UPDATED', { itemId, updates });
+    await this.logActivity('ITEM_UPDATED', before ? { itemId, updates, before } : { itemId, updates });
   },
 
   async deleteItem(itemId) {

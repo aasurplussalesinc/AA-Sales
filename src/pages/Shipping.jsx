@@ -37,6 +37,12 @@ export default function Shipping() {
 
   // Rate selection modal
   const [showRates, setShowRates] = useState(null); // order ID showing rates
+
+  // Asking for a missing ship-to phone, rather than letting UPS reject the
+  // label after the fact. { order, run } - run is the action that was clicked.
+  const [phonePrompt, setPhonePrompt] = useState(null);
+  const [phoneInput, setPhoneInput] = useState('');
+  const [savingPhone, setSavingPhone] = useState(false);
   const [selectedRate, setSelectedRate] = useState(null);
   const [rateSortBy, setRateSortBy] = useState('cheapest'); // cheapest, fastest, carrier
   const [rateFilterCarrier, setRateFilterCarrier] = useState('all'); // all, ups, usps, fedex, dhl
@@ -246,6 +252,47 @@ export default function Shipping() {
       setError(`Failed to get rates: ${err.message}`);
     }
     setProcessing(prev => ({ ...prev, [orderId]: false }));
+  };
+
+  // An order carries the phone the customer had when it was written, so a blank
+  // one here usually means the client record was filled in later - or never.
+  // Carriers refuse an international label without a ship-to phone.
+  const shipToPhoneFor = (order) => {
+    const onOrder = String(order?.customerPhone || '').trim();
+    if (onOrder) return onOrder;
+    const c = customers.find(x => x.id === order?.customerId);
+    return String(c?.phone || '').trim();
+  };
+
+  // Wrap any action that ends in a carrier call: ask first if there is no phone.
+  const withShipToPhone = (order, run) => {
+    if (shipToPhoneFor(order)) return run();
+    setPhoneInput('');
+    setPhonePrompt({ order, run });
+  };
+
+  const savePhoneAndContinue = async () => {
+    const phone = phoneInput.trim();
+    if (phone.replace(/\D/g, '').length < 10) {
+      setError('That phone number looks too short - carriers want at least 10 digits.');
+      return;
+    }
+    setSavingPhone(true);
+    setError('');
+    try {
+      const { order, run } = phonePrompt;
+      await DB.updatePurchaseOrder(order.id, { customerPhone: phone });
+      // Fill the client record too, so the next order starts out right. Never
+      // overwrite a number that is already there.
+      const c = customers.find(x => x.id === order.customerId);
+      if (c && !String(c.phone || '').trim()) await DB.updateCustomer(c.id, { phone });
+      setPhonePrompt(null);
+      await loadData();
+      await run();
+    } catch (err) {
+      setError(`Could not save the phone number: ${err.message}`);
+    }
+    setSavingPhone(false);
   };
 
   // Purchase a specific rate
@@ -1463,7 +1510,7 @@ export default function Shipping() {
                         {/* No label yet - Get Rates */}
                         {order.status === 'packed' && !label && (
                           <button
-                            onClick={() => getRates(order.id)}
+                            onClick={() => withShipToPhone(order, () => getRates(order.id))}
                             disabled={processing[order.id]}
                             style={{
                               padding: '6px 12px', background: '#1976d2', color: 'var(--text-on-dark)', border: 'none',
@@ -1487,7 +1534,7 @@ export default function Shipping() {
                               🏷️ Select Rate
                             </button>
                             <button
-                              onClick={() => getRates(order.id)}
+                              onClick={() => withShipToPhone(order, () => getRates(order.id))}
                               disabled={processing[order.id]}
                               style={{
                                 padding: '6px 12px', background: '#1976d2', color: 'var(--text-on-dark)', border: 'none',
@@ -1577,7 +1624,7 @@ export default function Shipping() {
                         {/* Error - Retry */}
                         {(label?.labelStatus === 'error' || label?.labelStatus === 'failed') && (
                           <button
-                            onClick={() => getRates(order.id)}
+                            onClick={() => withShipToPhone(order, () => getRates(order.id))}
                             disabled={processing[order.id]}
                             style={{
                               padding: '6px 12px', background: '#f44336', color: 'var(--text-on-dark)', border: 'none',
@@ -1591,7 +1638,7 @@ export default function Shipping() {
                         {/* Auto-generate (bypasses rate selection) */}
                         {order.status === 'packed' && !label?.trackingNumber && (
                           <button
-                            onClick={() => generateLabel(order.id)}
+                            onClick={() => withShipToPhone(order, () => generateLabel(order.id))}
                             disabled={processing[order.id]}
                             title="Auto-select best rate and purchase label"
                             style={{
@@ -1625,6 +1672,57 @@ export default function Shipping() {
           </table>
 
           {/* Rates Selection Panel */}
+          {phonePrompt && (
+            <div
+              onClick={() => setPhonePrompt(null)}
+              style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex',
+                alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
+            >
+              <div
+                onClick={e => e.stopPropagation()}
+                style={{ background: 'var(--bg-card, #fff)', color: 'var(--text-primary, #333)', borderRadius: 10,
+                  padding: 22, width: 'min(430px, 92vw)', boxShadow: '0 10px 40px rgba(0,0,0,0.35)' }}
+              >
+                <h3 style={{ margin: '0 0 8px', fontSize: 16 }}>📞 No phone number on file</h3>
+                <p style={{ margin: '0 0 14px', fontSize: 13, lineHeight: 1.45, color: 'var(--text-secondary, #666)' }}>
+                  <strong>{phonePrompt.order.customerName || 'This client'}</strong> has no phone number.
+                  Carriers reject international labels without one.
+                </p>
+                <input
+                  autoFocus
+                  type="tel"
+                  value={phoneInput}
+                  onChange={e => setPhoneInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') savePhoneAndContinue(); }}
+                  placeholder="778-349-8222"
+                  style={{ width: '100%', padding: '9px 11px', fontSize: 14, borderRadius: 6,
+                    border: '1px solid var(--border, #ccc)', background: 'var(--bg-input, #fff)',
+                    color: 'var(--text-primary, #333)' }}
+                />
+                <p style={{ margin: '8px 0 16px', fontSize: 11, color: 'var(--text-secondary, #888)' }}>
+                  Saved to this order, and to the client's record if they don't have one yet.
+                </p>
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => { const go = phonePrompt.run; setPhonePrompt(null); go(); }}
+                    style={{ padding: '8px 14px', background: 'transparent', color: 'var(--text-secondary, #666)',
+                      border: '1px solid var(--border, #ccc)', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}
+                  >
+                    Continue without
+                  </button>
+                  <button
+                    onClick={savePhoneAndContinue}
+                    disabled={savingPhone}
+                    style={{ padding: '8px 16px', background: '#1976d2', color: '#fff', border: 'none',
+                      borderRadius: 6, cursor: savingPhone ? 'default' : 'pointer', fontSize: 13, fontWeight: 600 }}
+                  >
+                    {savingPhone ? 'Saving…' : 'Save & continue'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {showRates && (() => {
             const order = filteredOrders.find(o => o.id === showRates);
             if (!order) return null;
@@ -1679,7 +1777,7 @@ export default function Shipping() {
                       🔁 Recalibrate from customer profile
                     </button>
                     <button
-                      onClick={() => { getRates(order.id); setShowRates(null); }}
+                      onClick={() => withShipToPhone(order, () => { getRates(order.id); setShowRates(null); })}
                       style={{
                         padding: '10px 20px', background: '#1976d2', color: 'white',
                         border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600
@@ -1958,7 +2056,7 @@ export default function Shipping() {
                               </td>
                               <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                 <button
-                                  onClick={() => purchaseRate(order.id, rate.rateId)}
+                                  onClick={() => withShipToPhone(order, () => purchaseRate(order.id, rate.rateId))}
                                   disabled={processing[order.id]}
                                   style={{
                                     padding: '6px 16px', background: '#4CAF50', color: 'var(--text-on-dark)',
@@ -2015,7 +2113,7 @@ export default function Shipping() {
                             </div>
                           )}
                           <button
-                            onClick={() => purchaseRate(order.id, rate.rateId)}
+                            onClick={() => withShipToPhone(order, () => purchaseRate(order.id, rate.rateId))}
                             disabled={processing[order.id]}
                             style={{
                               marginTop: 10, padding: '6px 14px', background: '#4CAF50', color: 'var(--text-on-dark)',

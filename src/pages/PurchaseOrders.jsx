@@ -1,4 +1,4 @@
-import { renderOrderDocument } from '../../functions/orderDocument.mjs';
+import { renderOrderDocument, refHtml, refStyles } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';

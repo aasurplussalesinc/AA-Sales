@@ -44,7 +44,10 @@ export function brandingHtml(org, opts) {
   return { logo, details: details.join('<br>') };
 }
 
-const refHtml = (order, opts = {}) => {
+// Also used directly by the pick list, packing lists and shipping labels in
+// PurchaseOrders.jsx - these moved here with the estimate template, so they are
+// exported rather than kept private to renderOrderDocument().
+export const refHtml = (order, opts = {}) => {
   const cpo = (order.customerPO || '').trim();
   const mine = order.poNumber || '';
   const size = opts.size || 'lg';   // 'lg' = document header, 'sm' = label
@@ -59,7 +62,7 @@ const refHtml = (order, opts = {}) => {
     </div>`;
 };
 
-const refStyles = `
+export const refStyles = `
   .ref-block { line-height: 1.15; }
   .ref-label { font-size: 9px; letter-spacing: .12em; font-weight: 800; color: #777; text-transform: uppercase; }
   .ref-main { font-weight: 800; letter-spacing: .02em; }

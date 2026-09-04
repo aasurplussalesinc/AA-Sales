@@ -2707,6 +2707,9 @@ exports.parseReceipt = functions
 // ════════════════════════════════════════════════════════════════════
 
 var crypto = require('crypto');
+var INV = require('./inventory');
+var ORD = require('./orders');
+var PDF = require('./pdf');
 
 function sha256Hex(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
@@ -2758,12 +2761,12 @@ function publicItem(id, d) {
 }
 
 exports.api = functions
-  .runWith({ timeoutSeconds: 60, memory: '512MB' })
+  .runWith({ timeoutSeconds: 120, memory: '1GB' })
   .https.onRequest(async function (req, res) {
     // CORS — agents often call from a browser context.
     res.set('Access-Control-Allow-Origin', '*');
     res.set('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
     if (req.method === 'OPTIONS') return res.status(204).send('');
 
     var auth;
@@ -2781,19 +2784,63 @@ exports.api = functions
 
     // Route: everything after /api
     var path = (req.path || '/').replace(/\/+$/, '') || '/';
-    var needsWrite = req.method === 'POST';
+    var needsWrite = req.method === 'POST' || req.method === 'PATCH';
     if (needsWrite && auth.scope !== 'write') {
       return apiError(res, 403, 'This key is read-only');
     }
 
     try {
       // ---- GET /items ---------------------------------------------------
+      // Cost: Firestore has no full-text index, so a free-text `search` is the
+      // one query that must read the collection. Everything else is served by
+      // an indexed query that reads only what it returns — pick the narrowest
+      // one available, then apply any remaining filters to that small set.
       if (req.method === 'GET' && (path === '/' || path === '/items')) {
         var limitN = Math.min(parseInt(req.query.limit) || 100, 500);
+        var offsetN = Math.max(parseInt(req.query.offset) || 0, 0);
         var search = (req.query.search || '').toLowerCase().trim();
-        var snap = await db.collection('items').where('orgId', '==', auth.orgId).get();
-        var items = snap.docs.map(function (d) { return publicItem(d.id, d.data()); });
+        var wantLoc = req.query.location ? INV.canonicalLocationCode(String(req.query.location)) : '';
+        var wantLow = req.query.lowStock === 'true';
+        var base = db.collection('items').where('orgId', '==', auth.orgId);
+        var items, scanned, counted = true;
 
+        if (req.query.sku) {
+          // Exact SKU — indexed, reads only the matching documents.
+          var skuSnap = await base.where('partNumber', '==', String(req.query.sku).trim()).get();
+          items = skuSnap.docs.map(function (d) { return publicItem(d.id, d.data()); });
+          scanned = skuSnap.size;
+
+        } else if (wantLoc) {
+          // locationCodes mirrors EVERY shelf an item holds stock on, so this
+          // single indexed query is both cheap and complete. Querying the
+          // primary `location` field instead would silently miss an item whose
+          // largest holding is elsewhere but which still has stock here.
+          var locSnap = await base.where('locationCodes', 'array-contains', wantLoc).get();
+          items = locSnap.docs.map(function (d) { return publicItem(d.id, d.data()); });
+          scanned = locSnap.size;
+
+        } else if (wantLow) {
+          // Only items with a threshold can ever be "low", and that field is
+          // indexable — so read those, not all 2,000.
+          var thrSnap = await base.where('lowStockThreshold', '>', 0).get();
+          items = thrSnap.docs.map(function (d) { return publicItem(d.id, d.data()); });
+          scanned = thrSnap.size;
+
+        } else if (!search) {
+          // Unfiltered listing — let Firestore cap the read.
+          var pageSnap = await base.limit(offsetN + limitN).get();
+          items = pageSnap.docs.map(function (d) { return publicItem(d.id, d.data()); });
+          scanned = pageSnap.size;
+          counted = false;   // the catalogue was never fully read
+
+        } else {
+          // Free-text only — no index can help.
+          var fullSnap = await base.get();
+          scanned = fullSnap.size;
+          items = fullSnap.docs.map(function (d) { return publicItem(d.id, d.data()); });
+        }
+
+        // Remaining filters, applied to whatever the cheapest query returned.
         if (search) {
           var tokens = search.split(/[^a-z0-9#]+/).filter(Boolean);
           items = items.filter(function (it) {
@@ -2801,21 +2848,33 @@ exports.api = functions
             return tokens.every(function (t) { return hay.indexOf(t) !== -1; });
           });
         }
-        if (req.query.location) {
-          var want = String(req.query.location).toUpperCase();
+        if (wantLoc) {
           items = items.filter(function (it) {
-            return (it.location || '').toUpperCase() === want ||
+            return (it.location || '').toUpperCase() === wantLoc ||
               (it.locations || []).some(function (e) {
-                return String(e.code || '').toUpperCase() === want;
+                return INV.canonicalLocationCode(e.code || '') === wantLoc;
               });
           });
         }
-        if (req.query.lowStock === 'true') {
+        if (wantLow) {
           items = items.filter(function (it) {
             return it.lowStockThreshold > 0 && it.quantity <= it.lowStockThreshold;
           });
         }
-        return res.json({ count: items.length, items: items.slice(0, limitN) });
+
+        var matched = items.length;
+        var page = items.slice(offsetN, offsetN + limitN);
+        return res.json({
+          count: page.length,                       // how many are in THIS response
+          total: counted ? matched : null,          // null = not counted, don't report it as a catalogue total
+          offset: offsetN,
+          truncated: counted ? (matched > offsetN + page.length) : (scanned >= offsetN + limitN),
+          documentsRead: scanned,                   // so a caller can see what a query costs
+          note: wantLow
+            ? 'Only items with a reorder threshold set can appear here; items with no threshold are invisible to this filter.'
+            : undefined,
+          items: page
+        });
       }
 
       // ---- GET /items/:id -----------------------------------------------
@@ -2881,7 +2940,11 @@ exports.api = functions
         return res.json({ count: orders.length, orders: orders.slice(0, limitO) });
       }
 
-      // ---- POST /items/:id/adjust  { delta | quantity, reason } ------------
+      // ---- POST /items/:id/adjust  { delta | quantity, location, reason } --
+      // The shelf quantities are the source of truth; `stock` and `location`
+      // are derived from them on every write. Writing `stock` on its own (what
+      // this route used to do) is what left items reading 0 while their shelves
+      // still held units.
       var mAdj = path.match(/^\/items\/([A-Za-z0-9_-]+)\/adjust$/);
       if (req.method === 'POST' && mAdj) {
         var ref = db.collection('items').doc(mAdj[1]);
@@ -2891,24 +2954,212 @@ exports.api = functions
         if (c.orgId !== auth.orgId) return apiError(res, 404, 'Item not found');
 
         var body = req.body || {};
-        var currentQty = parseInt(c.stock) || 0;
-        var newQty;
-        if (body.quantity !== undefined) newQty = parseInt(body.quantity);
-        else if (body.delta !== undefined) newQty = currentQty + parseInt(body.delta);
-        else return apiError(res, 400, 'Provide either "quantity" or "delta"');
+        var beforeStock = parseInt(c.stock) || 0;
+        var beforeShelves = INV.itemLocations(c);
 
-        if (!isFinite(newQty) || newQty < 0) return apiError(res, 400, 'Resulting quantity must be 0 or more');
+        var plan;
+        try {
+          plan = INV.applyAdjustment(c, { delta: body.delta, quantity: body.quantity, location: body.location });
+        } catch (e) {
+          return apiError(res, 400, e.message);
+        }
 
-        await ref.update({ stock: newQty, updatedAt: Date.now() });
+        await INV.writeItemLocations(db, ref.id, plan.derived.locations);
         await db.collection('activityLog').add({
           orgId: auth.orgId, action: 'ITEM_UPDATED',
-          details: { itemId: ref.id, updates: { stock: newQty }, before: { stock: currentQty },
-                     source: 'api', apiKey: auth.label, reason: body.reason || '' },
+          details: {
+            itemId: ref.id,
+            updates: { stock: plan.derived.stock, location: plan.derived.location, locations: plan.derived.locations },
+            before: { stock: beforeStock, locations: beforeShelves },
+            shelf: plan.shelf, shelfBefore: plan.shelfBefore, shelfAfter: plan.shelfAfter,
+            source: 'api', apiKey: auth.label, reason: body.reason || ''
+          },
           userEmail: 'API: ' + (auth.label || auth.keyId),
           timestamp: Date.now(), createdAt: new Date().toISOString()
         });
 
-        return res.json({ id: ref.id, previousQuantity: currentQty, quantity: newQty });
+        return res.json({
+          id: ref.id,
+          sku: c.partNumber || '', name: c.name || '', grade: c.grade || '',
+          shelf: plan.shelf, shelfPreviousQuantity: plan.shelfBefore, shelfQuantity: plan.shelfAfter,
+          createdShelf: plan.createdShelf, clearedShelf: plan.clearedShelf,
+          previousQuantity: beforeStock, quantity: plan.derived.stock,
+          primaryLocation: plan.derived.location,
+          locations: plan.derived.locations,
+          reason: body.reason || ''
+        });
+      }
+
+      // ---- GET /customers -------------------------------------------------
+      // Needed to attach an order to an existing customer record rather than
+      // creating a near-duplicate. `search` matches name, contact or email.
+      if (req.method === 'GET' && path === '/customers') {
+        var csnap = await db.collection('customers').where('orgId', '==', auth.orgId).get();
+        // The customers collection stores the business as `company` and the
+        // contact person as `customerName` - there is no `name` field. This
+        // mirrors selectCustomerForPO() in PurchaseOrders.jsx exactly, so an
+        // order built from here matches one built by hand in the app.
+        var custs = csnap.docs.map(function (d) {
+          var c = d.data();
+          return {
+            id: d.id,
+            company: c.company || '',
+            contactName: c.customerName || '',
+            orderCustomerName: c.company || c.customerName || '',
+            orderCustomerContact: c.company ? (c.customerName || '') : '',
+            email: c.email || '', phone: c.phone || '',
+            address: [c.address, c.city, c.state, c.zipCode].filter(Boolean).join(', '),
+            upsAccount: c.upsAccount || '', fedexAccount: c.fedexAccount || '',
+            notes: c.notes || ''
+          };
+        });
+        var cq = (req.query.search || '').toLowerCase().trim();
+        if (cq) {
+          var ctok = cq.split(/[^a-z0-9@.]+/).filter(Boolean);
+          custs = custs.filter(function (c) {
+            var hay = (c.company + ' ' + c.contactName + ' ' + c.email).toLowerCase();
+            return ctok.every(function (t) { return hay.indexOf(t) !== -1; });
+          });
+        }
+        var climit = Math.min(parseInt(req.query.limit) || 50, 200);
+        return res.json({ count: Math.min(custs.length, climit), total: custs.length,
+                          documentsRead: csnap.size, customers: custs.slice(0, climit) });
+      }
+
+      // ---- POST /orders ---------------------------------------------------
+      // Creates a purchase order as a DRAFT and nothing further. The logic
+      // lives in ./orders.js so the MCP tool and this route cannot drift.
+      if (req.method === 'POST' && path === '/orders') {
+        var built;
+        try {
+          built = await ORD.createDraftOrder(db, auth, req.body || {});
+        } catch (e) {
+          return apiError(res, e.statusCode || 400, e.message);
+        }
+        return res.json(built);
+      }
+
+      // ---- PATCH/POST /orders/:id  (revise a draft) ------------------------
+      var mUpd = path.match(/^\/orders\/([A-Za-z0-9_-]+)$/);
+      if ((req.method === 'PATCH' || req.method === 'POST') && mUpd) {
+        var upd;
+        try {
+          upd = await ORD.updateDraftOrder(db, auth, mUpd[1], req.body || {});
+        } catch (e) {
+          return apiError(res, e.statusCode || 400, e.message);
+        }
+        return res.json(upd);
+      }
+
+      // ---- GET /orders/:id  and  /orders/:id/document ----------------------
+      // The document route renders the SAME template the Purchase Orders screen
+      // prints (functions/orderDocument.mjs), so an emailed estimate or invoice
+      // is byte-for-byte what comes out of the UI.
+      var mOrd = path.match(/^\/orders\/([A-Za-z0-9_-]+)(\/document)?$/);
+      if (req.method === 'GET' && mOrd) {
+        var odoc = await db.collection('purchaseOrders').doc(mOrd[1]).get();
+        if (!odoc.exists) return apiError(res, 404, 'Order not found');
+        var od = odoc.data();
+        if (od.orgId !== auth.orgId) return apiError(res, 404, 'Order not found');
+        var order = Object.assign({ id: odoc.id }, od);
+
+        if (!mOrd[2]) {
+          return res.json({ order: order, documentsRead: 1 });
+        }
+
+        var dtype = req.query.type === 'invoice' ? 'invoice' : 'estimate';
+
+        // Grade can be blank on a line written before grades were captured; the
+        // template falls back to the catalogue row, so fetch just those items.
+        var ids = (order.items || []).map(function (l) { return l.itemId; })
+          .filter(function (v, i, arr) { return v && arr.indexOf(v) === i; });
+        var lineItems = [];
+        for (var ii = 0; ii < ids.length; ii++) {
+          var isnap2 = await db.collection('items').doc(ids[ii]).get();
+          if (isnap2.exists && isnap2.data().orgId === auth.orgId) {
+            lineItems.push(Object.assign({ id: isnap2.id }, isnap2.data()));
+          }
+        }
+
+        var orgSnap = await db.collection('organizations').doc(auth.orgId).get();
+        var orgData = orgSnap.exists ? orgSnap.data() : {};
+
+        var DOC = await import('./orderDocument.mjs');
+        var html = DOC.renderOrderDocument(order, dtype, {
+          items: lineItems,
+          organization: orgData,
+          branding: DOC.brandingHtml
+        });
+
+        var payload = {
+          poNumber: order.poNumber || '', status: order.status || '', type: dtype,
+          customerName: order.customerName || '', customerEmail: order.customerEmail || '',
+          customerContact: order.customerContact || '',
+          documentsRead: 2 + lineItems.length
+        };
+
+        // ?format=pdf renders the same HTML through headless Chrome, so the
+        // attachment matches what the print button produces.
+        if (req.query.format === 'pdf') {
+          var pdfBuf = await PDF.htmlToPdf(html);
+          payload.filename = (dtype === 'invoice' ? 'Invoice-' : 'Estimate-') + (order.poNumber || 'order') + '.pdf';
+          payload.mimeType = 'application/pdf';
+          payload.bytes = pdfBuf.length;
+          payload.pdfBase64 = pdfBuf.toString('base64');
+          return res.json(payload);
+        }
+
+        payload.html = html;
+        return res.json(payload);
+      }
+
+      // ---- POST /maintenance/backfill-location-codes ----------------------
+      // One-time (idempotent) migration: populate `locationCodes` on existing
+      // items from the shelf array they already have, so shelf lookups can use
+      // an indexed array-contains query instead of scanning the collection.
+      // Deliberately writes ONLY locationCodes — it does not touch stock, so
+      // items whose total disagrees with their shelves stay visibly wrong
+      // rather than being silently "corrected" by a migration.
+      if (req.method === 'POST' && path === '/maintenance/backfill-location-codes') {
+        var dryRun = (req.body || {}).dryRun === true;
+        var msnap = await db.collection('items').where('orgId', '==', auth.orgId).get();
+        var toWrite = [];
+        var already = 0;
+        msnap.docs.forEach(function (d) {
+          var data = d.data();
+          var want = INV.itemLocations(data).map(function (e) { return e.code; });
+          var have = Array.isArray(data.locationCodes) ? data.locationCodes : null;
+          var same = have && have.length === want.length && have.every(function (v, i) { return v === want[i]; });
+          if (same) { already++; return; }
+          toWrite.push({ ref: d.ref, codes: want });
+        });
+
+        if (dryRun) {
+          return res.json({
+            dryRun: true, scanned: msnap.size, alreadyCorrect: already,
+            wouldUpdate: toWrite.length,
+            sample: toWrite.slice(0, 10).map(function (w) { return { id: w.ref.id, locationCodes: w.codes }; })
+          });
+        }
+
+        var written = 0;
+        for (var i = 0; i < toWrite.length; i += 400) {
+          var batch = db.batch();
+          toWrite.slice(i, i + 400).forEach(function (w) {
+            batch.update(w.ref, { locationCodes: w.codes });
+          });
+          await batch.commit();
+          written += Math.min(400, toWrite.length - i);
+        }
+
+        await db.collection('activityLog').add({
+          orgId: auth.orgId, action: 'MAINTENANCE',
+          details: { task: 'backfill-location-codes', scanned: msnap.size, updated: written, alreadyCorrect: already, source: 'api', apiKey: auth.label },
+          userEmail: 'API: ' + (auth.label || auth.keyId),
+          timestamp: Date.now(), createdAt: new Date().toISOString()
+        });
+
+        return res.json({ scanned: msnap.size, updated: written, alreadyCorrect: already, documentsRead: msnap.size });
       }
 
       // ---- GET /  (discovery) ---------------------------------------------
@@ -2922,3 +3173,14 @@ exports.api = functions
       return apiError(res, 500, 'Internal error');
     }
   });
+
+// ── MCP endpoint ──────────────────────────────────────────────────────────
+// Same data and same apiKeys auth as exports.api, exposed as MCP tools so
+// Claude and other MCP clients can reach the inventory natively from any
+// device. Tool layer lives in ./mcp.js.
+exports.mcp = require('./mcp')({
+  functions: functions,
+  db: db,
+  resolveApiKey: resolveApiKey,
+  publicItem: publicItem
+});

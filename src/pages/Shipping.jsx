@@ -1510,7 +1510,7 @@ export default function Shipping() {
                                     try {
                                       const urls = label.allLabels.map(lbl => lbl.labelUrl);
                                       const mergeFn = httpsCallable(functions, 'mergeLabelPdfs');
-                                      const result = await mergeFn({ urls });
+                                      const result = await mergeFn({ urls, orgId: organization.id });
                                       const byteChars = atob(result.data.pdf);
                                       const byteArray = new Uint8Array(byteChars.length);
                                       for (let i = 0; i < byteChars.length; i++) byteArray[i] = byteChars.charCodeAt(i);

@@ -33,6 +33,28 @@ function checkRateLimit(key, maxCalls, windowMs) {
   return true;
 }
 
+
+// Tenant isolation helpers live in ./authz.js so there is one definition of
+// "may this caller act on this org", and so it can be unit tested.
+var AUTHZ = require('./authz')({ functions: functions, db: db });
+
+// Cloud Logging is retained, searchable, and readable by anyone with project
+// access - so it is the wrong place for a customer's street address or a
+// carrier account number. These keep the operational value of the shipping
+// logs (which carrier, which city, did it work) without the identifying part.
+function maskId(v) {
+  if (v === null || v === undefined) return null;
+  var t = String(v);
+  return t.length <= 4 ? '****' : '****' + t.slice(-4);
+}
+function coarseAddress(a) {
+  if (!a) return null;
+  return { city: a.city, state: a.state, zip: a.zip, country: a.country };
+}
+var assertOrgId = AUTHZ.assertOrgId;
+var assertOrgMember = AUTHZ.assertOrgMember;
+var assertOrderInOrg = AUTHZ.assertOrderInOrg;
+
 async function shippoRequest(apiKey, endpoint, method = 'GET', body = null) {
   if (!apiKey) throw new Error('Shippo API key not configured. Go to Shipping Settings and enter your Shippo API key.');
   const options = {
@@ -312,8 +334,8 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   try {
     var validated = await validateAddress(apiKey, toAddressRaw);
     console.log('=== ADDRESS VALIDATION ===');
-    console.log('Original:', JSON.stringify(toAddressRaw));
-    console.log('Validated:', JSON.stringify({ street1: validated.street1, city: validated.city, state: validated.state, zip: validated.zip, country: validated.country }));
+    console.log('Original:', JSON.stringify(coarseAddress(toAddressRaw)));
+    console.log('Validated:', JSON.stringify(coarseAddress(validated)));
     console.log('Is valid:', validated.validation_results && validated.validation_results.is_valid);
     console.log('Messages:', JSON.stringify((validated.validation_results && validated.validation_results.messages) || []));
     console.log('=== END VALIDATION ===');
@@ -358,7 +380,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     var activeAccounts = (carriers.results || []).filter(function(c) { return c.active; });
     console.log('=== CARRIER ACCOUNTS ===');
     activeAccounts.forEach(function(c) {
-      console.log('  ' + c.carrier + ' | ' + (c.account_id || 'no-id') + ' | object_id: ' + c.object_id + ' | is_shippo: ' + c.is_shippo_account);
+      console.log('  ' + c.carrier + ' | ' + (maskId(c.account_id) || 'no-id') + ' | object_id: ' + c.object_id + ' | is_shippo: ' + c.is_shippo_account);
     });
     console.log('=== END CARRIER ACCOUNTS ===');
     
@@ -490,7 +512,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
       var custMsgs = (shipmentCustUPS.messages || []).map(function(m) { return m.text || JSON.stringify(m); });
       if (custRates.length === 0 && custMsgs.length > 0) billing.error = custMsgs.join(' | ');
       console.log('=== SHIPPO DEBUG (Customer Account / UPS Insurance) ===');
-      console.log('Customer account:', customerBilling.account);
+      console.log('Customer account:', maskId(customerBilling.account));
       console.log('Total rates returned:', (shipmentCustUPS.rates || []).length);
       console.log('=== END DEBUG ===');
     } catch (e) {
@@ -599,6 +621,93 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   return result;
 }
 
+// Restored: both the hourly job and triggerShippingCheck have called this since
+// commit 64cd8c6, but the definition was dropped in that same commit, so the
+// scheduled run has been throwing a ReferenceError into a catch block that only
+// logs - the hourly shipping check has been silently doing nothing since then.
+// The orgSettings shape and the idempotency guard below deliberately mirror
+// batchGenerateLabels rather than the 2023 original, so an order that already
+// has a purchased label can never be bought a second time.
+async function processOrgPackedOrders(orgId, orgData, apiKey) {
+  var orgSettings = {
+    shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null,
+    preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups',
+    autoPurchaseLabels: !!(orgData.settings && orgData.settings.autoPurchaseLabels),
+    preferredService: (orgData.settings && orgData.settings.preferredService) || '',
+    autoPurchaseMaxPerBox: orgData.autoPurchaseMaxPerBox
+  };
+
+  var snapshot = await db.collection('purchaseOrders')
+    .where('orgId', '==', orgId)
+    .where('status', '==', 'packed')
+    .get();
+
+  var pending = [];
+  snapshot.docs.forEach(function (d) {
+    var o = Object.assign({ id: d.id }, d.data());
+    if (o.shippingLabel) return;
+    pending.push(o);
+  });
+
+  if (pending.length === 0) {
+    console.log('  No new packed orders for ' + orgId);
+    return { processed: 0, failed: 0 };
+  }
+  console.log('  ' + pending.length + ' packed order(s) to process for ' + orgId);
+
+  var processed = 0, failed = 0;
+  for (var i = 0; i < pending.length; i++) {
+    var order = pending[i];
+    try {
+      // Same guard batchGenerateLabels uses: a purchased label with a tracking
+      // number is done, whatever the order status says.
+      if (order.shippingLabel && order.shippingLabel.labelStatus === 'purchased' && order.shippingLabel.trackingNumber) continue;
+
+      var shippingResult = await processPackedOrder(apiKey, order, orgSettings);
+      var chargeUpd = (shippingResult.labelStatus === 'purchased') ? shippingChargeUpdate(order, shippingResult, orgData) : {};
+      await db.collection('purchaseOrders').doc(order.id).update(Object.assign({
+        shippingLabel: shippingResult,
+        shippingStatus: shippingResult.labelStatus,
+        updatedAt: Date.now()
+      }, chargeUpd));
+
+      await db.collection('activityLog').add({
+        orgId: orgId,
+        action: 'SHIPPING_LABEL_GENERATED',
+        details: {
+          poId: order.id,
+          poNumber: order.poNumber || null,
+          carrier: (shippingResult.selectedRate && shippingResult.selectedRate.provider) || null,
+          trackingNumber: shippingResult.trackingNumber || null,
+          labelStatus: shippingResult.labelStatus
+        },
+        userId: 'system',
+        userEmail: 'Automated Shipping System',
+        timestamp: Date.now(),
+        createdAt: new Date().toISOString()
+      });
+
+      processed++;
+      console.log('  ' + (order.poNumber || order.id) + ': ' + shippingResult.labelStatus);
+    } catch (orderError) {
+      failed++;
+      console.error('  Failed to process ' + (order.poNumber || order.id) + ':', orderError && orderError.message);
+      try {
+        await db.collection('purchaseOrders').doc(order.id).update({
+          shippingLabel: { labelStatus: 'error', error: String(orderError && orderError.message), createdAt: Date.now() },
+          shippingStatus: 'error',
+          updatedAt: Date.now()
+        });
+      } catch (writeError) {
+        console.error('  Could not record the failure on ' + order.id + ':', writeError && writeError.message);
+      }
+    }
+  }
+
+  console.log('  ' + orgId + ': ' + processed + ' processed, ' + failed + ' failed');
+  return { processed: processed, failed: failed };
+}
+
 // SCHEDULED
 exports.checkPackedOrdersScheduled = functions.pubsub.schedule('every 1 hours').timeZone('America/New_York').onRun(async function(context) {
   console.log('Hourly shipping check triggered');
@@ -659,6 +768,7 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
   }
   var orderId = data.orderId, orgId = data.orgId, rateId = data.rateId;
   if (!orderId || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderId and orgId required');
+  await assertOrgMember(context, orgId, 'staff');
   try {
     var orderDoc = await db.collection('purchaseOrders').doc(orderId).get();
     if (!orderDoc.exists) throw new functions.https.HttpsError('not-found', 'Order not found');
@@ -721,6 +831,7 @@ exports.batchGenerateLabels = functions.runWith({ timeoutSeconds: 300, memory: '
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   var orderIds = data.orderIds, orgId = data.orgId, autoPurchase = data.autoPurchase;
   if (!orderIds || !orderIds.length || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderIds and orgId required');
+  await assertOrgMember(context, orgId, 'staff');
   try {
     var orgDoc = await db.collection('organizations').doc(orgId).get();
     if (!orgDoc.exists) throw new functions.https.HttpsError('not-found', 'Org not found');
@@ -760,6 +871,8 @@ exports.saveCustomsInfo = functions.https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   var orderId = data.orderId, orgId = data.orgId, customsInfo = data.customsInfo;
   if (!orderId || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderId and orgId required');
+  await assertOrgMember(context, orgId, 'staff');
+  await assertOrderInOrg(orderId, orgId);
   try {
     await db.collection('purchaseOrders').doc(orderId).update({ customsInfo: customsInfo, updatedAt: Date.now() });
     return { success: true };
@@ -770,6 +883,8 @@ exports.saveInsurance = functions.https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   var orderId = data.orderId, orgId = data.orgId, insuranceAmount = data.insuranceAmount;
   if (!orderId || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderId and orgId required');
+  await assertOrgMember(context, orgId, 'staff');
+  await assertOrderInOrg(orderId, orgId);
   try {
     var updateObj = { insuranceAmount: parseFloat(insuranceAmount) || 0, updatedAt: Date.now() };
     // Save per-box insurance if provided
@@ -789,6 +904,7 @@ exports.triggerShippingCheck = functions.https.onCall(async function(data, conte
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   var orgId = data.orgId;
   if (!orgId) throw new functions.https.HttpsError('invalid-argument', 'orgId required');
+  await assertOrgMember(context, orgId, 'manager');
   try {
     var orgDoc = await db.collection('organizations').doc(orgId).get();
     if (!orgDoc.exists) throw new functions.https.HttpsError('not-found', 'Org not found');
@@ -803,6 +919,7 @@ exports.updateShippingSchedule = functions.https.onCall(async function(data, con
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
   var orgId = data.orgId;
   if (!orgId) throw new functions.https.HttpsError('invalid-argument', 'orgId required');
+  await assertOrgMember(context, orgId, 'admin');
   try {
     var updates = {}; updates['updatedAt'] = Date.now();
     if (data.checkHour !== undefined) updates['settings.shippingCheckHour'] = parseInt(data.checkHour);
@@ -815,6 +932,7 @@ exports.updateShippingSchedule = functions.https.onCall(async function(data, con
 
 exports.validateShippingAddress = functions.https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  await assertOrgMember(context, data.orgId, 'staff');
   try {
     var orgDoc = await db.collection('organizations').doc(data.orgId).get();
     var apiKey = getOrgShippoKey(orgDoc.data());
@@ -830,10 +948,9 @@ exports.getShippingRates = functions.https.onCall(async function(data, context) 
   if (!checkRateLimit('rates_' + context.auth.uid, 30, 5 * 60 * 1000)) {
     throw new functions.https.HttpsError('resource-exhausted', 'Too many rate requests. Please wait a moment.');
   }
+  await assertOrgMember(context, data.orgId, 'staff');
   try {
-    var orderDoc = await db.collection('purchaseOrders').doc(data.orderId).get();
-    if (!orderDoc.exists) throw new Error('Order not found');
-    var order = Object.assign({ id: orderDoc.id }, orderDoc.data());
+    var order = await assertOrderInOrg(data.orderId, data.orgId);
     var orgDoc = await db.collection('organizations').doc(data.orgId).get();
     var orgData = orgDoc.data(); var apiKey = getOrgShippoKey(orgData);
     if (!apiKey) throw new Error('Shippo API key not configured.');
@@ -845,15 +962,45 @@ exports.getShippingRates = functions.https.onCall(async function(data, context) 
 });
 
 // Merge multiple label PDFs into a single PDF - returns base64
+// The URLs come from the browser, and this function fetches them from inside
+// Google's network - so without a host allowlist any signed-in user could point
+// it at the metadata server or anything else reachable from the VPC and use the
+// error text as an oracle. Labels only ever come from the three carriers we
+// integrate with (or the S3 buckets they park PDFs in), so that is all this
+// will fetch. Redirects are refused rather than followed, because a permitted
+// host that 302s to 169.254.169.254 would otherwise walk straight through.
+var LABEL_HOST_SUFFIXES = ['goshippo.com', 'easypost.com', 'shipstation.com', 'amazonaws.com'];
+var MAX_LABEL_URLS = 25;
+var MAX_LABEL_BYTES = 10 * 1024 * 1024;
+
+function assertFetchableLabelUrl(raw) {
+  var u;
+  try { u = new URL(String(raw)); }
+  catch (e) { throw new functions.https.HttpsError('invalid-argument', 'Label URL is not a URL'); }
+  if (u.protocol !== 'https:') throw new functions.https.HttpsError('invalid-argument', 'Label URLs must be https');
+  if (u.username || u.password) throw new functions.https.HttpsError('invalid-argument', 'Label URL must not carry credentials');
+  if (u.port && u.port !== '443') throw new functions.https.HttpsError('invalid-argument', 'Label URL must use the default port');
+  var host = u.hostname.toLowerCase();
+  var ok = LABEL_HOST_SUFFIXES.some(function (suffix) {
+    return host === suffix || host.endsWith('.' + suffix);
+  });
+  if (!ok) throw new functions.https.HttpsError('invalid-argument', 'Label URLs must come from a shipping carrier');
+  return u.toString();
+}
+
 exports.mergeLabelPdfs = functions.runWith({ timeoutSeconds: 60, memory: '512MB' }).https.onCall(async function(data, context) {
-  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  await assertOrgMember(context, data.orgId, 'staff');
   var urls = data.urls;
   if (!urls || !Array.isArray(urls) || urls.length === 0) throw new functions.https.HttpsError('invalid-argument', 'No label URLs provided');
+  if (urls.length > MAX_LABEL_URLS) throw new functions.https.HttpsError('invalid-argument', 'Too many labels to merge at once');
+  var safeUrls = urls.map(assertFetchableLabelUrl);
   try {
     var mergedPdf = await PDFDocument.create();
-    for (var i = 0; i < urls.length; i++) {
-      var response = await fetch(urls[i]);
+    for (var i = 0; i < safeUrls.length; i++) {
+      var response = await fetch(safeUrls[i], { redirect: 'error' });
+      if (!response.ok) throw new Error('label fetch returned ' + response.status);
       var pdfBytes = await response.arrayBuffer();
+      if (pdfBytes.byteLength > MAX_LABEL_BYTES) throw new Error('label is too large');
       var srcPdf = await PDFDocument.load(pdfBytes);
       var pages = await mergedPdf.copyPages(srcPdf, srcPdf.getPageIndices());
       pages.forEach(function(p) { mergedPdf.addPage(p); });
@@ -861,7 +1008,12 @@ exports.mergeLabelPdfs = functions.runWith({ timeoutSeconds: 60, memory: '512MB'
     var mergedBytes = await mergedPdf.save();
     var base64 = Buffer.from(mergedBytes).toString('base64');
     return { pdf: base64, pageCount: mergedPdf.getPageCount() };
-  } catch (error) { throw new functions.https.HttpsError('internal', 'Failed to merge PDFs: ' + error.message); }
+  } catch (error) {
+    // The upstream message can echo back whatever the fetched host said, so it
+    // stays in the logs rather than going to the caller.
+    console.error('mergeLabelPdfs failed:', error && error.message);
+    throw new functions.https.HttpsError('internal', 'Failed to merge labels');
+  }
 });
 
 // Generate End of Day Driver Summary PDF (4x6 thermal)
@@ -946,6 +1098,7 @@ exports.generateEndOfDayPdf = functions.runWith({ timeoutSeconds: 30, memory: '2
 // One-time utility: Update UPS carrier account with invoice details to enable negotiated rates
 exports.updateCarrierInvoice = functions.https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  await assertOrgMember(context, data.orgId, 'admin');
   try {
     var orgDoc = await db.collection('organizations').doc(data.orgId).get();
     var apiKey = getOrgShippoKey(orgDoc.data());
@@ -958,7 +1111,7 @@ exports.updateCarrierInvoice = functions.https.onCall(async function(data, conte
     var current = await shippoRequest(apiKey, '/carrier_accounts/' + carrierAccountId, 'GET');
     console.log('Current carrier account:', JSON.stringify({
       carrier: current.carrier,
-      account_id: current.account_id,
+      account_id: maskId(current.account_id),
       object_id: current.object_id,
       active: current.active,
       is_shippo: current.is_shippo_account,
@@ -976,7 +1129,12 @@ exports.updateCarrierInvoice = functions.https.onCall(async function(data, conte
       })
     };
     
-    console.log('Updating carrier account with invoice:', JSON.stringify(updateBody));
+    console.log('Updating carrier account with invoice:', JSON.stringify({
+      has_invoice: true,
+      invoice_controlid: maskId(updateBody.parameters.invoice_controlid),
+      invoice_date: updateBody.parameters.invoice_date,
+      invoice_number: maskId(updateBody.parameters.invoice_number)
+    }));
     var result = await shippoRequest(apiKey, '/carrier_accounts/' + carrierAccountId, 'PUT', updateBody);
     console.log('Update result:', JSON.stringify({ object_id: result.object_id, active: result.active }));
     
@@ -1047,6 +1205,9 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
   if (!priceId) {
     throw new functions.https.HttpsError('invalid-argument', `No ${billingCycle} price configured for plan: ${plan}`);
   }
+  // Without this, a user of tenant A could bind a Stripe customer of their own
+  // to tenant B's org doc and then steer B's plan through the webhook.
+  await assertOrgMember(context, orgId, 'admin');
 
   try {
     // Check if org already has a Stripe customer ID
@@ -1110,6 +1271,10 @@ exports.createBillingPortalSession = functions.https.onCall(async (data, context
   }
 
   const { orgId } = data;
+
+  // The portal exposes invoices, billing address, card details and the ability
+  // to cancel the subscription - admin of that org only.
+  await assertOrgMember(context, orgId, 'admin');
 
   try {
     const orgDoc = await db.collection('organizations').doc(orgId).get();
@@ -1299,6 +1464,9 @@ exports.getShipStationRates = functions.https.onCall(async (data, context) => {
 
   const { orgId, orderId, toAddress, parcels } = data;
 
+  await assertOrgMember(context, orgId, 'staff');
+  if (orderId) await assertOrderInOrg(orderId, orgId);
+
   try {
     // Get org's ShipStation API key
     const orgDoc = await db.collection('organizations').doc(orgId).get();
@@ -1379,6 +1547,9 @@ exports.generateShipStationLabel = functions.https.onCall(async (data, context) 
   }
 
   const { orgId, orderId, rateId, toAddress, parcels, orderRef } = data;
+
+  await assertOrgMember(context, orgId, 'staff');
+  if (orderId) await assertOrderInOrg(orderId, orgId);
 
   try {
     const orgDoc = await db.collection('organizations').doc(orgId).get();
@@ -1503,6 +1674,9 @@ exports.getEasyPostRates = functions.https.onCall(async (data, context) => {
 
   const { orgId, orderId, toAddress, parcels } = data;
 
+  await assertOrgMember(context, orgId, 'staff');
+  if (orderId) await assertOrderInOrg(orderId, orgId);
+
   try {
     const orgDoc = await db.collection('organizations').doc(orgId).get();
     const apiKey = orgDoc.data()?.settings?.easypostApiKey;
@@ -1612,6 +1786,9 @@ exports.generateEasyPostLabel = functions.https.onCall(async (data, context) => 
 
   const { orgId, orderId, shipmentId, rateId, insuranceAmount } = data;
 
+  await assertOrgMember(context, orgId, 'staff');
+  if (orderId) await assertOrderInOrg(orderId, orgId);
+
   try {
     const orgDoc = await db.collection('organizations').doc(orgId).get();
     const apiKey = orgDoc.data()?.settings?.easypostApiKey;
@@ -1679,6 +1856,8 @@ exports.validateEasyPostAddress = functions.https.onCall(async (data, context) =
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
 
   const { orgId, address } = data;
+
+  await assertOrgMember(context, orgId, 'staff');
 
   try {
     const orgDoc = await db.collection('organizations').doc(orgId).get();
@@ -1934,9 +2113,9 @@ exports.exportOrgData = functions.https.onCall(async (data, context) => {
   const { orgId } = data;
   if (!orgId) throw new functions.https.HttpsError('invalid-argument', 'orgId required');
 
-  // Verify user is a member of this org
-  const memberDoc = await db.collection('orgMembers').doc(`${orgId}_${context.auth.uid}`).get();
-  if (!memberDoc.exists) throw new functions.https.HttpsError('permission-denied', 'Not a member of this org');
+  // Exports the whole tenant to CSV - manager and above, and the shared helper
+  // also rejects members whose status is no longer active.
+  await assertOrgMember(context, orgId, 'manager');
 
   const csvEscape = (val) => {
     if (val === null || val === undefined) return '';
@@ -2142,11 +2321,10 @@ exports.adminDeleteOrganization = functions.https.onCall(async (data, context) =
   if (!orgId) throw new functions.https.HttpsError('invalid-argument', 'orgId required');
 
   // Verify caller is a member of the owner org (SkidSling admin)
-  const callerOwnerMember = await db.collection('orgMembers')
-    .doc(`aa-surplus-sales_${context.auth.uid}`).get();
-  if (!callerOwnerMember.exists) {
-    throw new functions.https.HttpsError('permission-denied', 'Only SkidSling owner users can delete organizations');
-  }
+  // This cascade-deletes an entire tenant and their Firebase Auth accounts, so
+  // existence of an owner-org membership is not enough - require admin there.
+  await assertOrgMember(context, 'aa-surplus-sales', 'admin');
+  assertOrgId(orgId);
 
   // Hard guard: never delete the owner org itself
   if (orgId === 'aa-surplus-sales') {
@@ -2159,7 +2337,13 @@ exports.adminDeleteOrganization = functions.https.onCall(async (data, context) =
     throw new functions.https.HttpsError('not-found', 'Organization not found');
   }
   const org = orgDoc.data();
-  if (confirmName && org.name && confirmName.trim().toLowerCase() !== org.name.trim().toLowerCase()) {
+  // confirmName was only checked when supplied, so omitting it skipped the
+  // safety check entirely. Require it.
+  if (!confirmName || !String(confirmName).trim()) {
+    throw new functions.https.HttpsError('invalid-argument',
+      'confirmName is required - pass the exact organization name to confirm deletion');
+  }
+  if (org.name && confirmName.trim().toLowerCase() !== org.name.trim().toLowerCase()) {
     throw new functions.https.HttpsError('invalid-argument', `Name confirmation does not match. Expected: ${org.name}`);
   }
 

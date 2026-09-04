@@ -37,6 +37,7 @@ function checkRateLimit(key, maxCalls, windowMs) {
 // Tenant isolation helpers live in ./authz.js so there is one definition of
 // "may this caller act on this org", and so it can be unit tested.
 var AUTHZ = require('./authz')({ functions: functions, db: db });
+var shipToPhoneFallback = require('./shipTo')({ db: db }).shipToPhoneFallback;
 
 // Cloud Logging is retained, searchable, and readable by anyone with project
 // access - so it is the wrong place for a customer's street address or a
@@ -329,6 +330,19 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   else throw new Error('Order ' + order.poNumber + ' has no shipping address');
 
   if (order.customsInfo && order.customsInfo.destinationCountry) toAddressRaw.country = order.customsInfo.destinationCountry;
+
+  // Fill a missing ship-to phone from the customer record before anything is
+  // sent to the carrier. Done here rather than at the rate step so it covers
+  // rating, purchase and the scheduled job alike.
+  if (!String(toAddressRaw.phone || '').trim()) {
+    var fallbackPhone = await shipToPhoneFallback(order);
+    if (fallbackPhone) {
+      toAddressRaw.phone = fallbackPhone;
+      console.log('Ship-to phone was blank on ' + (order.poNumber || order.id) + '; used the number on the customer record.');
+    } else {
+      console.warn('Ship-to phone is blank on ' + (order.poNumber || order.id) + ' and the customer record has none. An international label will be refused by the carrier.');
+    }
+  }
 
   // Validate and auto-correct the destination address (Shippo's dashboard does this automatically)
   try {

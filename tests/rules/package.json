@@ -1,0 +1,11 @@
+{
+  "name": "skidsling-rules-tests",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "test": "node syntaxcheck.js && node rules_test.js"
+  },
+  "dependencies": {
+    "@firebase/eslint-plugin-security-rules": "^0.0.2"
+  }
+}

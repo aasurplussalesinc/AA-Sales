@@ -1,3 +1,4 @@
+import { h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { toast } from '../utils/toast';
 import QRCode from 'qrcode';
@@ -1613,7 +1614,7 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
         : [{ loc: item.location || '— NO LOCATION —', qty: totalQty }];
 
       const printWindow = window.open('', '_blank');
-      printWindow.document.write(`
+      printWindow.document.write(h`
         <html>
           <head>
             <title>Label - ${item.partNumber || item.name}</title>
@@ -1665,17 +1666,17 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                 🖨️ Print ${labels.length} label${labels.length === 1 ? '' : 's'} (4×6)
               </button>
             </div>
-            ${labels.map(l => `
+            ${raw(labels.map(l => h`
               <div class="label">
                 <div class="l-loc">${l.loc}</div>
                 <div class="l-name">${item.name || ''}</div>
                 <img class="l-qr" src="${qrImage}" />
                 <div class="l-sku">${item.partNumber || '—'}</div>
                 <div class="l-qty">${l.qty}<span> UNITS</span></div>
-                <div class="l-meta">${item.grade ? 'Condition: ' + item.grade : ''}${labels.length > 1 ? ' &nbsp;·&nbsp; total ' + totalQty : ''}</div>
+                <div class="l-meta">${item.grade ? 'Condition: ' + item.grade : ''}${raw(labels.length > 1 ? ' &nbsp;·&nbsp; total ' + totalQty : '')}</div>
                 <div class="l-foot">${new Date().toLocaleDateString()}</div>
               </div>
-            `).join('')}
+            `).join(''))}
           </body>
         </html>
       `);
@@ -1905,7 +1906,7 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
     
     if (format === 'individual') {
       // One label per page
-      printWindow.document.write(`
+      printWindow.document.write(h`
         <html><head><title>Labels</title>
         <style>
           @page { size: ${s.w} ${s.h}; margin: 0; }
@@ -1919,7 +1920,7 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
           .info p { font-size: ${s.font}px; margin: 1px 0; }
           .sku { font-family: monospace; font-weight: bold; }
         </style></head><body>
-        ${qrCodes.map(({ item, qrImage }) => `
+        ${raw(qrCodes.map(({ item, qrImage }) => h`
           <div class="label">
             <img src="${qrImage}" />
             <div class="info">
@@ -1928,12 +1929,12 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
               <p>Loc: ${item.location || '-'}</p>
             </div>
           </div>
-        `).join('')}
+        `).join(''))}
         </body></html>
       `);
     } else {
       // Sheet format - multiple labels per page
-      printWindow.document.write(`
+      printWindow.document.write(h`
         <html><head><title>Label Sheet</title>
         <style>
           @page { size: letter; margin: 0.3in; }
@@ -1947,14 +1948,14 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
           @media print { .label { border: 1px solid #eee; } }
         </style></head><body>
         <div class="grid">
-        ${qrCodes.map(({ item, qrImage }) => `
+        ${raw(qrCodes.map(({ item, qrImage }) => h`
           <div class="label">
             <img src="${qrImage}" />
             <h4>${(item.name || 'Unnamed').substring(0, 40)}</h4>
             <p><strong>${item.partNumber || '-'}</strong></p>
             <p>${item.location || ''}</p>
           </div>
-        `).join('')}
+        `).join(''))}
         </div>
         </body></html>
       `);

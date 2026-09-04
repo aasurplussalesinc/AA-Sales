@@ -1,3 +1,4 @@
+import { h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef, useMemo } from 'react';
 import QRCode from 'qrcode';
 import { OrgDB as DB } from '../orgDb';
@@ -585,7 +586,7 @@ W2,2,C,3`;
         alert('Please allow popups to print QR codes');
         return;
       }
-      printWindow.document.write(`
+      printWindow.document.write(h`
         <html>
           <head>
             <title>Location QR - ${locCode}</title>
@@ -693,7 +694,7 @@ W2,2,C,3`;
 
     const printed = new Date().toLocaleDateString();
     const win = window.open('', '_blank');
-    win.document.write(`
+    win.document.write(h`
       <html>
         <head>
           <title>Column ${wh}-R${rk}-${col}</title>
@@ -758,14 +759,14 @@ W2,2,C,3`;
               🖨️ Print ${sheets.length} sheet${sheets.length === 1 ? '' : 's'} — column ${wh}-R${rk}-${col} (4×6)
             </button>
           </div>
-          ${sheets.map(sh => {
+          ${raw(sheets.map(sh => {
             const single = sh.rows.length === 1 && sh.parts === 1;
             const sub = sh.parts > 1
               ? `${sh.itemCount} ITEMS · SHEET ${sh.part} OF ${sh.parts}`
               : `${sh.itemCount} ITEM${sh.itemCount === 1 ? '' : 'S'} · ${sh.totalQty} UNITS`;
             if (single) {
               const r = sh.rows[0];
-              return `
+              return h`
                 <div class="label">
                   <div class="l-loc">${sh.code}</div>
                   <div class="l-head">${sub}</div>
@@ -778,13 +779,13 @@ W2,2,C,3`;
                   <div class="l-foot">${printed}</div>
                 </div>`;
             }
-            return `
+            return h`
               <div class="label">
                 <div class="l-loc">${sh.code}</div>
                 <div class="l-head">${sub}</div>
                 <div class="l-div"></div>
                 <div class="rows">
-                  ${sh.rows.map(r => `
+                  ${raw(sh.rows.map(r => h`
                     <div class="row">
                       <img src="${r.qr}" />
                       <div class="t">
@@ -792,11 +793,11 @@ W2,2,C,3`;
                         <div class="s">${r.partNumber || '—'}</div>
                       </div>
                       <div class="q">${r.quantity}<i>UNITS</i></div>
-                    </div>`).join('')}
+                    </div>`).join(''))}
                 </div>
                 <div class="l-foot">${printed}${sh.part < sh.parts ? ' · continues →' : ''}</div>
               </div>`;
-          }).join('')}
+          }).join(''))}
         </body>
       </html>
     `);
@@ -831,7 +832,7 @@ W2,2,C,3`;
 
       // Create print window with all QR codes
       const printWindow = window.open('', '_blank');
-      printWindow.document.write(`
+      printWindow.document.write(h`
         <html>
           <head>
             <title>Labels - ${locCode}</title>
@@ -883,7 +884,7 @@ W2,2,C,3`;
                 🖨️ Print ${qrCodes.length} label${qrCodes.length === 1 ? '' : 's'} (4×6)
               </button>
             </div>
-            ${qrCodes.map(({ item, quantity, qrImage }) => `
+            ${raw(qrCodes.map(({ item, quantity, qrImage }) => h`
               <div class="label">
                 <div class="l-loc">${locCode}</div>
                 <div class="l-name">${item.name || ''}</div>
@@ -893,7 +894,7 @@ W2,2,C,3`;
                 <div class="l-meta">${item.grade ? 'Condition: ' + item.grade : ''}</div>
                 <div class="l-foot">${new Date().toLocaleDateString()}</div>
               </div>
-            `).join('')}
+            `).join(''))}
           </body>
         </html>
       `);

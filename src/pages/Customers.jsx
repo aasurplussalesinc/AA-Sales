@@ -1,3 +1,4 @@
+import { h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
@@ -428,7 +429,7 @@ export default function Customers() {
 
   const printPO = (order) => {
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
+    printWindow.document.write(h`
       <html>
         <head>
           <title>Purchase Order - ${order.poNumber}</title>
@@ -459,7 +460,7 @@ export default function Customers() {
         <body>
           <div class="header">
             <div class="company-info">
-              ${DB.brandingFrom(organization).logoUrl ? '<img src="' + DB.brandingFrom(organization).logoUrl + '" alt="" class="company-logo" />' : (DB.brandingFrom(organization).name ? '<div style="font-size:18px;font-weight:bold">' + DB.brandingFrom(organization).name + '</div>' : '')}
+              ${raw(DB.brandingHtml(organization).logo)}
               <div class="company-location">${[DB.brandingFrom(organization).addressLines.join(' '), DB.brandingFrom(organization).phone].filter(Boolean).join(' • ')}</div>
             </div>
             <div class="po-info">
@@ -472,9 +473,9 @@ export default function Customers() {
           <div class="customer-info">
             <h3>Bill To:</h3>
             <p><strong>${order.customerName}</strong></p>
-            ${order.customerAddress ? `<p>${order.customerAddress}</p>` : ''}
-            ${order.customerPhone ? `<p>Phone: ${order.customerPhone}</p>` : ''}
-            ${order.customerEmail ? `<p>Email: ${order.customerEmail}</p>` : ''}
+            ${raw(order.customerAddress ? h`<p>${order.customerAddress}</p>` : '')}
+            ${raw(order.customerPhone ? h`<p>Phone: ${order.customerPhone}</p>` : '')}
+            ${raw(order.customerEmail ? h`<p>Email: ${order.customerEmail}</p>` : '')}
           </div>
 
           <table>
@@ -488,7 +489,7 @@ export default function Customers() {
               </tr>
             </thead>
             <tbody>
-              ${order.items?.map(item => `
+              ${raw(order.items?.map(item => h`
                 <tr>
                   <td>${item.partNumber || '-'}</td>
                   <td>${item.itemName}</td>
@@ -496,7 +497,7 @@ export default function Customers() {
                   <td class="text-right">$${(item.unitPrice || 0).toFixed(2)}</td>
                   <td class="text-right">$${(item.lineTotal || 0).toFixed(2)}</td>
                 </tr>
-              `).join('') || ''}
+              `).join('') || '')}
             </tbody>
           </table>
 
@@ -505,19 +506,19 @@ export default function Customers() {
               <td>Subtotal:</td>
               <td class="text-right">$${(order.subtotal || 0).toFixed(2)}</td>
             </tr>
-            ${order.tax ? `<tr><td>Tax:</td><td class="text-right">$${order.tax.toFixed(2)}</td></tr>` : ''}
-            ${order.shipping ? `<tr><td>Shipping:</td><td class="text-right">$${order.shipping.toFixed(2)}</td></tr>` : ''}
+            ${raw(order.tax ? h`<tr><td>Tax:</td><td class="text-right">$${order.tax.toFixed(2)}</td></tr>` : '')}
+            ${raw(order.shipping ? h`<tr><td>Shipping:</td><td class="text-right">$${order.shipping.toFixed(2)}</td></tr>` : '')}
             <tr class="total-row">
               <td>TOTAL:</td>
               <td class="text-right">$${(order.total || 0).toFixed(2)}</td>
             </tr>
           </table>
 
-          ${order.notes ? `<div class="notes"><strong>Notes:</strong> ${order.notes}</div>` : ''}
+          ${raw(order.notes ? h`<div class="notes"><strong>Notes:</strong> ${order.notes}</div>` : '')}
 
           <div class="footer">
             <p>Thank you for your business!</p>
-            ${DB.brandingFrom(organization).name ? '<p>' + DB.brandingFrom(organization).name + '</p>' : ''}
+            ${raw(DB.brandingFrom(organization).name ? h`<p>${DB.brandingFrom(organization).name}</p>` : '')}
           </div>
         </body>
       </html>

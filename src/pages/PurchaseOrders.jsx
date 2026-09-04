@@ -1,4 +1,4 @@
-import { renderOrderDocument, refHtml, refStyles } from '../../functions/orderDocument.mjs';
+import { renderOrderDocument, refHtml, refStyles, h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
@@ -926,11 +926,11 @@ export default function PurchaseOrders() {
     };
     
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
+    printWindow.document.write(h`
       <html>
         <head>
           <title>Pick List - ${pickList.name}</title>
-          <style>${refStyles}
+          <style>${raw(refStyles)}
             body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: 0 auto; }
             .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 2px solid #2d5f3f; padding-bottom: 15px; }
             .title { font-size: 24px; font-weight: bold; color: #2d5f3f; }
@@ -958,7 +958,7 @@ export default function PurchaseOrders() {
             <div class="title">📋 PICK LIST: ${pickList.name}</div>
             <div class="meta">
               <div class="status">${pickList.status?.toUpperCase()}</div>
-              <div style="margin-top: 8px;">${refHtml(order, { size: 'sm' })}</div>
+              <div style="margin-top: 8px;">${raw(refHtml(order, { size: 'sm' }))}</div>
               <div>Customer: ${order.customerName}</div>
               <div style="margin-top: 8px;">Created: ${formatDate(pickList.createdAt)}</div>
             </div>
@@ -977,7 +977,7 @@ export default function PurchaseOrders() {
               </tr>
             </thead>
             <tbody>
-              ${pickList.items?.map((item, idx) => `
+              ${raw(pickList.items?.map((item, idx) => h`
                 <tr>
                   <td class="text-center">${idx + 1}</td>
                   <td>
@@ -987,14 +987,14 @@ export default function PurchaseOrders() {
                   <td class="text-center col-grade"><strong>${lineGrade(item) || '-'}</strong></td>
                   <td class="text-center col-loc"><strong>${item.location || '-'}</strong></td>
                   <td class="text-center"><strong>${item.requestedQty}</strong></td>
-                  <td class="text-center">${pickList.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>'}</td>
+                  <td class="text-center">${raw(pickList.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>')}</td>
                   <td class="text-center">${pickList.status === 'completed' ? (item.pickedQty >= item.requestedQty ? '✅' : '⚠️') : '☐'}</td>
                 </tr>
-              `).join('') || ''}
+              `).join('') || '')}
             </tbody>
           </table>
 
-          ${pickList.notes ? `<div class="notes"><strong>Notes:</strong> ${pickList.notes}</div>` : ''}
+          ${raw(pickList.notes ? h`<div class="notes"><strong>Notes:</strong> ${pickList.notes}</div>` : '')}
 
           <div class="signature">
             <div class="signature-line">Picker Signature</div>
@@ -1048,7 +1048,7 @@ export default function PurchaseOrders() {
         const wt = triwall.weight ? `${triwall.weight} lbs` : '';
         const dimsDisplay = dims && wt ? `${wt} | ${dims}` : (dims || wt);
         
-        return `<div class="box-section"><div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${items.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}${item.notes ? `<div style="font-size:9px;color:#555;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table></div>`;
+        return h`<div class="box-section"><div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${raw(items.map(item => h`<tr><td><span class="item-name">${item.itemName}</span>${raw(item.partNumber ? h` <span class="item-sku">(${item.partNumber})</span>` : '')}${raw(item.notes ? h`<div style="font-size:9px;color:#555;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : '')}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join(''))}</tbody></table></div>`;
       }).join('');
       
     } else {
@@ -1077,13 +1077,13 @@ export default function PurchaseOrders() {
       containerCount = Object.keys(boxes).length;
       
       // Generate HTML for each box
-      containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => `<div class="box-section"><div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${boxItems.map(item => `<tr><td><span class="item-name">${item.itemName}</span>${item.partNumber ? ` <span class="item-sku">(${item.partNumber})</span>` : ''}${item.notes ? `<div style="font-size:9px;color:#555;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join('')}</tbody></table></div>`).join('');
+      containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => h`<div class="box-section"><div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div><table><thead><tr><th>Item</th><th style="width:50px" class="qty">Qty</th></tr></thead><tbody>${raw(boxItems.map(item => h`<tr><td><span class="item-name">${item.itemName}</span>${raw(item.partNumber ? h` <span class="item-sku">(${item.partNumber})</span>` : '')}${raw(item.notes ? h`<div style="font-size:9px;color:#555;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : '')}</td><td class="qty">${item.qtyInContainer}</td></tr>`).join(''))}</tbody></table></div>`).join('');
     }
     
     const containerLabel = isTriwallMode ? 'Triwalls' : 'Boxes';
     
-    const printContent = `<!DOCTYPE html><html><head><title>Packing List - ${order.poNumber}</title>
-      <style>${refStyles}
+    const printContent = h`<!DOCTYPE html><html><head><title>Packing List - ${order.poNumber}</title>
+      <style>${raw(refStyles)}
         *{margin:0;padding:0;box-sizing:border-box}
         body{font-family:Arial,sans-serif;padding:15px;max-width:800px;margin:0 auto;font-size:11px}
         .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:15px;border-bottom:2px solid #333;padding-bottom:10px}
@@ -1105,15 +1105,15 @@ export default function PurchaseOrders() {
         @media print{body{padding:10px}@page{margin:0.4in}}
       </style></head><body>
       <div class="header">
-        <div>${DB.brandingHtml(organization).logo}<h1>PACKING LIST</h1><div>${refHtml(order, { size: 'sm' })}</div></div>
+        <div>${raw(DB.brandingHtml(organization).logo)}<h1>PACKING LIST</h1><div>${raw(refHtml(order, { size: 'sm' }))}</div></div>
         <div style="text-align:right;font-size:10px;color:#666"><strong>${organization?.name || ''}</strong><br>${organization?.address || ''}<br>${organization?.phone || ''}</div>
       </div>
       <div class="info-row">
         <div class="info-box"><h3>Ship To</h3><strong>${order.customerName}</strong><br>${order.customerAddress || ''}</div>
         <div class="info-box"><h3>Order Details</h3>Date: ${formatDate(order.createdAt)}<br>Items: ${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} | ${containerLabel}: ${containerCount}</div>
       </div>
-      ${containersHtml}
-      ${order.notes ? '<div style="margin-top:10px;padding:8px;background:#fff9e6;border-radius:4px;font-size:10px"><strong>Notes:</strong> ' + order.notes + '</div>' : ''}
+      ${raw(containersHtml)}
+      ${raw(order.notes ? h`<div style="margin-top:10px;padding:8px;background:#fff9e6;border-radius:4px;font-size:10px"><strong>Notes:</strong> ${order.notes}</div>` : '')}
       <div class="footer">Thank you for your business!</div></body></html>`;
     const printWindow = window.open('', '_blank');
     printWindow.document.write(printContent); printWindow.document.close(); printWindow.print();
@@ -1177,10 +1177,10 @@ export default function PurchaseOrders() {
         const wt = triwall.weight ? `${triwall.weight} lbs` : '';
         const dimsDisplay = dims && wt ? `${wt} | ${dims}` : (dims || wt);
         
-        return `<div class="box-section">
+        return h`<div class="box-section">
           <div class="box-header" style="background:#9c27b0"><span>🏗️ Triwall ${idx + 1}</span><span class="box-dims">${dimsDisplay}</span></div>
           <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th><th style="text-align:right">%</th></tr></thead>
-          <tbody>${containerItems.map(item => {
+          <tbody>${raw(containerItems.map(item => {
             const qty = item.qtyInContainer;
             const price = parseFloat(item.unitPrice) || 0;
             const revenue = qty * price;
@@ -1190,8 +1190,8 @@ export default function PurchaseOrders() {
             const weight = parseFloat(item.weightPerItem) || 0;
             const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
             const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
-            return `<tr>
-              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}${item.notes ? `<br><span style="color:#795548;font-size:8px;font-style:italic">📝 ${item.notes}</span>` : ''}</td>
+            return h`<tr>
+              <td><strong>${item.itemName}</strong>${raw(item.partNumber ? h` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : '')}${raw(item.contractNumber ? h`<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : '')}${raw(item.notes ? h`<br><span style="color:#795548;font-size:8px;font-style:italic">📝 ${item.notes}</span>` : '')}</td>
               <td><span class="src src-${srcClass}">${srcLabel}</span></td>
               <td style="text-align:center;font-weight:bold">${qty}</td>
               <td style="text-align:right">${weight ? weight.toFixed(1) : '—'}</td>
@@ -1201,7 +1201,7 @@ export default function PurchaseOrders() {
               <td style="text-align:right" class="profit">${margin !== null ? '$' + margin.toFixed(2) : '—'}</td>
               <td style="text-align:right" class="profit">${marginPct !== null ? marginPct + '%' : '—'}</td>
             </tr>`;
-          }).join('')}
+          }).join(''))}
           <tr style="background:#f3e5f5;font-weight:bold;border-top:2px solid #9c27b0">
             <td colspan="2">Triwall ${idx + 1} Total</td>
             <td style="text-align:center">${containerItems.reduce((sum, i) => sum + i.qtyInContainer, 0)}</td>
@@ -1241,10 +1241,10 @@ export default function PurchaseOrders() {
       containerCount = Object.keys(boxes).length;
       
       containersHtml = Object.entries(boxes).sort((a, b) => a[0] - b[0]).map(([boxNum, boxItems]) => {
-        return `<div class="box-section">
+        return h`<div class="box-section">
           <div class="box-header"><span>📦 Box ${boxNum}</span><span class="box-dims">${formatBoxDims(boxNum)}</span></div>
           <table><thead><tr><th>Item</th><th>Src</th><th style="text-align:center">Qty</th><th style="text-align:right">Wt</th><th style="text-align:right">Cost</th><th style="text-align:right">Price</th><th style="text-align:right">Rev</th><th style="text-align:right">Margin</th><th style="text-align:right">%</th></tr></thead>
-          <tbody>${boxItems.map(item => {
+          <tbody>${raw(boxItems.map(item => {
             const qty = item.qtyInContainer;
             const price = parseFloat(item.unitPrice) || 0;
             const revenue = qty * price;
@@ -1254,8 +1254,8 @@ export default function PurchaseOrders() {
             const weight = parseFloat(item.weightPerItem) || 0;
             const srcClass = item.source === 'inventory_contract' ? 'ic' : item.source === 'direct_contract' ? 'dc' : 'inv';
             const srcLabel = item.source === 'inventory_contract' ? 'I+C' : item.source === 'direct_contract' ? 'DC' : 'INV';
-            return `<tr>
-              <td><strong>${item.itemName}</strong>${item.partNumber ? ` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : ''}${item.contractNumber ? `<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : ''}${item.notes ? `<br><span style="color:#795548;font-size:8px;font-style:italic">📝 ${item.notes}</span>` : ''}</td>
+            return h`<tr>
+              <td><strong>${item.itemName}</strong>${raw(item.partNumber ? h` <span style="color:#666;font-size:8px">${item.partNumber}</span>` : '')}${raw(item.contractNumber ? h`<br><span style="color:#f57c00;font-size:8px">C: ${item.contractNumber}</span>` : '')}${raw(item.notes ? h`<br><span style="color:#795548;font-size:8px;font-style:italic">📝 ${item.notes}</span>` : '')}</td>
               <td><span class="src src-${srcClass}">${srcLabel}</span></td>
               <td style="text-align:center;font-weight:bold">${qty}</td>
               <td style="text-align:right">${weight ? weight.toFixed(1) : '—'}</td>
@@ -1265,7 +1265,7 @@ export default function PurchaseOrders() {
               <td style="text-align:right" class="profit">${margin !== null ? '$' + margin.toFixed(2) : '—'}</td>
               <td style="text-align:right" class="profit">${marginPct !== null ? marginPct + '%' : '—'}</td>
             </tr>`;
-          }).join('')}
+          }).join(''))}
           <tr style="background:#f5f5f5;font-weight:bold;border-top:2px solid #333">
             <td colspan="2">Box ${boxNum} Total</td>
             <td style="text-align:center">${boxItems.reduce((sum, i) => sum + i.qtyInContainer, 0)}</td>
@@ -1280,8 +1280,8 @@ export default function PurchaseOrders() {
       }).join('');
     }
     
-    const printContent = `<!DOCTYPE html><html><head><title>INTERNAL - ${order.poNumber}</title>
-      <style>${refStyles}
+    const printContent = h`<!DOCTYPE html><html><head><title>INTERNAL - ${order.poNumber}</title>
+      <style>${raw(refStyles)}
         body{font-family:Arial,sans-serif;padding:12px;max-width:900px;margin:0 auto;font-size:9px}
         .header{background:#ff9800;color:white;padding:8px 12px;margin-bottom:10px;border-radius:4px}
         .header h1{margin:0;font-size:14px}
@@ -1318,7 +1318,7 @@ export default function PurchaseOrders() {
         <div class="info-box"><h3>Customer</h3><div class="value">${order.customerName}</div></div>
         <div class="info-box"><h3>Totals</h3><div class="value">${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} items / ${containerCount} ${containerLabel}</div></div>
       </div>
-      ${containersHtml}
+      ${raw(containersHtml)}
       <div class="summary">
         <div class="summary-box costs"><h3 style="margin:0 0 8px 0;color:#c62828;font-size:10px">Cost Summary</h3>
           <div class="summary-row"><span>Known cost items:</span><span>${(order.items || []).length - unknownCostCount}/${(order.items || []).length}</span></div>
@@ -1330,7 +1330,7 @@ export default function PurchaseOrders() {
           <div class="summary-row total" style="color:#2e7d32"><span>Margin:</span><span>$${knownMargin.toFixed(2)} (${totalRevenue > 0 ? ((knownMargin / totalRevenue) * 100).toFixed(1) : 0}%)</span></div>
         </div>
       </div>
-      ${order.notes ? '<div style="margin-top:10px;padding:6px;background:#f5f5f5;border-radius:4px;font-size:9px"><strong>Notes:</strong> ' + order.notes + '</div>' : ''}
+      ${raw(order.notes ? h`<div style="margin-top:10px;padding:6px;background:#f5f5f5;border-radius:4px;font-size:9px"><strong>Notes:</strong> ${order.notes}</div>` : '')}
       </body></html>`;
     const printWindow = window.open('', '_blank');
     printWindow.document.write(printContent); printWindow.document.close(); printWindow.print();
@@ -1384,9 +1384,9 @@ ${organization?.email || ''}
     const labelNumber = triwallIndex + 1;
     const displayWeight = triwall.weight || '';
     
-    const printContent = `<!DOCTYPE html>
+    const printContent = h`<!DOCTYPE html>
 <html><head><title>Shipping Label - ${order.poNumber}</title>
-<style>${refStyles}
+<style>${raw(refStyles)}
   @page { size: landscape; margin: 0.5in; }
   body { 
     font-family: Arial, sans-serif; 
@@ -1442,26 +1442,26 @@ ${organization?.email || ''}
   <div class="from-section">
     <div class="label">FROM:</div>
     <div class="address">
-      ${[DB.brandingFrom(organization).name, ...DB.brandingFrom(organization).addressLines].filter(Boolean).join('<br>')}
+      ${raw([DB.brandingFrom(organization).name, ...DB.brandingFrom(organization).addressLines].filter(Boolean).map(esc).join('<br>'))}
     </div>
   </div>
   
   <div class="to-section">
     <div class="company">${(order.customerName || '').toUpperCase()}</div>
-    ${order.customerContact ? `<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : ''}
+    ${raw(order.customerContact ? h`<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : '')}
     <div class="address">
-      ${(order.customerAddress || '').toUpperCase().replace(/, /g, '<br>')}
+      ${raw(esc((order.customerAddress || '').toUpperCase()).replace(/, /g, '<br>'))}
     </div>
   </div>
   
   <div class="footer">
     <div>
-      ${order.customerPO
-        ? `<div class="po-number">PO: ${order.customerPO}</div><div class="our-ref">Our Ref: ${order.poNumber}</div>`
-        : `<div class="po-number">PO: ${order.poNumber}</div>`}
-      ${triwall.length && triwall.width && triwall.height ? 
-        `<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}"${displayWeight ? ' | ' + displayWeight + ' lbs' : ''}</div>` : 
-        (displayWeight ? `<div class="dimensions">Weight: ${displayWeight} lbs</div>` : '')}
+      ${raw(order.customerPO
+        ? h`<div class="po-number">PO: ${order.customerPO}</div><div class="our-ref">Our Ref: ${order.poNumber}</div>`
+        : h`<div class="po-number">PO: ${order.poNumber}</div>`)}
+      ${raw(triwall.length && triwall.width && triwall.height ? 
+        h`<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}"${displayWeight ? ' | ' + displayWeight + ' lbs' : ''}</div>` : 
+        (displayWeight ? h`<div class="dimensions">Weight: ${displayWeight} lbs</div>` : ''))}
     </div>
     <div class="box-count">${labelNumber} OF ${totalTriwalls}</div>
   </div>
@@ -1489,39 +1489,39 @@ ${organization?.email || ''}
       const labelNumber = idx + 1;
       const displayWeight = triwall.weight || '';
       
-      return `<div class="label-container">
+      return h`<div class="label-container">
   <div class="from-section">
     <div class="label">FROM:</div>
     <div class="address">
-      ${[DB.brandingFrom(organization).name, ...DB.brandingFrom(organization).addressLines].filter(Boolean).join('<br>')}
+      ${raw([DB.brandingFrom(organization).name, ...DB.brandingFrom(organization).addressLines].filter(Boolean).map(esc).join('<br>'))}
     </div>
   </div>
   
   <div class="to-section">
     <div class="company">${(order.customerName || '').toUpperCase()}</div>
-    ${order.customerContact ? `<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : ''}
+    ${raw(order.customerContact ? h`<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : '')}
     <div class="address">
-      ${(order.customerAddress || '').toUpperCase().replace(/, /g, '<br>')}
+      ${raw(esc((order.customerAddress || '').toUpperCase()).replace(/, /g, '<br>'))}
     </div>
   </div>
   
   <div class="footer">
     <div>
-      ${order.customerPO
-        ? `<div class="po-number">PO: ${order.customerPO}</div><div class="our-ref">Our Ref: ${order.poNumber}</div>`
-        : `<div class="po-number">PO: ${order.poNumber}</div>`}
-      ${triwall.length && triwall.width && triwall.height ? 
-        `<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}"${displayWeight ? ' | ' + displayWeight + ' lbs' : ''}</div>` : 
-        (displayWeight ? `<div class="dimensions">Weight: ${displayWeight} lbs</div>` : '')}
+      ${raw(order.customerPO
+        ? h`<div class="po-number">PO: ${order.customerPO}</div><div class="our-ref">Our Ref: ${order.poNumber}</div>`
+        : h`<div class="po-number">PO: ${order.poNumber}</div>`)}
+      ${raw(triwall.length && triwall.width && triwall.height ? 
+        h`<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}"${displayWeight ? ' | ' + displayWeight + ' lbs' : ''}</div>` : 
+        (displayWeight ? h`<div class="dimensions">Weight: ${displayWeight} lbs</div>` : ''))}
     </div>
     <div class="box-count">${labelNumber} OF ${totalTriwalls}</div>
   </div>
 </div>`;
     }).join('\n');
     
-    const printContent = `<!DOCTYPE html>
+    const printContent = h`<!DOCTYPE html>
 <html><head><title>Shipping Labels - ${order.poNumber}</title>
-<style>${refStyles}
+<style>${raw(refStyles)}
   @page { size: landscape; margin: 0.5in; }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { 
@@ -1576,7 +1576,7 @@ ${organization?.email || ''}
   }
 </style>
 </head><body>
-${labelsHtml}
+${raw(labelsHtml)}
 </body></html>`;
 
     const printWindow = window.open('', '_blank');

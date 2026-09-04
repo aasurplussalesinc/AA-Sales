@@ -1,3 +1,4 @@
+import { h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/library';
 import { OrgDB as DB } from '../orgDb';
@@ -509,7 +510,7 @@ export default function PickLists() {
     return bySku?.grade || '';
   };
 
-  const buildPickListPrintBody = (list) => `
+  const buildPickListPrintBody = (list) => h`
     <div class="pl-page">
       <div class="header">
         <div class="title">📋 PICK LIST: ${list.name}</div>
@@ -533,25 +534,25 @@ export default function PickLists() {
           </tr>
         </thead>
         <tbody>
-          ${list.items?.map((item, idx) => `
+          ${raw(list.items?.map((item, idx) => h`
             <tr>
               <td class="text-center">${idx + 1}</td>
               <td>
                 <strong>${item.itemName}</strong>
                 <div class="sku">${item.partNumber || ''}</div>
-                ${item.notes ? `<div style="font-size:9px;color:#795548;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : ''}
+                ${raw(item.notes ? h`<div style="font-size:9px;color:#795548;font-style:italic;margin-top:2px">📝 ${item.notes}</div>` : '')}
               </td>
               <td class="text-center col-grade"><strong>${gradeOf(item) || '-'}</strong></td>
               <td class="text-center col-loc"><strong>${item.location || '-'}</strong></td>
               <td class="text-center"><strong>${item.requestedQty}</strong></td>
-              <td class="text-center">${list.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>'}</td>
+              <td class="text-center">${raw(list.status === 'completed' ? item.pickedQty : '<div class="pick-box"></div>')}</td>
               <td class="text-center">${list.status === 'completed' ? (item.pickedQty >= item.requestedQty ? '✅' : '⚠️') : '☐'}</td>
             </tr>
-          `).join('') || ''}
+          `).join('') || '')}
         </tbody>
       </table>
 
-      ${list.notes ? `<div class="notes"><strong>Notes:</strong> ${list.notes}</div>` : ''}
+      ${raw(list.notes ? h`<div class="notes"><strong>Notes:</strong> ${list.notes}</div>` : '')}
 
       <div class="signature">
         <div class="signature-line">Picker Signature</div>
@@ -595,14 +596,14 @@ export default function PickLists() {
   const printPickList = (list) => {
     const printWindow = window.open('', '_blank');
     // Status color is per-list, but the existing single-print uses one status — keep that behavior here.
-    printWindow.document.write(`
+    printWindow.document.write(h`
       <html>
         <head>
           <title>Pick List - ${list.name}</title>
-          <style>${pickListPrintStyles(list)}</style>
+          <style>${raw(pickListPrintStyles(list))}</style>
         </head>
         <body>
-          ${buildPickListPrintBody(list)}
+          ${raw(buildPickListPrintBody(list))}
         </body>
       </html>
     `);
@@ -639,14 +640,14 @@ export default function PickLists() {
       alert('Print window was blocked. Please allow popups for this site and try again.');
       return;
     }
-    printWindow.document.write(`
+    printWindow.document.write(h`
       <html>
         <head>
           <title>Pick Lists (${lists.length})</title>
-          <style>${pickListPrintStyles(lists[0])}</style>
+          <style>${raw(pickListPrintStyles(lists[0]))}</style>
         </head>
         <body>
-          ${buildBulkBody(lists)}
+          ${raw(buildBulkBody(lists))}
         </body>
       </html>
     `);
@@ -933,7 +934,7 @@ export default function PickLists() {
     const estimatedWeight = calculateTriwallWeight(triwallId);
     const displayWeight = triwall.weight || estimatedWeight.toFixed(1);
     
-    const printContent = `<!DOCTYPE html>
+    const printContent = h`<!DOCTYPE html>
 <html><head><title>Shipping Label - ${order.poNumber}</title>
 <style>
   @page { size: landscape; margin: 0.5in; }
@@ -987,24 +988,24 @@ export default function PickLists() {
   <div class="from-section">
     <div class="label">FROM:</div>
     <div class="address">
-      ${[DB.brandingFrom(organization).name, ...DB.brandingFrom(organization).addressLines].filter(Boolean).join('<br>')}
+      ${raw([DB.brandingFrom(organization).name, ...DB.brandingFrom(organization).addressLines].filter(Boolean).map(esc).join('<br>'))}
     </div>
   </div>
   
   <div class="to-section">
     <div class="company">${(order.customerName || '').toUpperCase()}</div>
-    ${order.customerContact ? `<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : ''}
+    ${raw(order.customerContact ? h`<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : '')}
     <div class="address">
-      ${(order.customerAddress || '').toUpperCase().replace(/, /g, '<br>')}
+      ${raw(esc((order.customerAddress || '').toUpperCase()).replace(/, /g, '<br>'))}
     </div>
   </div>
   
   <div class="footer">
     <div>
       <div class="po-number">PO: ${order.poNumber}</div>
-      ${triwall.length && triwall.width && triwall.height ? 
-        `<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}" | ${displayWeight} lbs</div>` : 
-        (displayWeight ? `<div class="dimensions">Est. Weight: ${displayWeight} lbs</div>` : '')}
+      ${raw(triwall.length && triwall.width && triwall.height ? 
+        h`<div class="dimensions">${triwall.length}" x ${triwall.width}" x ${triwall.height}" | ${displayWeight} lbs</div>` : 
+        (displayWeight ? h`<div class="dimensions">Est. Weight: ${displayWeight} lbs</div>` : ''))}
     </div>
     <div class="box-count">${labelNumber} OF ${totalTriwalls}</div>
   </div>

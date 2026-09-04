@@ -1,3 +1,4 @@
+import { h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import QRCode from 'qrcode';
@@ -64,7 +65,7 @@ export default function CreateLocation() {
   const printQR = () => {
     const locationCode = getLocationCode();
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
+    printWindow.document.write(h`
       <html>
         <head>
           <title>QR Code - ${locationCode}</title>

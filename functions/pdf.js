@@ -20,8 +20,24 @@ var _browser = null;
 // is the expensive part, several seconds cold.
 async function getBrowser() {
   if (_browser && _browser.isConnected && _browser.isConnected()) return _browser;
+  // @sparticuz/chromium's default args include --disable-web-security,
+  // --disable-site-isolation-trials and --allow-running-insecure-content. Those
+  // are fine for rendering a static page in a browser you control, and very much
+  // not fine here: this process sits inside GCP, one fetch away from the
+  // metadata server and its service-account token. Strip them and keep the
+  // sandbox/perf flags.
+  var UNSAFE = [
+    '--disable-web-security',
+    '--disable-site-isolation-trials',
+    '--allow-running-insecure-content',
+    '--disable-features=IsolateOrigins,site-per-process'
+  ];
+  var safeArgs = (chromium.args || []).filter(function (a) {
+    return !UNSAFE.some(function (u) { return a === u || a.indexOf(u) === 0; });
+  });
+
   _browser = await puppeteer.launch({
-    args: chromium.args,
+    args: safeArgs,
     defaultViewport: { width: 1100, height: 1400 },
     executablePath: await chromium.executablePath(),
     headless: true
@@ -37,8 +53,19 @@ async function htmlToPdf(html) {
   var browser = await getBrowser();
   var page = await browser.newPage();
   try {
-    // No network fetches: the document is self-contained, and waiting on
-    // external resources is how this hangs until the function times out.
+    // Belt and braces: the document is self-contained, so nothing legitimate
+    // needs the network. Aborting every request means that even if a payload
+    // survives escaping, it has nowhere to send anything and nothing to fetch -
+    // including the metadata server. It also stops the render hanging on an
+    // external resource until the function times out.
+    await page.setJavaScriptEnabled(false);
+    await page.setRequestInterception(true);
+    page.on('request', function (req) {
+      var url = req.url();
+      if (url.indexOf('data:') === 0 || url.indexOf('about:') === 0) return req.continue();
+      return req.abort();
+    });
+
     await page.setContent(html, { waitUntil: 'load', timeout: 20000 });
     var buf = await page.pdf({
       format: 'Letter',

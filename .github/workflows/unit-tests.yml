@@ -1,0 +1,19 @@
+# Pure-logic tests that need no emulator and no Firebase project.
+name: Unit tests
+
+on:
+  push:
+    paths: ['src/**', 'tests/unit/**', '.github/workflows/unit-tests.yml']
+  pull_request:
+    paths: ['src/**', 'tests/unit/**', '.github/workflows/unit-tests.yml']
+  workflow_dispatch:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test tests/unit/*.test.mjs

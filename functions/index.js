@@ -884,9 +884,18 @@ exports.saveInsurance = functions.https.onCall(async function(data, context) {
   var orderId = data.orderId, orgId = data.orgId, insuranceAmount = data.insuranceAmount;
   if (!orderId || !orgId) throw new functions.https.HttpsError('invalid-argument', 'orderId and orgId required');
   await assertOrgMember(context, orgId, 'staff');
-  await assertOrderInOrg(orderId, orgId);
+  var existingOrder = await assertOrderInOrg(orderId, orgId);
   try {
     var updateObj = { insuranceAmount: parseFloat(insuranceAmount) || 0, updatedAt: Date.now() };
+    // Insurance is part of what the carrier quoted, and generateShippingLabel
+    // buys by rate id without re-rating - so a saved change has to take any
+    // unbought quote with it, or the label ships insured for the old amount.
+    // A purchased label is history and is left alone.
+    var priorLabel = existingOrder && existingOrder.shippingLabel;
+    if (priorLabel && !priorLabel.trackingNumber) {
+      updateObj.shippingLabel = null;
+      updateObj.shippingStatus = 'pending';
+    }
     // Save per-box insurance if provided
     if (data.boxInsurance && typeof data.boxInsurance === 'object') {
       var cleanBoxInsurance = {};

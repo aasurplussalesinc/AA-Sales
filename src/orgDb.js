@@ -1,4 +1,5 @@
 import { brandingFrom as sharedBrandingFrom, brandingHtml as sharedBrandingHtml } from '../functions/orderDocument.mjs';
+import { shouldClearShippingRates } from './parcelRates';
 import { collection, addDoc, getDocs, getDoc, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc, setDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
@@ -1807,10 +1808,35 @@ export const OrgDB = {
 
   async updatePurchaseOrder(poId, updates) {
     const ref = doc(db, 'purchaseOrders', poId);
+
+    // Re-measuring the boxes invalidates any shipping quote that has not been
+    // bought yet. generateShippingLabel purchases by rate id without re-rating,
+    // so leaving a stale quote on the order means the label goes out at the old
+    // size and weight and the carrier bills the difference. Dropping it here
+    // sends the order back to "pending" and forces a fresh Get Rates - the same
+    // thing the customer re-sync already does before it re-rates.
+    const extra = {};
+    try {
+      const snap = await getDoc(ref);
+      const before = snap.exists() ? snap.data() : null;
+      if (shouldClearShippingRates(before, updates)) {
+        extra.shippingLabel = null;
+        extra.shippingStatus = 'pending';
+      }
+    } catch (e) {
+      // A purchased label must never be wiped on a failed read, so leave the
+      // order alone and say so loudly rather than guessing either way.
+      console.error('Could not check for stale shipping rates on ' + poId, e);
+    }
+
     await updateDoc(ref, {
       ...updates,
+      ...extra,
       updatedAt: Date.now()
     });
+    if (extra.shippingLabel === null) {
+      await this.logActivity('SHIPPING_RATES_INVALIDATED', { poId, reason: 'packaging changed' });
+    }
     await this.logActivity('PO_UPDATED', { poId, updates });
   },
 

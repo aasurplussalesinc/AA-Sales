@@ -3,292 +3,342 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ═══════════════════════════════════════════════════════════
-    // HELPER FUNCTIONS
+    // HELPERS
+    //
+    // Role and membership both come from orgMembers/{orgId}_{uid}. That makes
+    // the write rules on THAT collection the foundation everything else rests
+    // on: if a user can mint their own membership document, every rule below
+    // is decorative. See the orgMembers block for why creates are constrained
+    // to three specific, verifiable paths.
     // ═══════════════════════════════════════════════════════════
-
-    // Is the user authenticated at all?
     function isAuthed() {
       return request.auth != null;
     }
-
-    // Get this user's membership doc for a given org
-    function membership(orgId) {
-      return get(/databases/$(database)/documents/orgMembers/$(orgId + '_' + request.auth.uid)).data;
+    function memberPath(orgId) {
+      return /databases/$(database)/documents/orgMembers/$(orgId + '_' + request.auth.uid);
     }
-
-    // Is the user a member of this org?
-    function isMember(orgId) {
-      return isAuthed() &&
-        exists(/databases/$(database)/documents/orgMembers/$(orgId + '_' + request.auth.uid));
+    function memberData(orgId) {
+      return get(memberPath(orgId)).data;
     }
-
-    // Is the user an admin of this org?
-    function isAdmin(orgId) {
-      return isMember(orgId) && membership(orgId).role == 'admin';
+    // Every permission check in this file funnels through here, so its cost is
+    // paid on every read the app does. Firestore bills each get()/exists() and
+    // caps a rule set evaluation at 10 of them, and the docs only promise that
+    // "some" repeated calls are cached - so this is deliberately three calls,
+    // not the four the previous shape needed.
+    //
+    // exists() first is what keeps the rest safe: off-boarding sets status to
+    // 'removed' rather than deleting the row (removeUserFromOrganization in
+    // orgDb.js), so an existence check alone would leave a former employee
+    // fully authorised, but reading a field off a document that isn't there is
+    // an error, and an error inside an || chain is not something to gamble a
+    // signup flow on. Defaults on the field reads cover rows written before
+    // status existed.
+    function hasRole(orgId, roles) {
+      return isAuthed()
+        && exists(memberPath(orgId))
+        && memberData(orgId).get('status', 'active') == 'active'
+        && memberData(orgId).get('role', 'staff') in roles;
     }
-
-    // Is the user an admin or manager of this org?
-    function isManager(orgId) {
-      return isMember(orgId) && membership(orgId).role in ['admin', 'manager'];
-    }
-
-    // Is the user any staff member (admin, manager, or staff)?
-    function isStaff(orgId) {
-      return isMember(orgId) && membership(orgId).role in ['admin', 'manager', 'staff'];
-    }
-
-    // Does the document belong to the user's org?
-    function belongsToOrg(orgId) {
-      return resource.data.orgId == orgId;
-    }
-
-    // Does the incoming write target the correct org?
-    function writingToOrg(orgId) {
-      return request.resource.data.orgId == orgId;
-    }
-
-    // Is this the owner org?
-    function isOwnerOrg(orgId) {
-      return orgId == 'aa-surplus-sales';
-    }
-
-    // Is the authenticated user a member of the owner org (a SkidSling admin)?
+    function isMember(orgId)  { return hasRole(orgId, ['admin', 'manager', 'staff']); }
+    function isStaff(orgId)   { return hasRole(orgId, ['admin', 'manager', 'staff']); }
+    function isManager(orgId) { return hasRole(orgId, ['admin', 'manager']); }
+    function isAdmin(orgId)   { return hasRole(orgId, ['admin']); }
+    // A SkidSling operator. Membership of the owner org is not enough on its
+    // own - it has to be an admin membership.
     function isOwnerUser() {
-      return isAuthed() &&
-        exists(/databases/$(database)/documents/orgMembers/$('aa-surplus-sales_' + request.auth.uid));
+      return isAdmin('aa-surplus-sales');
     }
-
+    // An update must not move a document into a different tenant. Creates
+    // already gate on the incoming orgId; without this, updates did not.
+    function staysInOrg() {
+      return request.resource.data.orgId == resource.data.orgId;
+    }
+    // The person who created an org is entitled to be its first admin.
+    function orgCreatedByCaller(orgId) {
+      return exists(/databases/$(database)/documents/organizations/$(orgId))
+        && get(/databases/$(database)/documents/organizations/$(orgId)).data.createdBy == request.auth.uid;
+    }
+    // A self-join must be backed by a real, active invite code for that org,
+    // and may only grant the role that code carries. Invite codes are stored
+    // with the code itself as the document id. The `code is string` guard is
+    // load-bearing twice over: it short-circuits before any document access
+    // when the field is absent, and callers pass a defaulted read so a missing
+    // field is '' rather than an error.
+    function inviteDoc(code) {
+      return get(/databases/$(database)/documents/inviteCodes/$(code)).data;
+    }
+    function inviteGrants(code, orgId, role) {
+      return code is string && code != ''
+        && exists(/databases/$(database)/documents/inviteCodes/$(code))
+        && inviteDoc(code).orgId == orgId
+        && inviteDoc(code).status == 'active'
+        && inviteDoc(code).role == role;
+    }
+    // The legacy invitation flow. OrgAuthContext.login() still auto-accepts
+    // pending invitations for the signed-in address on every login, so this
+    // path is live even though nothing in the UI creates invitations any more.
+    function invitationDoc(invId) {
+      return get(/databases/$(database)/documents/invitations/$(invId)).data;
+    }
+    function invitationGrants(invId, orgId, role) {
+      return invId is string && invId != ''
+        && exists(/databases/$(database)/documents/invitations/$(invId))
+        && invitationDoc(invId).orgId == orgId
+        && invitationDoc(invId).status == 'pending'
+        && invitationDoc(invId).role == role
+        && invitationDoc(invId).email == request.auth.token.email
+        && request.auth.token.email_verified == true;
+    }
 
     // ═══════════════════════════════════════════════════════════
     // ORGANIZATIONS
+    // Billing state is set by the Stripe webhook with the Admin SDK, which
+    // bypasses these rules. Clients must never be able to write it, or any
+    // tenant admin can grant themselves an enterprise plan forever.
     // ═══════════════════════════════════════════════════════════
-
+    function billingFieldsUntouched() {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+        'plan', 'status', 'trialEndsAt', 'trialExpiredAt', 'gracePeriodEndsAt',
+        'subscriptionId', 'customerId', 'stripeCustomerId', 'stripeSubscriptionId',
+        'subscriptionStartedAt', 'billingCycle', 'pendingDeletionAt', 'createdBy'
+      ]);
+    }
     match /organizations/{orgId} {
-      // Any member can read their org
-      allow read: if isAuthed() && (isMember(orgId) || isOwnerOrg(orgId) || isOwnerUser());
-
-      // Only admins can update org settings
-      allow update: if isAdmin(orgId);
-
-      // Only Cloud Functions / owner can create orgs (signup flow)
-      // We allow create from the client only during signup (no existing membership yet)
-      allow create: if isAuthed();
-
-      // Nobody deletes orgs from the client
+      allow read: if isAuthed() && (isMember(orgId) || isOwnerUser());
+      allow update: if isAdmin(orgId) && billingFieldsUntouched();
+      // Signup creates the org before any membership exists, so this cannot
+      // require membership - but it can require the caller to own what they
+      // create and to start on a trial like everyone else.
+      allow create: if isAuthed()
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.plan == 'trial';
       allow delete: if false;
     }
 
-
     // ═══════════════════════════════════════════════════════════
-    // ORG MEMBERS
+    // ORG MEMBERS — the foundation. Three legitimate ways a row appears:
+    //   1. an existing admin of that org adds someone
+    //   2. the person who just created the org becomes its first admin
+    //   3. someone self-joins using a live invite code, at that code's role
+    // Anything else is refused. The document id is pinned to orgId_userId so
+    // a row cannot be keyed to one org while claiming another.
     // ═══════════════════════════════════════════════════════════
-
     match /orgMembers/{memberId} {
-      // Members can read their own record; admins can read all members of their org; owner user reads all
       allow read: if isAuthed() && (
         resource.data.userId == request.auth.uid ||
         isAdmin(resource.data.orgId) ||
         isOwnerUser()
       );
-
-      // Admins can create/update membership (invite flow, role changes)
-      allow create: if isAuthed() && (
-        // Self-join via invite code (userId must match auth)
-        request.resource.data.userId == request.auth.uid ||
-        // Admin adding a member
-        isAdmin(request.resource.data.orgId)
-      );
-
-      allow update: if isAdmin(resource.data.orgId);
-
-      // Admins can remove members; users can remove themselves
+      allow create: if isAuthed()
+        && memberId == request.resource.data.orgId + '_' + request.resource.data.userId
+        && request.resource.data.status == 'active'
+        && request.resource.data.role in ['admin', 'manager', 'staff']
+        && (
+          isAdmin(request.resource.data.orgId)
+          || (request.resource.data.userId == request.auth.uid && (
+                (request.resource.data.role == 'admin'
+                  && orgCreatedByCaller(request.resource.data.orgId))
+                || inviteGrants(request.resource.data.get('inviteCode', ''),
+                                request.resource.data.orgId,
+                                request.resource.data.role)
+                || invitationGrants(request.resource.data.get('invitationId', ''),
+                                    request.resource.data.orgId,
+                                    request.resource.data.role)
+             ))
+        );
+      // Role changes stay an admin action, and identity is immutable.
+      allow update: if isAdmin(resource.data.orgId)
+        && request.resource.data.orgId == resource.data.orgId
+        && request.resource.data.userId == resource.data.userId;
       allow delete: if isAuthed() && (
         resource.data.userId == request.auth.uid ||
         isAdmin(resource.data.orgId)
       );
     }
 
-
     // ═══════════════════════════════════════════════════════════
     // INVITE CODES
+    // `get` is allowed so a joiner can validate the code they were given.
+    // `list` is not: it would hand any signed-in user every code, every org
+    // name and every granted role across the whole platform.
     // ═══════════════════════════════════════════════════════════
-
     match /inviteCodes/{code} {
-      // Anyone authenticated can read (to validate a code on join)
-      allow read: if isAuthed();
-
-      // Only admins of the org can create invite codes
+      allow get: if isAuthed();
+      allow list: if isAdmin(resource.data.orgId);
       allow create: if isAdmin(request.resource.data.orgId);
-
-      // Only the org admin or the join flow (incrementing uses) can update
       allow update: if isAuthed() && (
         isAdmin(resource.data.orgId) ||
-        // Allow use count increment during join (only uses and status fields change)
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses', 'status'])
+        // Redeeming a code: only the use counter moves, only upward, only
+        // while the code is live, and only by one.
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses', 'status', 'updatedAt'])
+          && resource.data.status == 'active'
+          && request.resource.data.uses == resource.data.uses + 1
+          && request.resource.data.orgId == resource.data.orgId
+          && request.resource.data.role == resource.data.role)
       );
-
-      // Only admins can revoke/delete
       allow delete: if isAdmin(resource.data.orgId);
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // INVITATIONS
     // ═══════════════════════════════════════════════════════════
-
     match /invitations/{invId} {
       allow read: if isAuthed() && (
-        resource.data.invitedEmail == request.auth.token.email ||
+        (resource.data.invitedEmail == request.auth.token.email
+          && request.auth.token.email_verified == true) ||
         isAdmin(resource.data.orgId)
       );
       allow create: if isAdmin(request.resource.data.orgId);
       allow update, delete: if isAdmin(resource.data.orgId);
     }
 
-
     // ═══════════════════════════════════════════════════════════
     // INVENTORY ITEMS
     // ═══════════════════════════════════════════════════════════
-
     match /items/{itemId} {
       allow read: if isStaff(resource.data.orgId);
       allow create: if isManager(request.resource.data.orgId);
-      allow update: if isManager(resource.data.orgId);
+      allow update: if isManager(resource.data.orgId) && staysInOrg();
       allow delete: if isAdmin(resource.data.orgId);
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // LOCATIONS
     // ═══════════════════════════════════════════════════════════
-
     match /locations/{locId} {
       allow read: if isStaff(resource.data.orgId);
       allow create: if isManager(request.resource.data.orgId);
-      allow update: if isManager(resource.data.orgId);
+      allow update: if isManager(resource.data.orgId) && staysInOrg();
       allow delete: if isAdmin(resource.data.orgId);
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // PURCHASE ORDERS
     // ═══════════════════════════════════════════════════════════
-
     match /purchaseOrders/{poId} {
       allow read: if isStaff(resource.data.orgId);
-      // Staff can create orders, managers/admins can update/delete
       allow create: if isStaff(request.resource.data.orgId);
-      allow update: if isStaff(resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId) && staysInOrg();
       allow delete: if isManager(resource.data.orgId);
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // PICK LISTS
     // ═══════════════════════════════════════════════════════════
-
     match /pickLists/{listId} {
       allow read: if isStaff(resource.data.orgId);
       allow create: if isStaff(request.resource.data.orgId);
-      allow update: if isStaff(resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId) && staysInOrg();
       allow delete: if isManager(resource.data.orgId);
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // CUSTOMERS
     // ═══════════════════════════════════════════════════════════
-
     match /customers/{custId} {
       allow read: if isStaff(resource.data.orgId);
       allow create: if isStaff(request.resource.data.orgId);
-      allow update: if isStaff(resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId) && staysInOrg();
       allow delete: if isManager(resource.data.orgId);
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // CONTRACTS
     // ═══════════════════════════════════════════════════════════
-
     match /contracts/{contractId} {
       allow read: if isStaff(resource.data.orgId);
       allow create: if isManager(request.resource.data.orgId);
-      allow update: if isManager(resource.data.orgId);
+      allow update: if isManager(resource.data.orgId) && staysInOrg();
       allow delete: if isAdmin(resource.data.orgId);
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // RECEIVINGS
     // ═══════════════════════════════════════════════════════════
-
     match /receivings/{recId} {
       allow read: if isStaff(resource.data.orgId);
       allow create: if isStaff(request.resource.data.orgId);
-      allow update: if isStaff(resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId) && staysInOrg();
       allow delete: if isManager(resource.data.orgId);
     }
 
-
     // ═══════════════════════════════════════════════════════════
-    // MOVEMENTS
+    // MOVEMENTS — append only, immutable audit trail
     // ═══════════════════════════════════════════════════════════
-
     match /movements/{movId} {
       allow read: if isStaff(resource.data.orgId);
-      // Movements are created by the system — staff can create
       allow create: if isStaff(request.resource.data.orgId);
-      // Movements are immutable — no updates or deletes
       allow update, delete: if false;
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // EXPENSES (receipts, bills, employee pay)
+    // Manager+ only — these records can expose payroll and account numbers,
+    // so ordinary staff are deliberately excluded.
+    // ═══════════════════════════════════════════════════════════
+    match /expenses/{expenseId} {
+      allow read: if isManager(resource.data.orgId);
+      allow create: if isManager(request.resource.data.orgId);
+      allow update: if isManager(resource.data.orgId) && staysInOrg();
+      allow delete: if isAdmin(resource.data.orgId);
+    }
 
     // ═══════════════════════════════════════════════════════════
-    // ACTIVITY LOG
+    // API KEYS (external agent access)
+    // Only the SHA-256 hash of a key is stored, so a read cannot be replayed.
+    // Updates are restricted to revoking: without that constraint an admin
+    // could flip a read-only key to write, or un-revoke a key that had been
+    // withdrawn from a departing agent.
+    //
+    // The API itself runs in Cloud Functions with the Admin SDK and bypasses
+    // these rules entirely; its security comes from key hashing and per-request
+    // org scoping. These rules govern only the in-app management screen.
     // ═══════════════════════════════════════════════════════════
+    match /apiKeys/{keyId} {
+      allow read: if isAdmin(resource.data.orgId);
+      allow create: if isAdmin(request.resource.data.orgId)
+        && request.resource.data.revoked == false
+        && request.resource.data.scope in ['read', 'write'];
+      allow update: if isAdmin(resource.data.orgId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revoked', 'revokedAt', 'updatedAt'])
+        && request.resource.data.revoked == true;
+      allow delete: if false;
+    }
 
+    // ═══════════════════════════════════════════════════════════
+    // ACTIVITY LOG — append only
+    // ═══════════════════════════════════════════════════════════
     match /activityLog/{logId} {
-      // Only managers and above can read activity log; owner user reads all
       allow read: if isManager(resource.data.orgId) || isOwnerUser();
-      // System writes only — staff can create log entries
       allow create: if isStaff(request.resource.data.orgId);
-      // Logs are immutable
       allow update, delete: if false;
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // COUNTS (inventory count sessions)
     // ═══════════════════════════════════════════════════════════
-
     match /counts/{countId} {
       allow read: if isStaff(resource.data.orgId);
       allow create: if isStaff(request.resource.data.orgId);
-      allow update: if isStaff(resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId) && staysInOrg();
       allow delete: if isManager(resource.data.orgId);
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // QUICK SALES
     // ═══════════════════════════════════════════════════════════
-
     match /quickSales/{saleId} {
       allow read: if isStaff(resource.data.orgId);
       allow create: if isStaff(request.resource.data.orgId);
-      allow update: if isStaff(resource.data.orgId);
+      allow update: if isStaff(resource.data.orgId) && staysInOrg();
       allow delete: if isManager(resource.data.orgId);
     }
-
 
     // ═══════════════════════════════════════════════════════════
     // CATCH-ALL — deny everything not explicitly allowed
     // ═══════════════════════════════════════════════════════════
-
     match /{document=**} {
       allow read, write: if false;
     }
-
   }
 }

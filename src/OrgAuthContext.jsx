@@ -154,8 +154,13 @@ export function AuthProvider({ children }) {
     } catch (e) { /* non-critical */ }
     await loadUserOrganizations(result.user.uid);
     
-    // Check for pending invitations
-    const invitations = await OrgDB.getInvitationsByEmail(email);
+    // Check for pending invitations. An unverified address proves nothing about
+    // who owns it, so the security rules refuse to redeem an invitation for one;
+    // skipping the lookup here keeps that from firing a permission error on
+    // every login instead of silently doing nothing.
+    const invitations = result.user.emailVerified
+      ? await OrgDB.getInvitationsByEmail(email)
+      : [];
     if (invitations.length > 0) {
       // Auto-accept invitations
       for (const inv of invitations) {

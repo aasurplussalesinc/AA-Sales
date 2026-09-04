@@ -147,7 +147,13 @@ export const OrgDB = {
   
   // ==================== USER-ORGANIZATION LINKING ====================
   
-  async addUserToOrganization(userId, orgId, role = 'staff', email = '') {
+  // `provenance` is how the security rules verify a self-join. A user creating
+  // their own membership row has to show why they are entitled to it: either an
+  // invite code ({ inviteCode }) or a pending invitation ({ invitationId }).
+  // Rows written by an existing admin, or by the person who just created the
+  // org, need nothing extra - the rules can already verify both from the
+  // document id and the organization record.
+  async addUserToOrganization(userId, orgId, role = 'staff', email = '', provenance = {}) {
     const memberDoc = {
       userId: userId,
       orgId: orgId,
@@ -157,6 +163,8 @@ export const OrgDB = {
       joinedAt: Date.now(),
       updatedAt: Date.now()
     };
+    if (provenance && provenance.inviteCode) memberDoc.inviteCode = provenance.inviteCode;
+    if (provenance && provenance.invitationId) memberDoc.invitationId = provenance.invitationId;
     
     // Use composite ID for easy lookup
     const memberId = `${orgId}_${userId}`;
@@ -331,7 +339,7 @@ export const OrgDB = {
     const inviteCode = validation.inviteCode;
     
     // Add user to organization
-    await this.addUserToOrganization(userId, inviteCode.orgId, inviteCode.role, userEmail);
+    await this.addUserToOrganization(userId, inviteCode.orgId, inviteCode.role, userEmail, { inviteCode: upperCode });
     
     // Increment uses
     const ref = doc(db, 'inviteCodes', upperCode);
@@ -425,7 +433,7 @@ export const OrgDB = {
     const invitation = docSnap.data();
     
     // Add user to organization
-    await this.addUserToOrganization(userId, invitation.orgId, invitation.role, invitation.email);
+    await this.addUserToOrganization(userId, invitation.orgId, invitation.role, invitation.email, { invitationId: invitationId });
     
     // Mark invitation as accepted
     await updateDoc(ref, { status: 'accepted', acceptedAt: Date.now() });

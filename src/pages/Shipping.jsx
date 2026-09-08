@@ -295,6 +295,22 @@ export default function Shipping() {
     setSavingPhone(false);
   };
 
+  // Buying a rate billed to AA on an order whose customer gave us a working
+  // carrier account means we pay their freight. There are legitimate reasons to
+  // do that, so this asks rather than blocks - but silently is the one way it
+  // should not happen.
+  const confirmBilling = (order, rate) => {
+    const customerRatesExist = (order.shippingLabel?.rates || []).some(r => r.billedTo === 'Customer');
+    if (!customerRatesExist || rate.billedTo === 'Customer') return true;
+    const acct = order.thirdPartyBilling?.account ? ` (${order.thirdPartyBilling.account})` : '';
+    return window.confirm(
+      `This rate bills to your AA account.\n\n` +
+      `${order.customerName || 'This customer'} has a working carrier account${acct} on this order, ` +
+      `and rates billed to them came back too.\n\n` +
+      `Buy the AA-billed rate anyway?`
+    );
+  };
+
   // Purchase a specific rate
   const purchaseRate = async (orderId, rateId) => {
     setProcessing(prev => ({ ...prev, [orderId]: true }));
@@ -2078,7 +2094,7 @@ export default function Shipping() {
                               </td>
                               <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                                 <button
-                                  onClick={() => withShipToPhone(order, () => purchaseRate(order.id, rate.rateId))}
+                                  onClick={() => { if (!confirmBilling(order, rate)) return; withShipToPhone(order, () => purchaseRate(order.id, rate.rateId)); }}
                                   disabled={processing[order.id]}
                                   style={{
                                     padding: '6px 16px', background: '#4CAF50', color: 'var(--text-on-dark)',
@@ -2135,7 +2151,7 @@ export default function Shipping() {
                             </div>
                           )}
                           <button
-                            onClick={() => withShipToPhone(order, () => purchaseRate(order.id, rate.rateId))}
+                            onClick={() => { if (!confirmBilling(order, rate)) return; withShipToPhone(order, () => purchaseRate(order.id, rate.rateId)); }}
                             disabled={processing[order.id]}
                             style={{
                               marginTop: 10, padding: '6px 14px', background: '#4CAF50', color: 'var(--text-on-dark)',

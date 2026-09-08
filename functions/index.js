@@ -38,6 +38,7 @@ function checkRateLimit(key, maxCalls, windowMs) {
 // "may this caller act on this org", and so it can be unit tested.
 var AUTHZ = require('./authz')({ functions: functions, db: db });
 var shipToPhoneFallback = require('./shipTo')({ db: db }).shipToPhoneFallback;
+var chooseRate = require('./rateChoice').chooseRate;
 
 // Cloud Logging is retained, searchable, and readable by anyone with project
 // access - so it is the wrong place for a customer's street address or a
@@ -508,15 +509,11 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   // Sort all rates by price
   allRates.sort(function(a, b) { return parseFloat(a.amount) - parseFloat(b.amount); });
 
+  // Who pays for the freight is decided here - see functions/rateChoice.js.
   var preferredCarrier = orgSettings.preferredCarrier || 'ups';
-  var selectedRate = null;
-
-  if (allRates.length > 0) {
-    var carrierRates = allRates.filter(function(r) { return r.provider.toLowerCase().indexOf(preferredCarrier.toLowerCase()) >= 0; });
-    if (carrierRates.length > 0) {
-      selectedRate = carrierRates[0]; // already sorted cheapest first
-    }
-    if (!selectedRate) selectedRate = allRates[0];
+  var selectedRate = chooseRate(allRates, preferredCarrier);
+  if (selectedRate && selectedRate.billedTo === 'Customer') {
+    console.log('Selected a rate billed to the customer account');
   }
 
   // If auto-purchase is on but rating produced nothing, fail with a clear reason
@@ -752,9 +749,20 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
         console.warn('Could not fetch purchased rate details:', rateErr.message);
       }
 
-      var newSelectedRate = order.shippingLabel && order.shippingLabel.selectedRate ? order.shippingLabel.selectedRate : {};
+      // Which account gets invoiced is fixed when the rate is created, and Shippo
+      // does not return it with the purchased rate - so carry it across from the
+      // rate we quoted. Without this, billedTo is dropped at the moment of
+      // purchase and the order can never say afterwards whether the freight went
+      // on the customer's account or ours.
+      var quotedRate = ((order.shippingLabel && order.shippingLabel.rates) || []).filter(function (r) {
+        return r.rateId === rateId || r.object_id === rateId;
+      })[0] || null;
+
+      var newSelectedRate = quotedRate
+        ? Object.assign({}, quotedRate)
+        : (order.shippingLabel && order.shippingLabel.selectedRate ? order.shippingLabel.selectedRate : {});
       if (purchasedRate) {
-        newSelectedRate = {
+        newSelectedRate = Object.assign({}, newSelectedRate, {
           object_id: purchasedRate.object_id,
           provider: purchasedRate.provider,
           servicelevel: purchasedRate.servicelevel,
@@ -763,8 +771,9 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
           currency: purchasedRate.currency,
           estimatedDays: purchasedRate.estimated_days,
           durationTerms: purchasedRate.duration_terms,
-        };
+        });
       }
+      console.log('Label billed to: ' + (newSelectedRate.billedTo || 'AA (unknown - rate not found on the order)'));
 
       var result = Object.assign({}, order.shippingLabel || {}, {
         labelUrl: transaction.label_url, trackingNumber: transaction.tracking_number,

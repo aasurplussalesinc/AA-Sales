@@ -311,6 +311,15 @@ export default function Shipping() {
     );
   };
 
+  // The rate carries a token, not something to show a human. 'native' is legacy
+  // and was wrong besides: no insurance provider is ever named on the parcel, so
+  // the cover is Shippo's own (XCover), not the carrier's declared value.
+  const insuranceLabel = (token) => {
+    if (token === 'shippo' || token === 'native') return 'Shippo insurance';
+    if (!token || token === 'none') return '';
+    return token;
+  };
+
   // Purchase a specific rate
   const purchaseRate = async (orderId, rateId) => {
     setProcessing(prev => ({ ...prev, [orderId]: true }));
@@ -2086,9 +2095,8 @@ export default function Shipping() {
                                   }
                                   {rate.insuranceProvider && rate.insuranceProvider !== 'none' && (
                                     <span style={{ padding: '2px 7px', borderRadius: 8, fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap',
-                                      background: rate.insuranceProvider === 'UPS' ? '#fff3e0' : '#e8f5e9',
-                                      color: rate.insuranceProvider === 'UPS' ? '#e65100' : '#2e7d32'
-                                    }}>🛡️ {rate.insuranceProvider}</span>
+                                      background: '#e8f5e9', color: '#2e7d32'
+                                    }}>🛡️ {insuranceLabel(rate.insuranceProvider)}</span>
                                   )}
                                 </div>
                               </td>
@@ -2140,9 +2148,8 @@ export default function Shipping() {
                             }
                             {rate.insuranceProvider && rate.insuranceProvider !== 'none' && (
                               <span style={{ padding: '2px 7px', borderRadius: 8, fontSize: 10, fontWeight: 600,
-                                background: rate.insuranceProvider === 'UPS' ? '#fff3e0' : '#e8f5e9',
-                                color: rate.insuranceProvider === 'UPS' ? '#e65100' : '#2e7d32'
-                              }}>🛡️ {rate.insuranceProvider}</span>
+                                background: '#e8f5e9', color: '#2e7d32'
+                              }}>🛡️ {insuranceLabel(rate.insuranceProvider)}</span>
                             )}
                           </div>
                           {rate.estimatedDays && (

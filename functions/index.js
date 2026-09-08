@@ -293,6 +293,9 @@ function formatParcelsFromOrder(order, insuranceAmount, insuranceProvider) {
   // insurance is left carrier-agnostic and every carrier can quote.
   var boxInsurance = order.boxInsurance || {};
   var hasPerBoxInsurance = Object.keys(boxInsurance).length > 0;
+  // No provider is named, so this is Shippo's own insurance (XCover), NOT the
+  // carrier's native declared-value coverage. Naming a provider (UPS) made
+  // non-UPS carriers decline the whole shipment, which is why it is left off.
   var insuranceObj = function(amt) {
     var ins = { amount: String(amt), currency: 'USD' };
     if (insuranceProvider) ins.provider = insuranceProvider;
@@ -443,7 +446,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   // the entire shipment.
   var parcelsAA = formatParcelsFromOrder(order, insuranceAmount, null);
   var shipmentAA = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAA, customsDeclarationId, null, carrierAccountIds);
-  var allRates = mapRates(shipmentAA, 'AA', hasInsurance ? 'native' : 'none');
+  var allRates = mapRates(shipmentAA, 'AA', hasInsurance ? 'shippo' : 'none');
 
   console.log('=== SHIPPO RATES (AA account) ===');
   console.log('Shipment ID:', shipmentAA.object_id);
@@ -482,7 +485,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     try {
       var parcelsCustomer = formatParcelsFromOrder(order, insuranceAmount, null);
       var shipmentCustomer = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustomer, customsDeclarationId, customerBilling, carrierAccountIds);
-      var custRates = mapRates(shipmentCustomer, 'Customer', hasInsurance ? 'native' : 'none');
+      var custRates = mapRates(shipmentCustomer, 'Customer', hasInsurance ? 'shippo' : 'none');
       billing.customerRateCount += custRates.length;
       allRates = allRates.concat(custRates);
       // Capture any carrier message that explains a decline (account not authorized, etc.)

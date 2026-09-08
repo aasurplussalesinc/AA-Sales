@@ -39,6 +39,7 @@ function checkRateLimit(key, maxCalls, windowMs) {
 var AUTHZ = require('./authz')({ functions: functions, db: db });
 var shipToPhoneFallback = require('./shipTo')({ db: db }).shipToPhoneFallback;
 var chooseRate = require('./rateChoice').chooseRate;
+var shippingChargeUpdate = require('./shippingCharge').shippingChargeUpdate;
 
 // Cloud Logging is retained, searchable, and readable by anyone with project
 // access - so it is the wrong place for a customer's street address or a
@@ -698,34 +699,6 @@ exports.checkPackedOrdersScheduled = functions.pubsub.schedule('every 1 hours').
 // CALLABLE FUNCTIONS
 // Compute the customer-facing shipping charge from the real carrier cost plus the
 // org's markup (percent and/or flat). Returns a number rounded to cents.
-function customerShippingCharge(realCost, orgData) {
-  var cost = parseFloat(realCost) || 0;
-  var m = (orgData && orgData.shippingMarkup) || {};
-  var pct = parseFloat(m.percent) || 0;
-  var flat = parseFloat(m.flat) || 0;
-  var charge = cost * (1 + pct / 100) + flat;
-  if (m.roundUp) charge = Math.ceil(charge);
-  return Math.round(charge * 100) / 100;
-}
-
-// Given the order and the just-purchased shippingLabel, produce the fields to write
-// so the invoice's shipping line reflects cost + markup — while RESPECTING a shipping
-// amount a user typed manually (never silently overwrite it).
-function shippingChargeUpdate(order, shippingLabel, orgData) {
-  var rate = shippingLabel && shippingLabel.selectedRate;
-  var realCost = rate ? parseFloat(rate.amount) : NaN;
-  if (!isFinite(realCost) || realCost <= 0) return {};
-  var charge = customerShippingCharge(realCost, orgData);
-  var update = { shippingCost: realCost, shippingChargeAuto: charge };
-  // Respect a manual override: only auto-fill the shipping line when the user
-  // hasn't set one themselves (or when a prior auto value is being refreshed).
-  var manual = parseFloat(order.shipping);
-  var manuallySet = order.shippingManual === true;
-  var priorAuto = parseFloat(order.shippingChargeAuto);
-  var canWrite = !manuallySet && (!(manual > 0) || (isFinite(priorAuto) && Math.abs(manual - priorAuto) < 0.005));
-  if (canWrite) update.shipping = charge;
-  return update;
-}
 
 exports.generateShippingLabel = functions.https.onCall(async function(data, context) {
   if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');

@@ -395,6 +395,10 @@ async function processPackedOrder(apiKey, order, orgSettings) {
 
   // Fetch active carrier accounts - prefer user's own accounts over Shippo accounts
   var carrierAccountIds = [];
+  // Which carriers we actually put the question to. Without this, a carrier that
+  // returns neither a rate nor a message is indistinguishable from one that was
+  // never asked - and those two have completely different fixes.
+  var carriersAsked = [];
   try {
     var carriers = await shippoRequest(apiKey, '/carrier_accounts/?results=50', 'GET');
     var activeAccounts = (carriers.results || []).filter(function(c) { return c.active; });
@@ -409,13 +413,15 @@ async function processPackedOrder(apiKey, order, orgSettings) {
       if (!c.is_shippo_account) userOwnCarriers[c.carrier] = true;
     });
     
-    carrierAccountIds = activeAccounts.filter(function(c) {
+    var accountsUsed = activeAccounts.filter(function(c) {
       if (c.is_shippo_account && userOwnCarriers[c.carrier]) {
         console.log('  Excluding Shippo account for ' + c.carrier + ' (user has own account)');
         return false;
       }
       return true;
-    }).map(function(c) { return c.object_id; });
+    });
+    carrierAccountIds = accountsUsed.map(function(c) { return c.object_id; });
+    carriersAsked = accountsUsed.map(function(c) { return c.carrier; }).filter(function(v, i, a) { return a.indexOf(v) === i; });
     
     console.log('Using ' + carrierAccountIds.length + ' carrier accounts for rate request');
   } catch (e) {
@@ -534,6 +540,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     parcels: parcelsAA.length, toAddress: toAddressRaw, createdAt: Date.now(),
     insuranceAmount: insuranceFallbackUsed ? 0 : insuranceAmount,
     insuranceFallbackUsed: insuranceFallbackUsed,
+    carriersAsked: carriersAsked,
     shippoMessages: (shipmentAA.messages || []).map(function(m) { return m.text || JSON.stringify(m); }),
     billing: billing,
   };

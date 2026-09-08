@@ -1922,27 +1922,71 @@ export default function Shipping() {
                   </div>
                 )}
 
-                {/* Shippo returns a message per carrier that declined, even when others
-                    quoted - but until now those were only shown when NO rates came back at
-                    all. That is exactly the case where you cannot tell why DHL or USPS are
-                    missing from a list that has UPS in it. */}
-                {(order.shippingLabel?.shippoMessages || []).length > 0 && (
-                  <details style={{
-                    marginBottom: 12, background: 'var(--bg-surface)', border: '1px solid var(--border)',
-                    borderRadius: 8, padding: '8px 12px'
-                  }}>
-                    <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>
-                      Why only {carriers.length} carrier{carriers.length !== 1 ? 's' : ''} quoted
-                      {' — '}{order.shippingLabel.shippoMessages.length} carrier message{order.shippingLabel.shippoMessages.length !== 1 ? 's' : ''}
-                    </summary>
-                    <ul style={{ margin: '8px 0 6px 18px', fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.6 }}>
-                      {order.shippingLabel.shippoMessages.slice(0, 8).map((m, i) => <li key={i}>{m}</li>)}
-                    </ul>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                      A carrier that is missing entirely, with no message, usually has no account connected in Shippo.
-                    </div>
-                  </details>
-                )}
+                {/* A carrier can be absent for two completely different reasons: it was
+                    asked and declined, or it was never asked at all. Those have different
+                    fixes, so show both - which carriers the question went to, which came
+                    back, and what the silent ones said. */}
+                {(() => {
+                  const asked = order.shippingLabel?.carriersAsked || [];
+                  const msgs = order.shippingLabel?.shippoMessages || [];
+                  if (asked.length === 0 && msgs.length === 0) return null;
+                  const quotedLower = carriers.map(c => String(c).toLowerCase());
+                  const silent = asked.filter(a => !quotedLower.some(q => q.includes(String(a).toLowerCase()) || String(a).toLowerCase().includes(q)));
+                  return (
+                    <details style={{
+                      marginBottom: 12, background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                      borderRadius: 8, padding: '8px 12px'
+                    }}>
+                      <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>
+                        {carriers.length} of {asked.length || carriers.length} carrier{(asked.length || carriers.length) !== 1 ? 's' : ''} quoted
+                        {silent.length > 0 ? ` — no rates from ${silent.join(', ')}` : ''}
+                      </summary>
+                      {asked.length > 0 && (
+                        <div style={{ margin: '8px 0 6px', fontSize: 12, color: 'var(--text-primary)' }}>
+                          <div><strong>Asked:</strong> {asked.join(', ')}</div>
+                          <div><strong>Quoted:</strong> {carriers.length ? carriers.join(', ') : 'none'}</div>
+                        </div>
+                      )}
+                      {msgs.length > 0 ? (
+                        <ul style={{ margin: '6px 0 6px 18px', fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                          {msgs.slice(0, 8).map((m, i) => <li key={i}>{m}</li>)}
+                        </ul>
+                      ) : (
+                        <div style={{ margin: '6px 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                          The carriers that didn't quote gave no reason at all.
+                        </div>
+                      )}
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                        A carrier can decline for the shipment itself — over its weight or size limit, outside
+                        its service area, or a service it doesn't sell (a regional carrier on a cross-country
+                        run, an international account on a domestic one). Insurance is the other common cause.
+                      </div>
+                      {((order.insuranceAmount || 0) > 0 || Object.keys(order.boxInsurance || {}).length > 0) && silent.length > 0 && (
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(
+                              `This clears the insurance saved on ${order.poNumber} and re-rates without it, ` +
+                              `to see whether ${silent.join(', ')} quote${silent.length === 1 ? 's' : ''} then.\n\n` +
+                              `You'll need to set the insurance again afterwards if you want it.`
+                            )) return;
+                            try {
+                              const saveFn = httpsCallable(functions, 'saveInsurance');
+                              await saveFn({ orderId: order.id, orgId: organization.id, insuranceAmount: 0, boxInsurance: {} });
+                              await getRates(order.id);
+                              setShowRates(null);
+                            } catch (e) { setError('Could not re-rate without insurance: ' + e.message); }
+                          }}
+                          style={{
+                            marginTop: 8, padding: '6px 12px', background: 'transparent', color: 'var(--text-primary)',
+                            border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12
+                          }}
+                        >
+                          🛡️ Re-rate without insurance to test
+                        </button>
+                      )}
+                    </details>
+                  );
+                })()}
 
                 {/* Quick Stats */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 15, flexWrap: 'wrap' }}>

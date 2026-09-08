@@ -287,7 +287,9 @@ function formatParcelsFromOrder(order, insuranceAmount, insuranceProvider) {
   }
   
   // Apply insurance per-box if available, otherwise split evenly
-  // insuranceProvider: 'UPS' for UPS native, undefined/null for XCover default
+  // insuranceProvider names the insurer on the parcel. Every caller passes null:
+  // naming a provider (UPS) made non-UPS carriers decline the whole shipment, so
+  // insurance is left carrier-agnostic and every carrier can quote.
   var boxInsurance = order.boxInsurance || {};
   var hasPerBoxInsurance = Object.keys(boxInsurance).length > 0;
   var insuranceObj = function(amt) {
@@ -438,43 +440,17 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   // Carrier-agnostic insurance (no forced UPS provider) so every carrier — UPS, FedEx, USPS,
   // DHL — can quote. Forcing UPS-provider insurance previously made non-UPS carriers decline
   // the entire shipment.
-  var parcelsUPS = formatParcelsFromOrder(order, insuranceAmount, null);
-  var shipmentAAUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsUPS, customsDeclarationId, null, carrierAccountIds);
-  var allRates = mapRates(shipmentAAUPS, 'AA', hasInsurance ? 'native' : 'none');
+  var parcelsAA = formatParcelsFromOrder(order, insuranceAmount, null);
+  var shipmentAA = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAA, customsDeclarationId, null, carrierAccountIds);
+  var allRates = mapRates(shipmentAA, 'AA', hasInsurance ? 'native' : 'none');
 
-  console.log('=== SHIPPO DEBUG (AA Account / UPS Insurance) ===');
-  console.log('Shipment ID:', shipmentAAUPS.object_id);
-  console.log('Total rates returned:', (shipmentAAUPS.rates || []).length);
-  console.log('Shipment messages:', JSON.stringify(shipmentAAUPS.messages || []));
+  console.log('=== SHIPPO RATES (AA account) ===');
+  console.log('Shipment ID:', shipmentAA.object_id);
+  console.log('Total rates returned:', (shipmentAA.rates || []).length);
+  console.log('Carrier messages:', JSON.stringify(shipmentAA.messages || []));
   console.log('Insurance amount used:', insuranceAmount);
-  console.log('Parcels sent:', JSON.stringify(parcelsUPS));
+  console.log('Parcels sent:', JSON.stringify(parcelsAA));
   console.log('=== END DEBUG ===');
-
-  // ── SAFETY-NET CALL: the primary call above already uses carrier-agnostic insurance, so all
-  // carriers should quote there. This second provider-agnostic pass catches any carrier that was
-  // missed and merges in providers not already present. Usually redundant now, but harmless.
-  try {
-    var parcelsAgnostic = formatParcelsFromOrder(order, hasInsurance ? insuranceAmount : 0, null);
-    var shipmentAgnostic = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAgnostic, customsDeclarationId, null, carrierAccountIds);
-    var agnosticRates = mapRates(shipmentAgnostic, 'AA', hasInsurance ? 'native' : 'none');
-
-    console.log('=== SHIPPO DEBUG (AA Account / Carrier-Native Insurance) ===');
-    console.log('Total rates returned:', (shipmentAgnostic.rates || []).length);
-    console.log('=== END DEBUG ===');
-
-    // Add any rates from carriers we don't already have (USPS, FedEx, DHL, etc.)
-    var existingProviders = {};
-    allRates.forEach(function(r) {
-      var key = (r.provider || '') + '|' + (typeof r.servicelevel === 'object' ? (r.servicelevel.token || r.servicelevel.name) : r.servicelevel) + '|' + r.billedTo;
-      existingProviders[key] = true;
-    });
-    agnosticRates.forEach(function(r) {
-      var key = (r.provider || '') + '|' + (typeof r.servicelevel === 'object' ? (r.servicelevel.token || r.servicelevel.name) : r.servicelevel) + '|' + r.billedTo;
-      if (!existingProviders[key]) allRates.push(r);
-    });
-  } catch (e) {
-    console.log('Agnostic-insurance shipment failed (non-critical):', e.message);
-  }
 
   // FALLBACK: if insurance is set but no rates returned, retry without insurance
   // This commonly happens when insurance amount exceeds carrier max or causes Shippo validation errors
@@ -497,59 +473,29 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     }
   }
 
-  // AA Account + XCover insurance
-  if (hasInsurance) {
-    try {
-      var parcelsAAXCover = formatParcelsFromOrder(order, insuranceAmount, null);
-      var shipmentAAXCover = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAAXCover, customsDeclarationId, null, carrierAccountIds);
-      allRates = allRates.concat(mapRates(shipmentAAXCover, 'AA', 'XCover'));
-      console.log('=== SHIPPO DEBUG (AA Account / XCover Insurance) ===');
-      console.log('Total rates returned:', (shipmentAAXCover.rates || []).length);
-      console.log('=== END DEBUG ===');
-    } catch (e) {
-      console.log('AA XCover shipment failed (non-critical):', e.message);
-    }
-  }
-
   // --- Customer Account rates (third-party billing) ---
   // Track the outcome so the UI can tell you whether the customer's account
   // will actually be billed, or whether it silently fell back to AA.
   var billing = { requested: !!customerBilling, account: customerBilling ? customerBilling.account : null, customerRateCount: 0, error: null };
   if (customerBilling) {
     try {
-      var parcelsCustUPS = formatParcelsFromOrder(order, insuranceAmount, null);
-      var shipmentCustUPS = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustUPS, customsDeclarationId, customerBilling, carrierAccountIds);
-      var custRates = mapRates(shipmentCustUPS, 'Customer', hasInsurance ? 'native' : 'none');
+      var parcelsCustomer = formatParcelsFromOrder(order, insuranceAmount, null);
+      var shipmentCustomer = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustomer, customsDeclarationId, customerBilling, carrierAccountIds);
+      var custRates = mapRates(shipmentCustomer, 'Customer', hasInsurance ? 'native' : 'none');
       billing.customerRateCount += custRates.length;
       allRates = allRates.concat(custRates);
       // Capture any carrier message that explains a decline (account not authorized, etc.)
-      var custMsgs = (shipmentCustUPS.messages || []).map(function(m) { return m.text || JSON.stringify(m); });
+      var custMsgs = (shipmentCustomer.messages || []).map(function(m) { return m.text || JSON.stringify(m); });
       if (custRates.length === 0 && custMsgs.length > 0) billing.error = custMsgs.join(' | ');
-      console.log('=== SHIPPO DEBUG (Customer Account / UPS Insurance) ===');
+      console.log('=== SHIPPO RATES (customer account) ===');
       console.log('Customer account:', maskId(customerBilling.account));
-      console.log('Total rates returned:', (shipmentCustUPS.rates || []).length);
+      console.log('Total rates returned:', (shipmentCustomer.rates || []).length);
       console.log('=== END DEBUG ===');
     } catch (e) {
       billing.error = e.message;
-      console.log('Customer UPS billing shipment failed (non-critical):', e.message);
+      console.log('Customer-billed rate request failed (non-critical):', e.message);
     }
 
-    // Customer Account + XCover insurance
-    if (hasInsurance) {
-      try {
-        var parcelsCustXCover = formatParcelsFromOrder(order, insuranceAmount, null);
-        var shipmentCustXCover = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustXCover, customsDeclarationId, customerBilling, carrierAccountIds);
-        var custXRates = mapRates(shipmentCustXCover, 'Customer', 'XCover');
-        billing.customerRateCount += custXRates.length;
-        allRates = allRates.concat(custXRates);
-        console.log('=== SHIPPO DEBUG (Customer Account / XCover Insurance) ===');
-        console.log('Total rates returned:', (shipmentCustXCover.rates || []).length);
-        console.log('=== END DEBUG ===');
-      } catch (e) {
-        if (!billing.error) billing.error = e.message;
-        console.log('Customer XCover shipment failed (non-critical):', e.message);
-      }
-    }
   }
 
   // Resolve a plain-English billing status for the UI.
@@ -580,15 +526,15 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   }
 
   var result = {
-    shipmentId: shipmentAAUPS.object_id, international: international,
+    shipmentId: shipmentAA.object_id, international: international,
     customerBillingAccount: customerBilling ? customerBilling.account : null,
     customsDeclarationId: customsDeclarationId, destinationCountry: toAddressRaw.country,
     rates: allRates,
     selectedRate: selectedRate,
-    parcels: parcelsUPS.length, toAddress: toAddressRaw, createdAt: Date.now(),
+    parcels: parcelsAA.length, toAddress: toAddressRaw, createdAt: Date.now(),
     insuranceAmount: insuranceFallbackUsed ? 0 : insuranceAmount,
     insuranceFallbackUsed: insuranceFallbackUsed,
-    shippoMessages: (shipmentAAUPS.messages || []).map(function(m) { return m.text || JSON.stringify(m); }),
+    shippoMessages: (shipmentAA.messages || []).map(function(m) { return m.text || JSON.stringify(m); }),
     billing: billing,
   };
 
@@ -596,7 +542,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     // Per-box spending guard: block auto-purchase if the rate exceeds
     // $45 x (number of boxes). Catches mispriced/oversized shipments before
     // any money is spent; the user buys these manually if they're legitimate.
-    var boxCount = parcelsUPS.length || 1;
+    var boxCount = parcelsAA.length || 1;
     // Configurable in Settings → Shipping. Falls back to $45 so existing orgs
     // behave exactly as before; 0 or blank disables the guard entirely.
     var configured = parseFloat(orgSettings.autoPurchaseMaxPerBox);
@@ -618,7 +564,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
       result.labelUrl = transaction.label_url; result.trackingNumber = transaction.tracking_number;
       result.trackingUrl = transaction.tracking_url_provider; result.transactionId = transaction.object_id;
       result.labelStatus = 'purchased'; result.purchasedAt = Date.now();
-      result.labelPageCount = parcelsUPS.length;
+      result.labelPageCount = parcelsAA.length;
       // Store all parcel labels for multi-piece shipments
       if (transaction.allLabels && transaction.allLabels.length > 0) {
         result.allLabels = transaction.allLabels;
@@ -629,7 +575,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     }
   } else {
     result.labelStatus = 'rates_ready';
-    result.labelPageCount = parcelsUPS.length;
+    result.labelPageCount = parcelsAA.length;
   }
 
   return result;

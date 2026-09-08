@@ -1897,6 +1897,28 @@ export default function Shipping() {
                   </div>
                 )}
 
+                {/* Shippo returns a message per carrier that declined, even when others
+                    quoted - but until now those were only shown when NO rates came back at
+                    all. That is exactly the case where you cannot tell why DHL or USPS are
+                    missing from a list that has UPS in it. */}
+                {(order.shippingLabel?.shippoMessages || []).length > 0 && (
+                  <details style={{
+                    marginBottom: 12, background: 'var(--bg-surface)', border: '1px solid var(--border)',
+                    borderRadius: 8, padding: '8px 12px'
+                  }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 13, color: 'var(--text-muted)' }}>
+                      Why only {carriers.length} carrier{carriers.length !== 1 ? 's' : ''} quoted
+                      {' — '}{order.shippingLabel.shippoMessages.length} carrier message{order.shippingLabel.shippoMessages.length !== 1 ? 's' : ''}
+                    </summary>
+                    <ul style={{ margin: '8px 0 6px 18px', fontSize: 12, color: 'var(--text-primary)', lineHeight: 1.6 }}>
+                      {order.shippingLabel.shippoMessages.slice(0, 8).map((m, i) => <li key={i}>{m}</li>)}
+                    </ul>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      A carrier that is missing entirely, with no message, usually has no account connected in Shippo.
+                    </div>
+                  </details>
+                )}
+
                 {/* Quick Stats */}
                 <div style={{ display: 'flex', gap: 12, marginBottom: 15, flexWrap: 'wrap' }}>
                   {cheapest && (

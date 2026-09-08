@@ -487,7 +487,14 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   // --- Customer Account rates (third-party billing) ---
   // Track the outcome so the UI can tell you whether the customer's account
   // will actually be billed, or whether it silently fell back to AA.
-  var billing = { requested: !!customerBilling, account: customerBilling ? customerBilling.account : null, customerRateCount: 0, error: null };
+  var billing = { requested: !!customerBilling, account: customerBilling ? customerBilling.account : null, customerRateCount: 0, error: null, warning: null };
+  // UPS validates third-party billing against the billing account's postal code.
+  // With no zip it can refuse the instruction and bill us instead - and the label
+  // still prints and ships, so nothing looks wrong until the invoice lands.
+  if (customerBilling && !String(customerBilling.zip || '').trim()) {
+    billing.warning = 'No postal code on file for this billing account. UPS checks third-party billing against it and may bill AA instead. Add the zip to the customer record.';
+    console.warn('Third-party billing on ' + (order.poNumber || order.id) + ' has no billing postal code');
+  }
   if (customerBilling) {
     try {
       var parcelsCustomer = formatParcelsFromOrder(order, insuranceAmount, null);

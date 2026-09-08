@@ -66,6 +66,9 @@ export default function Shipping() {
       const autoUpdates = [];
       for (const order of sorted) {
         if (order.status !== 'packed' || order.shippingLabel?.trackingNumber) continue;
+        // Somebody set the Bill To on this order by hand - including clearing it.
+        // Leave it alone, or their choice is reverted on the next page load.
+        if (order.thirdPartyBillingManual) continue;
         const cust = customersData.find(c => c.id === order.customerId);
         if (!cust?.upsAccount) continue;
         const alreadySet = order.thirdPartyBilling?.account === cust.upsAccount && 
@@ -676,10 +679,27 @@ export default function Shipping() {
     return carrier === 'ups' ? (cust.upsAccount || '') : (cust.fedexAccount || '');
   };
 
-  // Save third-party billing info on order
+  // Save third-party billing info on order.
+  //
+  // The zip matters: UPS validates third-party billing against the billing
+  // account's postal code, and without it the instruction can be refused and the
+  // charges quietly revert to us - the label still prints and ships, so nothing
+  // looks wrong until the invoice arrives. This used to send no zip at all.
+  //
+  // thirdPartyBillingManual records that a person set this, so the auto-detect
+  // on load stops overwriting it with whatever is on the customer record.
   const saveBillTo = async (orderId, upsAccount) => {
     try {
-      await DB.updatePurchaseOrder(orderId, { thirdPartyBilling: upsAccount ? { account: upsAccount, type: 'THIRD_PARTY', country: 'US' } : null, updatedAt: Date.now() });
+      const order = orders.find(o => o.id === orderId);
+      const cust = customers.find(c => c.id === order?.customerId);
+      const billingZip = cust?.zipCode || '';
+      await DB.updatePurchaseOrder(orderId, {
+        thirdPartyBilling: upsAccount
+          ? { account: upsAccount, type: 'THIRD_PARTY', country: 'US', zip: billingZip }
+          : null,
+        thirdPartyBillingManual: true,
+        updatedAt: Date.now()
+      });
       await loadData();
       setMessage('Bill To updated');
       setTimeout(() => setMessage(''), 2000);
@@ -1908,6 +1928,16 @@ export default function Shipping() {
                     background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--text-muted)', padding: '0 4px'
                   }}>✕</button>
                 </div>
+
+                {/* Billing set up but missing the postal code UPS validates against */}
+                {order.shippingLabel?.billing?.warning && !billingDeclined && (
+                  <div style={{
+                    padding: '10px 14px', marginBottom: 12, borderRadius: 8,
+                    background: '#fff8e1', border: '1px solid #ffcc80', color: '#8a5300', fontSize: 13
+                  }}>
+                    <strong>⚠️ Billing may not stick.</strong> {order.shippingLabel.billing.warning}
+                  </div>
+                )}
 
                 {/* Customer account declined notice */}
                 {billingDeclined && (

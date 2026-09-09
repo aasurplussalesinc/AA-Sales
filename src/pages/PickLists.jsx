@@ -323,7 +323,10 @@ export default function PickLists() {
         // movement. The three separate calls this replaces wrote `stock`
         // directly and adjusted the shelf independently, so the total and the
         // shelf sum could end up disagreeing.
-        const moved = await DB.removeStockAtLocation(item.itemId, pickedFrom, picked);
+        const moved = await DB.removeStockAtLocation(item.itemId, pickedFrom, picked, {
+          orderId: list.purchaseOrderId || '',
+          orderNumber: list.poNumber || list.orderNumber || ''
+        });
         if (!moved) { errors.push(`No shelf stock to pull for ${item.itemName}`); continue; }
         linesDeducted++;
       } catch (e) {

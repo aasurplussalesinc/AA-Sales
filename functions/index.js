@@ -3123,16 +3123,25 @@ exports.api = functions
         });
         candidates.sort(function (a, b) { return (a.o.createdAt || 0) - (b.o.createdAt || 0); });
 
-        // Every PICK movement in the window, pooled per item.
+        // PICK movements in the window. Ones tagged with an orderId are attributed
+        // to that order exactly; untagged ones (written before the tag existed)
+        // fall into a per-item pool and are matched heuristically.
         var movSnap = await db.collection('movements').where('orgId', '==', auth.orgId).get();
-        var pool = {};
-        var pickMovements = 0;
+        var exact = {}, pool = {};
+        var pickMovements = 0, taggedMovements = 0;
         movSnap.docs.forEach(function (d) {
           var m = d.data();
           if (m.type !== 'PICK') return;
           if ((m.timestamp || 0) < since) return;
-          pool[m.itemId] = (pool[m.itemId] || 0) + (parseInt(m.quantity) || 0);
           pickMovements++;
+          var units = parseInt(m.quantity) || 0;
+          if (m.orderId) {
+            taggedMovements++;
+            if (!exact[m.orderId]) exact[m.orderId] = {};
+            exact[m.orderId][m.itemId] = (exact[m.orderId][m.itemId] || 0) + units;
+          } else {
+            pool[m.itemId] = (pool[m.itemId] || 0) + units;
+          }
         });
 
         var suspect = [], healthy = 0, unitsUnexplained = 0;
@@ -3145,9 +3154,17 @@ exports.api = functions
             var qty = parseInt(line.pickedQty) || parseInt(line.qtyShipped) || parseInt(line.quantity) || 0;
             if (qty <= 0 || !line.itemId) return;
             linesChecked++;
-            var have = pool[line.itemId] || 0;
-            var claimed = Math.min(have, qty);
-            pool[line.itemId] = have - claimed;   // consumed, cannot be reused
+            // Movements tagged with this order id are proof, not inference.
+            var tagged = (exact[c.id] || {})[line.itemId] || 0;
+            var claimed = Math.min(tagged, qty);
+            if (exact[c.id]) exact[c.id][line.itemId] = tagged - claimed;
+            // Anything still unaccounted for falls back to the untagged pool.
+            if (claimed < qty) {
+              var have = pool[line.itemId] || 0;
+              var fromPool = Math.min(have, qty - claimed);
+              pool[line.itemId] = have - fromPool;   // consumed, cannot be reused
+              claimed += fromPool;
+            }
             if (claimed < qty) {
               missing.push({
                 sku: line.partNumber || '', item: line.itemName || '',
@@ -3171,10 +3188,11 @@ exports.api = functions
           windowDays: days,
           ordersExamined: candidates.length,
           pickMovementsInWindow: pickMovements,
+          pickMovementsTaggedWithAnOrder: taggedMovements,
           ordersFullyExplained: healthy,
           ordersWithUnexplainedLines: suspect.length,
           unitsUnexplained: unitsUnexplained,
-          note: 'A line is unexplained when no unclaimed PICK movement covers the units it shipped. stockDeducted true with unexplained lines is the signature of the pick-list flag bug. Read-only.',
+          note: 'A line is unexplained when no unclaimed PICK movement covers the units it shipped. Movements tagged with an orderId are matched exactly; untagged ones (written before the tag existed) are matched by item and quantity, oldest order first. stockDeducted true with unexplained lines is the signature of the pick-list flag bug. Read-only.',
           orders: suspect
         });
       }

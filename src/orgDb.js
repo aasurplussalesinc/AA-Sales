@@ -1238,7 +1238,11 @@ export const OrgDB = {
 
   // Remove qty from a shelf (picking / shipping). Falls back to the largest
   // holding if the named shelf doesn't have it, so stock can't go untracked.
-  async removeStockAtLocation(itemId, code, qty) {
+  // `meta` is stamped onto the movement this writes. Pass { orderId, orderNumber }
+  // from a pick so the ledger says WHICH order took the units. Without it, an
+  // audit has to guess by matching item, quantity and time, and two orders
+  // shipping the same SKU in the same week are indistinguishable.
+  async removeStockAtLocation(itemId, code, qty, meta = {}) {
     const amount = parseInt(qty) || 0;
     if (amount <= 0) return null;
     const snap = await getDoc(doc(db, 'items', itemId));
@@ -1251,7 +1255,11 @@ export const OrgDB = {
     if (!hit) return null;
     hit.qty -= amount;
     const res = await this.setItemLocations(itemId, entries.filter(e => e.qty > 0));
-    await this.logMovement({ itemId, itemName: item.name, quantity: amount, type: 'PICK', fromLocation: hit.code });
+    await this.logMovement({
+      itemId, itemName: item.name, quantity: amount, type: 'PICK', fromLocation: hit.code,
+      ...(meta.orderId ? { orderId: meta.orderId } : {}),
+      ...(meta.orderNumber ? { orderNumber: meta.orderNumber } : {})
+    });
     return res;
   },
 
@@ -1860,6 +1868,8 @@ export const OrgDB = {
       name: `PO: ${po.poNumber} - ${po.customerName}`,
       notes: `Auto-generated from Purchase Order ${po.poNumber}`,
       purchaseOrderId: poId,
+      // Carried so a PICK movement can name the order in words, not just by id.
+      poNumber: po.poNumber || '',
       items: po.items.filter(item => item.source !== 'manual').map(item => ({
         itemId: item.itemId || '',
         itemName: item.itemName || '',
@@ -1987,7 +1997,7 @@ export const OrgDB = {
       const from = line.pickedFrom || line.location || '';
       let moved = null;
       try {
-        moved = await this.removeStockAtLocation(line.itemId, from, qty);
+        moved = await this.removeStockAtLocation(line.itemId, from, qty, { orderId: orderId, orderNumber: order.poNumber || '' });
       } catch (e) {
         console.warn('removeStockAtLocation failed for', line.itemName, e.message);
       }

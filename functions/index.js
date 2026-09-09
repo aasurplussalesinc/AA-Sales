@@ -3092,6 +3092,93 @@ exports.api = functions
         return res.json({ count: orders.length, orders: orders.slice(0, limitO) });
       }
 
+      // ---- GET /diagnostics/stock-deduction ------------------------------
+      // Which shipped orders never took their stock off the shelves.
+      //
+      // A pick list completed with no picked quantities stamped the order
+      // stockDeducted without deducting anything, and deductOrderStock then
+      // refused to run because the flag said the work was done. Orders that hit
+      // that are indistinguishable from healthy ones by their own fields - the
+      // flag is set either way - so the only real evidence is the movement
+      // ledger.
+      //
+      // Movements carry no order id, so lines are matched to PICK movements by
+      // item, quantity and time. Orders are walked oldest-first and each order
+      // CONSUMES the movement units it can claim, so two orders shipping the
+      // same item cannot both point at the same movement.
+      //
+      // Read-only. Reports; changes nothing.
+      if (req.method === 'GET' && path === '/diagnostics/stock-deduction') {
+        var days = Math.min(Math.max(parseInt(req.query.days) || 60, 1), 365);
+        var since = Date.now() - days * 24 * 60 * 60 * 1000;
+        var SHIPPED_STATES = { shipped: 1, packed: 1, paid: 1, completed: 1 };
+
+        var ordSnap = await db.collection('purchaseOrders').where('orgId', '==', auth.orgId).get();
+        var candidates = [];
+        ordSnap.docs.forEach(function (d) {
+          var o = d.data();
+          if (!SHIPPED_STATES[o.status]) return;
+          if ((o.createdAt || 0) < since) return;
+          candidates.push({ id: d.id, o: o });
+        });
+        candidates.sort(function (a, b) { return (a.o.createdAt || 0) - (b.o.createdAt || 0); });
+
+        // Every PICK movement in the window, pooled per item.
+        var movSnap = await db.collection('movements').where('orgId', '==', auth.orgId).get();
+        var pool = {};
+        var pickMovements = 0;
+        movSnap.docs.forEach(function (d) {
+          var m = d.data();
+          if (m.type !== 'PICK') return;
+          if ((m.timestamp || 0) < since) return;
+          pool[m.itemId] = (pool[m.itemId] || 0) + (parseInt(m.quantity) || 0);
+          pickMovements++;
+        });
+
+        var suspect = [], healthy = 0, unitsUnexplained = 0;
+        candidates.forEach(function (c) {
+          var o = c.o;
+          var missing = [];
+          var linesChecked = 0;
+          (o.items || []).forEach(function (line) {
+            if (line.source && line.source !== 'inventory' && line.source !== 'inventory_contract') return;
+            var qty = parseInt(line.pickedQty) || parseInt(line.qtyShipped) || parseInt(line.quantity) || 0;
+            if (qty <= 0 || !line.itemId) return;
+            linesChecked++;
+            var have = pool[line.itemId] || 0;
+            var claimed = Math.min(have, qty);
+            pool[line.itemId] = have - claimed;   // consumed, cannot be reused
+            if (claimed < qty) {
+              missing.push({
+                sku: line.partNumber || '', item: line.itemName || '',
+                shipped: qty, movementUnitsFound: claimed, unexplained: qty - claimed
+              });
+              unitsUnexplained += (qty - claimed);
+            }
+          });
+          if (missing.length === 0) { healthy++; return; }
+          suspect.push({
+            orderNumber: o.poNumber || c.id, orderId: c.id, customer: o.customerName || '',
+            status: o.status, createdAt: o.createdAt || null,
+            stockDeducted: !!o.stockDeducted,
+            linesChecked: linesChecked, linesUnexplained: missing.length,
+            lines: missing
+          });
+        });
+
+        suspect.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); });
+        return res.json({
+          windowDays: days,
+          ordersExamined: candidates.length,
+          pickMovementsInWindow: pickMovements,
+          ordersFullyExplained: healthy,
+          ordersWithUnexplainedLines: suspect.length,
+          unitsUnexplained: unitsUnexplained,
+          note: 'A line is unexplained when no unclaimed PICK movement covers the units it shipped. stockDeducted true with unexplained lines is the signature of the pick-list flag bug. Read-only.',
+          orders: suspect
+        });
+      }
+
       // ---- POST /items/:id/adjust  { delta | quantity, location, reason } --
       // The shelf quantities are the source of truth; `stock` and `location`
       // are derived from them on every write. Writing `stock` on its own (what

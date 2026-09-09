@@ -1,6 +1,7 @@
 import { h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/library';
+import { resolvePickLocation, shouldFlagStockDeducted } from '../pickDeduction';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
 
@@ -289,57 +290,59 @@ export default function PickLists() {
       return;
     }
 
+    // Nothing picked means nothing comes off the shelves. That used to happen in
+    // silence - AA6645 shipped eight lines without moving a single number.
+    const anyPicked = list.items.some(i => (parseInt(i.pickedQty) || 0) > 0);
+    if (!anyPicked) {
+      if (!window.confirm(
+        'No picked quantities are recorded on this list, so NO stock will come off the shelves.\n\n' +
+        'Complete it anyway?'
+      )) return;
+    }
+
     // Process each picked item — wrap each operation so one failure doesn't block modal close
     const errors = [];
+    let linesAttempted = 0;
+    let linesDeducted = 0;
+
     for (const item of list.items) {
-      if (item.pickedQty > 0) {
-        const dbItem = items.find(i => i.id === item.itemId);
-        if (dbItem) {
-          // Resolve the location actually picked from: the picker's choice, else the
-          // single known location, else the item's primary location field.
-          const opts = getItemLocationOptions(item.itemId);
-          const pickedFrom = item.pickLocation || (opts.length === 1 ? opts[0].code : item.location) || '';
+      const picked = parseInt(item.pickedQty) || 0;
+      if (picked <= 0) continue;
+      linesAttempted++;
 
-          try {
-            await DB.logMovement({
-              itemId: item.itemId,
-              itemName: item.itemName,
-              quantity: item.pickedQty,
-              type: 'PICK',
-              fromLocation: pickedFrom || 'Unknown',
-              timestamp: Date.now()
-            });
-          } catch (e) {
-            console.warn('logMovement failed for', item.itemName, e.message);
-            errors.push(`Movement log: ${item.itemName}`);
-          }
+      const dbItem = items.find(i => i.id === item.itemId);
+      if (!dbItem) { errors.push(`Unknown item: ${item.itemName || item.itemId}`); continue; }
 
-          try {
-            await DB.updateItemStock(item.itemId, Math.max(0, (dbItem.stock || 0) - item.pickedQty));
-          } catch (e) {
-            console.warn('updateItemStock failed for', item.itemName, e.message);
-            errors.push(`Stock update: ${item.itemName}`);
-          }
+      // Resolve the location actually picked from: the picker's choice, else the
+      // single known location, else the item's primary location field.
+      const pickedFrom = resolvePickLocation(item, getItemLocationOptions(item.itemId));
 
-          // Draw the picked quantity down from the specific location it came from,
-          // so per-location counts stay consistent (not just the item total).
-          if (pickedFrom) {
-            try {
-              await DB.decrementLocationInventory(pickedFrom, item.itemId, item.pickedQty);
-            } catch (e) {
-              console.warn('decrementLocationInventory failed for', item.itemName, e.message);
-              errors.push(`Location update: ${item.itemName}`);
-            }
-          }
-        }
+      try {
+        // One funnel. removeStockAtLocation takes the units off the shelf,
+        // recalculates the item total FROM the shelves, and logs the PICK
+        // movement. The three separate calls this replaces wrote `stock`
+        // directly and adjusted the shelf independently, so the total and the
+        // shelf sum could end up disagreeing.
+        const moved = await DB.removeStockAtLocation(item.itemId, pickedFrom, picked);
+        if (!moved) { errors.push(`No shelf stock to pull for ${item.itemName}`); continue; }
+        linesDeducted++;
+      } catch (e) {
+        console.warn('removeStockAtLocation failed for', item.itemName, e.message);
+        errors.push(`Stock: ${item.itemName}`);
       }
     }
 
     try {
       await DB.updatePickList(list.id, { status: 'completed', completedBy, completedAt: Date.now() });
-      // This step has already pulled the stock, so flag the linked order —
-      // otherwise marking it shipped later would deduct the same units again.
-      if (list.purchaseOrderId) {
+      // Only claim the stock was taken if every picked line actually moved.
+      //
+      // This flag stops marking the order shipped from deducting the same units
+      // twice - but it was previously set whether or not anything was deducted.
+      // A pick list completed with no picked quantities deducted nothing, still
+      // stamped the order, and deductOrderStock then refused to run because the
+      // flag said the job was done. The guard against double-deduction became a
+      // guarantee of zero deduction, silently.
+      if (list.purchaseOrderId && shouldFlagStockDeducted(linesAttempted, linesDeducted)) {
         try {
           await DB.updatePurchaseOrder(list.purchaseOrderId, {
             stockDeducted: true, stockDeductedAt: Date.now()
@@ -347,6 +350,13 @@ export default function PickLists() {
         } catch (e) {
           console.warn('could not flag order as stock-deducted:', e.message);
         }
+      } else if (list.purchaseOrderId) {
+        // Leave the order unflagged so deductOrderStock can still pick it up
+        // when the order is confirmed or marked shipped.
+        console.warn(
+          'Pick list ' + list.id + ' deducted ' + linesDeducted + ' of ' + linesAttempted +
+          ' line(s); leaving the order unflagged so the shipping step can still deduct.'
+        );
       }
     } catch (e) {
       console.error('updatePickList failed:', e.message);

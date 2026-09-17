@@ -209,7 +209,7 @@ module.exports = function createMcpFunction(deps) {
     {
       name: 'create_draft_order',
       title: 'Create Draft Order',
-      description: 'Create a purchase order as a DRAFT from lines you have already matched to catalogue items. It never goes past draft - nothing is reserved, picked or shipped until a person presses Confirm & Pick in SkidSling. The catalogue price is always used; a price quoted by the customer is recorded on the line for the paper trail but never becomes the invoice price. Items with too little stock are still included so the order shows what was actually asked for. Confirm the full line list with the user before calling this.',
+      description: 'Create a purchase order as a DRAFT from lines you have already matched to catalogue items. It never goes past draft - nothing is reserved, picked or shipped until a person presses Confirm & Pick in SkidSling. Lines default to the catalogue price. Pass unitPrice to price a line deliberately (a show price, a negotiated deal) - that writes to the order only and never changes the item. A price merely quoted by the customer goes in quotedPrice, which is recorded for the paper trail and never charged. Items with too little stock are still included so the order shows what was actually asked for. Confirm the full line list with the user before calling this.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -234,7 +234,7 @@ module.exports = function createMcpFunction(deps) {
                 itemId: { type: 'string', description: 'Catalogue item id from search_items' },
                 description: { type: 'string', description: 'Free text, for a line with no catalogue item behind it' },
                 quantity: { type: 'integer', minimum: 1, description: 'Quantity ordered' },
-                unitPrice: { type: 'number', description: 'Only for free-text lines; catalogue lines always use the catalogue price' },
+                unitPrice: { type: 'number', description: 'Price this line deliberately, overriding the catalogue price. Applies to catalogue and free-text lines alike, is stored on the order only, and never alters the item. Omit to use the catalogue price.' },
                 quotedPrice: { type: 'number', description: 'The price the customer quoted, when it differs. Recorded for the paper trail, not charged.' },
                 notes: { type: 'string' }
               },

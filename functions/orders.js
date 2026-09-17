@@ -31,14 +31,43 @@ async function buildLines(db, auth, rawLines) {
       var onHand = parseInt(d.stock) || 0;
       var label = (d.partNumber || '') + ' ' + (d.name || '');
 
-      // Catalogue price wins. A price quoted in the email is recorded on the
-      // line for the paper trail but never becomes the invoice price.
+      // Two different things, deliberately kept apart:
+      //
+      //   quotedPrice - a price READ off a customer's email or order sheet.
+      //     Advisory only: recorded on the line for the paper trail, never
+      //     charged, because an agent must not talk itself into a price from
+      //     something it parsed.
+      //
+      //   unitPrice - a price the CALLER states outright for this line. This is
+      //     the same per-line override the order modal gives a person on every
+      //     line, and like the modal it is written to the ORDER only - the
+      //     catalogue item's price is never touched. Stating it is an explicit
+      //     instruction, not an inference, so it is honoured.
+      //
+      // With no explicit unitPrice the catalogue price still wins.
       var quoted = (L.quotedPrice !== undefined && L.quotedPrice !== null && L.quotedPrice !== '')
         ? parseFloat(L.quotedPrice) : null;
-      if (quoted !== null && isFinite(quoted) && Math.abs(quoted - catalogPrice) > 0.005) {
+      if (quoted !== null && !isFinite(quoted)) quoted = null;
+
+      var override = null;
+      if (L.unitPrice !== undefined && L.unitPrice !== null && L.unitPrice !== '') {
+        override = parseFloat(L.unitPrice);
+        if (!isFinite(override) || override < 0) {
+          throw bad('Line ' + (i + 1) + ': unitPrice must be a number of 0 or more');
+        }
+      }
+      var linePrice = override !== null ? override : catalogPrice;
+
+      if (override !== null && Math.abs(override - catalogPrice) > 0.005) {
+        warnings.push({ type: 'price_override', line: i + 1, item: label,
+          catalogPrice: catalogPrice, unitPrice: override,
+          note: 'Line priced at the supplied unit price, not the catalogue price. The catalogue item is unchanged.' });
+      }
+      if (quoted !== null && Math.abs(quoted - linePrice) > 0.005) {
         warnings.push({ type: 'price_mismatch', line: i + 1, item: label,
           catalogPrice: catalogPrice, quotedPrice: quoted,
-          note: 'Order uses the catalogue price; the quoted price is recorded on the line only.' });
+          note: 'Order uses ' + (override !== null ? 'the supplied unit price' : 'the catalogue price')
+                + '; the quoted price is recorded on the line only.' });
       }
       if (onHand < qty) {
         warnings.push({ type: 'insufficient_stock', line: i + 1, item: label,
@@ -50,8 +79,8 @@ async function buildLines(db, auth, rawLines) {
         lineId: lineId,
         itemId: idoc.id, itemName: d.name || '', partNumber: d.partNumber || '',
         location: d.location || '', grade: d.grade || '',
-        quantity: qty, qtyShipped: '', unitPrice: catalogPrice,
-        estTotal: qty * catalogPrice, lineTotal: 0,
+        quantity: qty, qtyShipped: '', unitPrice: linePrice,
+        estTotal: qty * linePrice, lineTotal: 0,
         source: 'inventory', contractId: '', contractNumber: '', costPerLb: 0,
         weightPerItem: d.weight || '', itemCost: d.cost || 0,
         quotedPrice: (quoted !== null && isFinite(quoted)) ? quoted : null,
@@ -249,4 +278,7 @@ async function updateDraftOrder(db, auth, orderId, body) {
   };
 }
 
-module.exports = { createDraftOrder: createDraftOrder, updateDraftOrder: updateDraftOrder };
+module.exports = { createDraftOrder: createDraftOrder, updateDraftOrder: updateDraftOrder,
+  // Exported for unit tests only - line pricing decides what a customer is
+  // billed, so it is worth testing directly rather than through a live write.
+  __buildLinesForTest: buildLines };

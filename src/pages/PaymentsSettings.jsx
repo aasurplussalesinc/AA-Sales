@@ -7,6 +7,9 @@ import { Payments, Invoices, CONNECTION_LABELS, connectionState, formatCents } f
 // (Stripe Connect). SkidSling stores only the account id and its status flags;
 // bank and identity details are entered on Stripe's own pages. Everything that
 // emails a customer is off until an admin turns it on.
+// Time zones offered for the daily reminder run (the saved value is always kept in the list).
+const TIME_ZONES = ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Phoenix', 'America/Los_Angeles',
+  'America/Anchorage', 'Pacific/Honolulu', 'America/Puerto_Rico', 'UTC'];
 const box = { background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginBottom: 20 };
 const label = { display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 };
 

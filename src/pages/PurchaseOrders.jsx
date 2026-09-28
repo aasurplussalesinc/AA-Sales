@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
+import InvoicePanel from '../components/InvoicePanel';
 
 // Two-step confirm: window.confirm() can be suppressed by the browser, which
 // silently aborts the action. Returns true only on the SECOND call within the
@@ -2072,6 +2073,13 @@ ${raw(labelsHtml)}
               </div>
 
               {selectedOrder.notes && <div style={{ background: 'var(--bg-badge-orange)', padding: 15, borderRadius: 8, marginBottom: 20 }}><strong>Notes:</strong> {selectedOrder.notes}</div>}
+
+              {/* Invoice & payments ledger (Stripe + manual). Only when the company
+                  turned invoicing on, or the order already has ledger data. */}
+              {((organization?.payments?.enabled && selectedOrder.status && selectedOrder.status !== 'draft')
+                || selectedOrder.invoice || selectedOrder.amountPaidCents != null) && (
+                <InvoicePanel key={selectedOrder.id} order={selectedOrder} orgId={organization?.id} canEdit={canEdit} onChanged={loadData} />
+              )}
 
               {selectedOrder.paymentMethod && (
                 <div style={{ background: 'var(--bg-badge-green)', padding: 15, borderRadius: 8, marginBottom: 20 }}>

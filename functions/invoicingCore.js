@@ -151,7 +151,373 @@ function sanitizePaymentSettings(input, current) {
     out.billingEmail = be;
   }
   if (input.notifyOnPayment !== undefined) out.notifyOnPayment = input.notifyOnPayment === true;
+  if (input.cardSurcharge !== undefined) {
+    // Built, but ships OFF: surcharging has card-network rules, a 3% US cap
+    // and state restrictions - Alan's/accountant's decision before it is used.
+    var cs = input.cardSurcharge || {};
+    var pct = Number(cs.percent);
+    if (cs.percent !== undefined && cs.percent !== '' && (!isFinite(pct) || pct < 0 || pct > 3)) {
+      throw new Error('Card surcharge must be between 0% and 3%');
+    }
+    var max = cs.maxInvoiceForCards;
+    var maxCents = (max === null || max === undefined || max === '') ? null : toCents(max);
+    if (maxCents !== null && maxCents < 0) throw new Error('Card limit must be 0 or more');
+    out.cardSurcharge = { enabled: cs.enabled === true, percent: isFinite(pct) ? pct : 0, maxInvoiceForCardsCents: maxCents };
+  }
   return out;
+}
+
+// ────────────────────────────────────────────────────────────── money ────
+
+/** Dollars (number or numeric string) to integer cents, rounded like toFixed(2). */
+function toCents(v) {
+  var n = typeof v === 'number' ? v : parseFloat(v);
+  if (!isFinite(n)) return 0;
+  return Math.round(Number(n.toFixed(2)) * 100);
+}
+function centsToDollars(c) { return Math.round(Number(c) || 0) / 100; }
+function formatCents(c) {
+  var n = Math.round(Number(c) || 0);
+  var s = (Math.abs(n) / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return (n < 0 ? '-$' : '$') + s;
+}
+
+/**
+ * What the INVOICE says the customer owes, in cents. Exactly the arithmetic of
+ * renderOrderDocument(order, 'invoice') in orderDocument.mjs - shipped
+ * quantity x unit price, plus tax and shipping, less credit and discount -
+ * rounded the way the document prints its Total. The printed invoice is the
+ * source of truth; Stripe only collects what it says.
+ */
+function invoiceTotalCents(order) {
+  var o = order || {};
+  var subtotal = (o.items || []).reduce(function (sum, item) {
+    var qty = Number(item && item.qtyShipped) || 0;
+    var price = parseFloat(item && item.unitPrice) || 0;
+    return sum + qty * price;
+  }, 0);
+  var total = subtotal + (parseFloat(o.tax) || 0) + (parseFloat(o.shipping) || 0)
+    - (parseFloat(o.credit) || 0) - (parseFloat(o.discount) || 0);
+  return toCents(total);
+}
+
+// ────────────────────────────────────────────────────────────── dates ────
+// Invoices are dated in whole days. A "day number" is days since 1970-01-01
+// for a calendar date, so due-date arithmetic never trips over time zones or
+// daylight saving. Timestamps become calendar dates in the org's time zone.
+
+var DAY_MS = 86400000;
+var DEFAULT_TZ = 'America/New_York';
+
+function isoToDay(s) {
+  var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '').trim());
+  if (!m) return null;
+  var t = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  return isFinite(t) ? Math.floor(t / DAY_MS) : null;
+}
+function dayToIso(day) {
+  if (day === null || day === undefined || !isFinite(day)) return '';
+  return new Date(day * DAY_MS).toISOString().slice(0, 10);
+}
+function validTimeZone(tz) {
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch (e) { return false; }
+}
+/** Calendar date (day number) of a moment, in a time zone. */
+function localDay(ms, tz) {
+  if (ms === null || ms === undefined || !isFinite(ms)) return null;
+  var parts = new Intl.DateTimeFormat('en-CA', { timeZone: validTimeZone(tz) ? tz : DEFAULT_TZ,
+    year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(ms));
+  return isoToDay(parts);
+}
+function localHour(ms, tz) {
+  return parseInt(new Intl.DateTimeFormat('en-US', { timeZone: validTimeZone(tz) ? tz : DEFAULT_TZ,
+    hour: 'numeric', hourCycle: 'h23' }).format(new Date(ms)), 10) % 24;
+}
+/** A stored date in any of the shapes orders use: 'YYYY-MM-DD', ms, ISO string, Firestore Timestamp. */
+function anyToDay(v, tz) {
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'string') {
+    var d = isoToDay(v.slice(0, 10));
+    if (d !== null && /^\d{4}-\d{2}-\d{2}$/.test(v.trim())) return d;
+    var t = Date.parse(v);
+    return isFinite(t) ? localDay(t, tz) : null;
+  }
+  if (typeof v === 'number') return localDay(v, tz);
+  if (typeof v.toMillis === 'function') return localDay(v.toMillis(), tz);
+  if (typeof v.toDate === 'function') return localDay(v.toDate().getTime(), tz);
+  var secs = v.seconds !== undefined ? v.seconds : v._seconds;
+  if (secs !== undefined) return localDay(Number(secs) * 1000, tz);
+  return null;
+}
+
+/** Days allowed by payment terms. "Net 30" -> 30, "Due on Receipt" -> 0; blank or unknown -> 30 (the documents' default). */
+function termsDays(terms) {
+  var t = String(terms || '').trim();
+  if (!t) return 30;
+  var m = /net\s*(\d{1,3})/i.exec(t) || /^(\d{1,3})\s*days?$/i.exec(t);
+  if (m) return Math.min(parseInt(m[1], 10), 365);
+  if (/receipt|cod\b|c\.o\.d|prepaid|pre-paid|immediate|due now|upon/i.test(t)) return 0;
+  return 30;
+}
+
+/** The invoice date: invoiceDate if set, else when it shipped, else when it was issued/created. */
+function invoiceIssueDay(order, tz) {
+  var o = order || {};
+  return anyToDay(o.invoiceDate, tz)
+    ?? anyToDay(o.shippedAt, tz)
+    ?? anyToDay(o.invoice && o.invoice.issuedAt, tz)
+    ?? anyToDay(o.createdAt, tz);
+}
+/** Due date: an explicit order.dueDate wins, else invoice date + terms. */
+function invoiceDueDay(order, tz) {
+  var o = order || {};
+  var explicit = anyToDay(o.dueDate, tz);
+  if (explicit !== null) return explicit;
+  var issue = invoiceIssueDay(o, tz);
+  if (issue === null) return null;
+  return issue + termsDays(o.terms);
+}
+
+// ───────────────────────────────────────────────────────────── ledger ────
+
+/**
+ * A payment's status from the facts recorded on it. Facts only accumulate
+ * (succeededAt, failedAt, refundedCents only grows), which is what makes the
+ * webhook processing order-independent: however events arrive, the same facts
+ * give the same status. A success outranks a failure - a declined card
+ * followed by a good one on the same payment intent is a payment.
+ */
+function paymentStatus(p) {
+  p = p || {};
+  if (p.voidedAt) return 'voided';
+  var amount = Number(p.amountCents) || 0;
+  var refunded = Math.min(Number(p.refundedCents) || 0, amount);
+  if (p.succeededAt) {
+    if (amount > 0 && refunded >= amount) return 'refunded';
+    if (refunded > 0) return 'partially_refunded';
+    return 'succeeded';
+  }
+  if (p.failedAt) return 'failed';
+  return 'pending';
+}
+
+/** How a payment is split across invoices, oldest first. Single-invoice payments carry the whole amount. */
+function paymentAllocations(p) {
+  if (Array.isArray(p.allocations) && p.allocations.length) return p.allocations;
+  if (p.orderId) return [{ orderId: p.orderId, cents: Number(p.amountCents) || 0 }];
+  return [];
+}
+
+/**
+ * What one payment contributes to one order: { paid, pending }. Refunds come
+ * off the END of the allocation list (the newest invoice a statement payment
+ * covered, after any unallocated credit), so earlier invoices stay paid.
+ */
+function paymentShare(p, orderId) {
+  var st = paymentStatus(p);
+  var allocs = paymentAllocations(p);
+  var out = { paid: 0, pending: 0 };
+  if (st === 'pending') {
+    allocs.forEach(function (a) { if (a.orderId === orderId) out.pending += Number(a.cents) || 0; });
+    return out;
+  }
+  if (st !== 'succeeded' && st !== 'partially_refunded' && st !== 'refunded') return out;
+  var amount = Number(p.amountCents) || 0;
+  var allocated = allocs.reduce(function (s, a) { return s + (Number(a.cents) || 0); }, 0);
+  var credit = Math.max(0, amount - allocated);
+  var refunded = Math.min(Number(p.refundedCents) || 0, amount);
+  var refundLeft = Math.max(0, refunded - credit);        // credit is refunded first
+  var effective = allocs.map(function (a) { return Number(a.cents) || 0; });
+  for (var i = effective.length - 1; i >= 0 && refundLeft > 0; i--) {
+    var take = Math.min(effective[i], refundLeft);
+    effective[i] -= take; refundLeft -= take;
+  }
+  allocs.forEach(function (a, i) { if (a.orderId === orderId) out.paid += effective[i]; });
+  return out;
+}
+
+/** Totals for one order across the ledger. */
+function orderLedger(orderId, payments) {
+  var led = { paidCents: 0, pendingCents: 0, paymentCount: 0, lastPaymentAt: null, lastMethod: null, disputed: false };
+  (payments || []).forEach(function (p) {
+    var ids = Array.isArray(p.orderIds) ? p.orderIds : [p.orderId];
+    if (ids.indexOf(orderId) === -1) return;
+    var share = paymentShare(p, orderId);
+    led.paidCents += share.paid;
+    led.pendingCents += share.pending;
+    var st = paymentStatus(p);
+    if (st !== 'voided' && st !== 'failed') led.paymentCount++;
+    if (p.disputed && !p.disputeClosed) led.disputed = true;
+    var at = p.succeededAt || null;
+    if (at && (!led.lastPaymentAt || at > led.lastPaymentAt)) { led.lastPaymentAt = at; led.lastMethod = p.method || null; }
+  });
+  return led;
+}
+
+var INVOICE_STATUSES = ['draft', 'sent', 'partially_paid', 'paid', 'overdue', 'void'];
+var OPEN_INVOICE_STATUSES = ['draft', 'sent', 'partially_paid', 'overdue'];
+
+/**
+ * Everything about an invoice's money and status, from the order, its ledger
+ * totals and today's date (a day number in the org's time zone).
+ *
+ *   void            order cancelled, or invoice voided
+ *   draft           not issued yet (not shipped), nothing on it, or issued but not sent and not yet due
+ *   paid            balance is zero (by the ledger, or an order someone marked Paid by hand)
+ *   overdue         past due with a balance
+ *   partially_paid  something paid, not yet due
+ *   sent            emailed, nothing paid, not yet due
+ */
+function invoiceState(order, ledger, today, tz) {
+  var o = order || {};
+  var inv = o.invoice || {};
+  var led = ledger || { paidCents: Number(o.amountPaidCents) || 0, pendingCents: Number(o.pendingCents) || 0 };
+  var totalCents = invoiceTotalCents(o);
+  var paid = Number(led.paidCents) || 0;
+  var pending = Number(led.pendingCents) || 0;
+  // "Mark Paid" in the app (no ledger entry) is a person saying it's settled.
+  var manualPaid = o.status === 'paid' && o.paidVia !== 'ledger';
+  var voided = o.status === 'cancelled' || !!inv.voidedAt;
+  var issued = !!inv.issuedAt || o.status === 'shipped' || o.status === 'paid';
+  var raw = totalCents - paid;
+  var balance = manualPaid ? 0 : Math.max(0, raw);
+  var credit = raw < 0 ? -raw : 0;
+  var dueDay = invoiceDueDay(o, tz);
+  var collectible = voided ? 0 : Math.max(0, balance - pending);
+  var daysOverdue = (issued && !voided && balance > 0 && dueDay !== null && today !== null && today > dueDay) ? today - dueDay : 0;
+
+  var status;
+  if (voided) status = 'void';
+  else if (!issued || totalCents <= 0) status = manualPaid ? 'paid' : 'draft';
+  else if (balance === 0) status = 'paid';
+  else if (daysOverdue > 0) status = 'overdue';
+  else if (paid > 0) status = 'partially_paid';
+  else if (inv.sentAt) status = 'sent';
+  else status = 'draft';
+
+  return {
+    status: status,
+    totalCents: totalCents,
+    paidCents: paid,
+    pendingCents: pending,
+    balanceCents: voided ? 0 : balance,
+    collectibleCents: collectible,
+    creditCents: credit,
+    paymentPending: pending > 0 && !voided,
+    issued: issued,
+    zeroTotal: totalCents <= 0,
+    manualPaid: manualPaid,
+    dueDate: dayToIso(dueDay),
+    dueDay: dueDay,
+    daysOverdue: daysOverdue
+  };
+}
+
+// ─────────────────────────────────────────────────────── pay links ────
+
+/**
+ * The customer-facing pay link carries an HMAC of what it is for (one
+ * invoice, or one customer's statement) so it cannot be edited to point at a
+ * different order or org. `nonce` lets an invoice's link be revoked (void)
+ * by changing it. No expiry: the link always charges the balance at the
+ * moment it is opened, so it cannot go stale.
+ */
+function payTokenMessage(kind, orgId, id, nonce) {
+  return ['pay', 'v1', kind, orgId, id, nonce || ''].join('|');
+}
+function signPayToken(secret, kind, orgId, id, nonce) {
+  if (!secret) throw new Error('INVOICE_LINK_SECRET is not set');
+  return hmac(secret, payTokenMessage(kind, orgId, id, nonce)).slice(0, 32);
+}
+function verifyPayToken(secret, kind, orgId, id, nonce, token) {
+  if (!secret || typeof token !== 'string' || token.length !== 32) return false;
+  return safeEqual(token, signPayToken(secret, kind, orgId, id, nonce));
+}
+function invoicePayUrl(base, secret, orgId, orderId, nonce) {
+  return base + '/pay/' + encodeURIComponent(orgId) + '/' + encodeURIComponent(orderId) +
+    '?t=' + signPayToken(secret, 'invoice', orgId, orderId, nonce);
+}
+function statementPayUrl(base, secret, orgId, customerId) {
+  return base + '/pay/' + encodeURIComponent(orgId) + '/statement/' + encodeURIComponent(customerId) +
+    '?t=' + signPayToken(secret, 'statement', orgId, customerId, '');
+}
+
+// ──────────────────────────────────────────────────── checkout options ────
+
+/** Card surcharge in cents. Ships OFF; capped at 3% (US card-network cap) even if set higher. */
+function cardSurchargeCents(balanceCents, cardSurcharge) {
+  var cs = cardSurcharge || {};
+  if (!cs.enabled) return 0;
+  var pct = Math.min(3, Math.max(0, Number(cs.percent) || 0));
+  return Math.round((Number(balanceCents) || 0) * pct / 100);
+}
+
+/**
+ * The ways a customer may pay this balance. When nothing about cards is
+ * special there is one option with every enabled method; otherwise bank
+ * transfer and card are offered separately so a surcharge (if the org turned
+ * one on) is only ever added to a card payment.
+ */
+function paymentOptions(methods, cardSurcharge, balanceCents) {
+  var ms = (Array.isArray(methods) && methods.length ? methods : ALLOWED_METHODS)
+    .filter(function (m) { return ALLOWED_METHODS.indexOf(m) !== -1; });
+  var cs = cardSurcharge || {};
+  var maxCard = cs.maxInvoiceForCardsCents === null || cs.maxInvoiceForCardsCents === undefined ? null : Number(cs.maxInvoiceForCardsCents);
+  var cardAllowed = ms.indexOf('card') !== -1 && !(maxCard !== null && isFinite(maxCard) && balanceCents > maxCard);
+  var bankAllowed = ms.indexOf('us_bank_account') !== -1;
+  var surcharge = cardAllowed ? cardSurchargeCents(balanceCents, cs) : 0;
+  var opts = [];
+  if (bankAllowed && cardAllowed && surcharge === 0 && maxCard === null) {
+    opts.push({ method: 'any', methods: ['us_bank_account', 'card'], label: 'Pay now (bank transfer or card)', surchargeCents: 0 });
+    return opts;
+  }
+  if (bankAllowed) opts.push({ method: 'us_bank_account', methods: ['us_bank_account'], label: 'Pay by bank transfer (ACH)', surchargeCents: 0 });
+  if (cardAllowed) opts.push({ method: 'card', methods: ['card'], label: 'Pay by card', surchargeCents: surcharge });
+  return opts;
+}
+
+function invoiceLineName(order) {
+  var o = order || {};
+  var name = 'Invoice ' + (o.poNumber || '');
+  if (o.customerPO) name += ' (PO ' + String(o.customerPO).slice(0, 60) + ')';
+  return name.trim();
+}
+
+/**
+ * Stripe Checkout Session parameters (created ON the connected account by the
+ * caller). The session charges exactly the collectible balance; metadata ties
+ * every resulting event back to the org and order(s).
+ */
+function buildCheckoutParams(a) {
+  var surcharge = a.option.surchargeCents || 0;
+  var meta = {
+    skidsling: 'invoice-payment',
+    kind: a.kind,                           // 'invoice' | 'statement'
+    orgId: a.orgId,
+    orderId: a.orderId || '',
+    orderNumber: a.orderNumber || '',
+    customerId: a.customerId || '',
+    surchargeCents: String(surcharge)
+  };
+  var lines = [{
+    price_data: { currency: 'usd', unit_amount: a.amountCents, product_data: { name: a.lineName } },
+    quantity: 1
+  }];
+  if (surcharge > 0) {
+    lines.push({ price_data: { currency: 'usd', unit_amount: surcharge,
+      product_data: { name: 'Card processing fee' } }, quantity: 1 });
+  }
+  var params = {
+    mode: 'payment',
+    payment_method_types: a.option.methods.slice(),
+    line_items: lines,
+    metadata: meta,
+    payment_intent_data: { metadata: meta, description: a.lineName },
+    success_url: a.successUrl,
+    cancel_url: a.cancelUrl
+  };
+  if (a.customerEmail && isEmail(a.customerEmail)) params.customer_email = a.customerEmail.trim();
+  return params;
 }
 
 module.exports = {
@@ -165,5 +531,37 @@ module.exports = {
   ALLOWED_METHODS: ALLOWED_METHODS,
   isEmail: isEmail,
   emailList: emailList,
-  sanitizePaymentSettings: sanitizePaymentSettings
+  sanitizePaymentSettings: sanitizePaymentSettings,
+  // money & dates
+  toCents: toCents,
+  centsToDollars: centsToDollars,
+  formatCents: formatCents,
+  invoiceTotalCents: invoiceTotalCents,
+  DEFAULT_TZ: DEFAULT_TZ,
+  isoToDay: isoToDay,
+  dayToIso: dayToIso,
+  localDay: localDay,
+  localHour: localHour,
+  anyToDay: anyToDay,
+  validTimeZone: validTimeZone,
+  termsDays: termsDays,
+  invoiceIssueDay: invoiceIssueDay,
+  invoiceDueDay: invoiceDueDay,
+  // ledger & status
+  paymentStatus: paymentStatus,
+  paymentAllocations: paymentAllocations,
+  paymentShare: paymentShare,
+  orderLedger: orderLedger,
+  invoiceState: invoiceState,
+  INVOICE_STATUSES: INVOICE_STATUSES,
+  OPEN_INVOICE_STATUSES: OPEN_INVOICE_STATUSES,
+  // pay links & checkout
+  signPayToken: signPayToken,
+  verifyPayToken: verifyPayToken,
+  invoicePayUrl: invoicePayUrl,
+  statementPayUrl: statementPayUrl,
+  cardSurchargeCents: cardSurchargeCents,
+  paymentOptions: paymentOptions,
+  invoiceLineName: invoiceLineName,
+  buildCheckoutParams: buildCheckoutParams
 };

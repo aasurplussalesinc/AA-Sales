@@ -28,7 +28,13 @@ export default function PaymentsSettings() {
       enabled: !!p.enabled,
       methods: Array.isArray(p.methods) && p.methods.length ? p.methods : ['card', 'us_bank_account'],
       billingEmail: p.billingEmail || '',
-      notifyOnPayment: !!p.notifyOnPayment
+      notifyOnPayment: !!p.notifyOnPayment,
+      cardSurcharge: {
+        enabled: !!(p.cardSurcharge && p.cardSurcharge.enabled),
+        percent: p.cardSurcharge && p.cardSurcharge.percent != null ? String(p.cardSurcharge.percent) : '',
+        maxInvoiceForCards: p.cardSurcharge && p.cardSurcharge.maxInvoiceForCardsCents != null
+          ? String(p.cardSurcharge.maxInvoiceForCardsCents / 100) : ''
+      }
     });
   }, [organization?.id, organization?.payments]);
 
@@ -168,6 +174,29 @@ export default function PaymentsSettings() {
             <input type="checkbox" disabled={!isAdmin} checked={form.notifyOnPayment} onChange={e => setForm({ ...form, notifyOnPayment: e.target.checked })} />
             <span>Email the billing address when a payment arrives, fails or is refunded</span>
           </label>
+
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4, marginBottom: 12 }}>
+            <span style={label}>Card fees</span>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 8px' }}>
+              Bank transfer (ACH) costs about 0.8% (capped); cards about 2.9% + 30&cent;. A card surcharge has card-network rules,
+              a 3% cap in the US and is restricted in some states - check with your accountant before turning it on.
+            </p>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              <input type="checkbox" disabled={!isAdmin} checked={form.cardSurcharge.enabled}
+                onChange={e => setForm({ ...form, cardSurcharge: { ...form.cardSurcharge, enabled: e.target.checked } })} />
+              <span>Add a surcharge to card payments</span>
+            </label>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 13 }}>Surcharge %
+                <input className="form-input" type="number" step="0.1" min="0" max="3" disabled={!isAdmin || !form.cardSurcharge.enabled}
+                  value={form.cardSurcharge.percent} onChange={e => setForm({ ...form, cardSurcharge: { ...form.cardSurcharge, percent: e.target.value } })} style={{ width: 90, marginLeft: 6 }} />
+              </label>
+              <label style={{ fontSize: 13 }}>Cards only for invoices up to $
+                <input className="form-input" type="number" step="1" min="0" disabled={!isAdmin} placeholder="no limit"
+                  value={form.cardSurcharge.maxInvoiceForCards} onChange={e => setForm({ ...form, cardSurcharge: { ...form.cardSurcharge, maxInvoiceForCards: e.target.value } })} style={{ width: 110, marginLeft: 6 }} />
+              </label>
+            </div>
+          </div>
           {isAdmin && <button className="btn btn-primary" disabled={!!busy} onClick={save}>Save payment settings</button>}
         </div>
       )}

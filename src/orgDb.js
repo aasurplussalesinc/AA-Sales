@@ -12,6 +12,19 @@ import { db, auth, storage } from './firebase';
 // Your company's org ID - gets free access forever
 export const OWNER_ORG_ID = 'aa-surplus-sales';
 
+// Fields the payments ledger owns on an order (functions/invoicing.js writes
+// them from the `payments` collection; firestore.rules refuses them from the
+// client). Stripped from every order write here so that saving a whole order
+// object - the packing screen does - can never roll back a payment that
+// arrived while the screen was open.
+const LEDGER_ORDER_FIELDS = ['invoice', 'amountPaid', 'balanceDue', 'amountPaidCents', 'balanceDueCents',
+  'creditCents', 'pendingCents', 'payStatusUpdatedAt', 'paidVia'];
+export function withoutLedgerFields(obj) {
+  const out = { ...(obj || {}) };
+  LEDGER_ORDER_FIELDS.forEach(k => { delete out[k]; });
+  return out;
+}
+
 // Current organization context (set after login)
 let currentOrgId = null;
 let currentOrgData = null;
@@ -1888,7 +1901,7 @@ export const OrgDB = {
     }
     
     const ref = await addDoc(collection(db, 'purchaseOrders'), {
-      ...poData,
+      ...withoutLedgerFields(poData),
       poNumber,
       status: 'draft',  // Always start as draft
       orgId: currentOrgId,
@@ -1929,7 +1942,7 @@ export const OrgDB = {
     }
 
     await updateDoc(ref, {
-      ...updates,
+      ...withoutLedgerFields(updates),
       ...extra,
       updatedAt: Date.now()
     });

@@ -221,10 +221,22 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     // PURCHASE ORDERS
     // ═══════════════════════════════════════════════════════════
+    // What the payments ledger has worked out about an order (paid, balance,
+    // invoice status, pay link) is written only by Cloud Functions from the
+    // `payments` collection. A client editing these would make an invoice read
+    // paid without a payment - and a stale full-order save would silently
+    // undo a payment that landed while the screen was open. src/orgDb.js strips
+    // them from every order write, so the app never trips this.
+    function paymentFields() {
+      return ['invoice', 'amountPaid', 'balanceDue', 'amountPaidCents', 'balanceDueCents',
+              'creditCents', 'pendingCents', 'payStatusUpdatedAt', 'paidVia'];
+    }
     match /purchaseOrders/{poId} {
       allow read: if isStaff(resource.data.orgId);
-      allow create: if isStaff(request.resource.data.orgId);
-      allow update: if isStaff(resource.data.orgId) && staysInOrg();
+      allow create: if isStaff(request.resource.data.orgId)
+        && !request.resource.data.keys().hasAny(paymentFields());
+      allow update: if isStaff(resource.data.orgId) && staysInOrg()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(paymentFields());
       allow delete: if isManager(resource.data.orgId);
     }
 

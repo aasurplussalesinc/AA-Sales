@@ -5,6 +5,7 @@ import OrgLogin from './pages/OrgLogin';
 import SubscriptionRequired from './pages/SubscriptionRequired';
 import OrgSettings from './pages/OrgSettings';
 import PaymentsSettings from './pages/PaymentsSettings';
+import PayInvoice from './pages/PayInvoice';
 import Dashboard from './pages/Dashboard';
 import Items from './pages/Items';
 import Locations from './pages/Locations';
@@ -379,6 +380,9 @@ function AppRoutes() {
           <AppLayout><AdminDashboard /></AppLayout>
         </ProtectedRoute>
       } />
+      {/* Public "Pay online" page for an invoice - no sign-in; the signed
+          token in the link is checked server-side. */}
+      <Route path="/pay/:orgId/:orderId" element={<PayInvoice />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

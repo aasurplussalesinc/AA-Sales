@@ -25,6 +25,7 @@ put('expenses/exp1', { orgId:'acme', amount:100 });
 put('apiKeys/key1',  { orgId:'acme', hash:'x', scope:'read', revoked:false, updatedAt:1 });
 put('movements/mv1', { orgId:'acme', delta:-1 });
 put('activityLog/log1', { orgId:'acme', action:'x' });
+put('purchaseOrders/po1', { orgId:'acme', poNumber:'AA1', status:'shipped', total:50, amountPaidCents:0, balanceDueCents:5000, invoice:{ status:'sent', payUrl:'https://x/pay/acme/po1?t=abc' } });
 put('payments/pay1', { orgId:'acme', orderId:'po1', orderIds:['po1'], amountCents:5000, status:'succeeded', source:'stripe' });
 put('payments/pay2', { orgId:'victim', orderId:'po2', orderIds:['po2'], amountCents:7000, status:'succeeded', source:'manual' });
 put('stripeEvents/evt_1', { orgId:'acme', type:'payment_intent.succeeded', processedAt:1 });
@@ -198,6 +199,16 @@ T('manager reads the activity log', true, { path:P+'activityLog/log1', op:'get',
 T('admin cannot point payments at another Stripe account', false, { path:P+'organizations/acme', op:'update', auth:alice, resource:acmeOrg, request_resource:orgWith({ payments:{ enabled:true, stripeAccountId:'acct_hijack' } }) });
 T('admin cannot switch online payments on from the client', false, { path:P+'organizations/acme', op:'update', auth:alice, resource:Object.assign({}, acmeOrg, { payments:{ enabled:false } }), request_resource:orgWith({ payments:{ enabled:true } }) });
 T('admin still edits other org settings with payments present', true, { path:P+'organizations/acme', op:'update', auth:alice, resource:Object.assign({}, acmeOrg, { payments:{ enabled:true } }), request_resource:Object.assign({}, acmeOrg, { payments:{ enabled:true }, name:'Acme Inc', updatedAt:2 }) });
+
+// ---- invoicing: ledger-owned order fields --------------------------------------
+const po1 = D('purchaseOrders/po1');
+const poWith = (o) => Object.assign({}, po1, o, { updatedAt:2 });
+T('staff still edits an order with invoice fields present', true, { path:P+'purchaseOrders/po1', op:'update', auth:carol, resource:po1, request_resource:poWith({ notes:'call first' }) });
+T('staff cannot mark an invoice paid by editing the balance', false, { path:P+'purchaseOrders/po1', op:'update', auth:carol, resource:po1, request_resource:poWith({ balanceDueCents:0, amountPaidCents:5000 }) });
+T('admin cannot rewrite the invoice status or pay link', false, { path:P+'purchaseOrders/po1', op:'update', auth:alice, resource:po1, request_resource:poWith({ invoice:{ status:'paid', payUrl:'https://evil' } }) });
+T('a stale full-order save cannot roll back a payment', false, { path:P+'purchaseOrders/po1', op:'update', auth:dave, resource:Object.assign({}, po1, { amountPaidCents:5000, balanceDueCents:0 }), request_resource:poWith({ amountPaidCents:0, balanceDueCents:5000 }) });
+T('an order cannot be created already carrying ledger fields', false, { path:P+'purchaseOrders/po9', op:'create', auth:carol, request_resource:{ orgId:'acme', poNumber:'AA9', amountPaidCents:100 } });
+T('staff marks an order paid by hand (existing button)', true, { path:P+'purchaseOrders/po1', op:'update', auth:carol, resource:po1, request_resource:poWith({ status:'paid', paidAt:5, paymentMethod:'check' }) });
 
 // ---- invoicing: payments ledger ---------------------------------------------
 T('staff reads own org payment', true, { path:P+'payments/pay1', op:'get', auth:carol, resource:D('payments/pay1') });

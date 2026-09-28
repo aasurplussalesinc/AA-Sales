@@ -17,6 +17,34 @@ export const Payments = {
   saveSettings: call('paymentsSaveSettings')
 };
 
+export const Invoices = {
+  getDetails: call('invoiceGetDetails'),
+  getPayLink: call('invoiceGetPayLink'),
+  recordManualPayment: call('invoiceRecordManualPayment'),
+  reverseManualPayment: call('invoiceReverseManualPayment'),
+  // Public: the pay page (no sign-in; the signed token in the link is checked server-side)
+  payLinkStatus: call('invoicePayLinkStatus'),
+  payLinkCheckout: call('invoicePayLinkCheckout')
+};
+
+export const INVOICE_STATUS_LABELS = {
+  draft: { label: 'Not sent', color: '#666', bg: '#eceff1' },
+  sent: { label: 'Sent', color: '#1565c0', bg: '#e3f2fd' },
+  partially_paid: { label: 'Partially paid', color: '#b26a00', bg: '#fff3e0' },
+  paid: { label: 'Paid', color: '#2e7d32', bg: '#e8f5e9' },
+  overdue: { label: 'Overdue', color: '#c62828', bg: '#ffebee' },
+  void: { label: 'Void', color: '#666', bg: '#eeeeee' }
+};
+
+export const PAYMENT_METHOD_LABELS = {
+  card: 'Card', ach: 'Bank transfer (ACH)', check: 'Check', cash: 'Cash', zelle: 'Zelle', wire: 'Wire', other: 'Other'
+};
+
+export const PAYMENT_STATUS_LABELS = {
+  pending: 'Pending', succeeded: 'Received', failed: 'Failed', refunded: 'Refunded',
+  partially_refunded: 'Partly refunded', voided: 'Reversed'
+};
+
 export function formatCents(cents) {
   const n = Number(cents) || 0;
   const sign = n < 0 ? '-' : '';

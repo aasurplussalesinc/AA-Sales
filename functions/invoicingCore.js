@@ -95,13 +95,25 @@ function verifyOAuthState(secret, state, uid, nowMs, maxAgeMs) {
 function accountFlags(acct) {
   acct = acct || {};
   var req = acct.requirements || {};
-  return {
+  var out = {
     chargesEnabled: !!acct.charges_enabled,
     payoutsEnabled: !!acct.payouts_enabled,
     detailsSubmitted: !!acct.details_submitted,
     currentlyDue: Array.isArray(req.currently_due) ? req.currently_due.slice(0, 20) : [],
     disabledReason: req.disabled_reason || null
   };
+  // The company's brand color from its own Stripe branding settings (also used
+  // by Stripe Checkout). Only set when present, so a refresh never clears it.
+  var color = acct.settings && acct.settings.branding && acct.settings.branding.primary_color;
+  if (hexColor(color)) out.brandColor = hexColor(color);
+  return out;
+}
+
+/** '#1a2b3c' (lower case) or null. */
+function hexColor(v) {
+  var s = String(v || '').trim().toLowerCase();
+  if (/^#[0-9a-f]{3}$/.test(s)) s = '#' + s[1] + s[1] + s[2] + s[2] + s[3] + s[3];
+  return /^#[0-9a-f]{6}$/.test(s) ? s : null;
 }
 
 /** Connected / Needs info / Disconnected, as the settings page shows it. */
@@ -847,6 +859,97 @@ function prettyDate(iso) {
   return m[dt.getUTCMonth()] + ' ' + dt.getUTCDate() + ', ' + dt.getUTCFullYear();
 }
 
+// ─────────────────────────────────────────────────────── email layout ────
+
+var SKIDSLING_URL = 'https://skidsling.com';
+var SKIDSLING_GREEN = '#0d7a52';
+var FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+/** The company's accent: its Stripe brand color, else SkidSling green. */
+function brandColor(org) {
+  return hexColor(org && org.payments && org.payments.brandColor) || SKIDSLING_GREEN;
+}
+
+/** White or near-black text, whichever reads better on `hex`. */
+function textOn(hex) {
+  var n = parseInt(hex.slice(1), 16);
+  var lum = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  return lum > 0.62 ? '#111827' : '#ffffff';
+}
+
+function safeUrl(u) { return u && /^https:\/\/[^\s"'<>]+$/.test(u) ? u : ''; }
+
+function emailButton(href, label, color) {
+  var e = escapeHtml;
+  return '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px auto 8px"><tr><td style="border-radius:8px;background:' + color + '">' +
+    '<a href="' + e(href) + '" style="display:inline-block;padding:14px 34px;font-family:' + FONT + ';font-size:16px;font-weight:700;color:' + textOn(color) +
+    ';text-decoration:none;border-radius:8px">' + e(label) + '</a></td></tr></table>';
+}
+
+/** Big "amount due" panel. `sub` is the line under it; `alert` turns it red. */
+function amountPanel(label, amount, sub, alert) {
+  var e = escapeHtml;
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #eef0f3;border-radius:10px;margin:20px 0 4px">' +
+    '<tr><td style="padding:20px 22px;text-align:center">' +
+    '<div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280">' + e(label) + '</div>' +
+    '<div style="font-size:34px;font-weight:800;color:#111827;margin:4px 0 2px">' + e(amount) + '</div>' +
+    (sub ? '<div style="font-size:14px;color:' + (alert ? '#b91c1c;font-weight:600' : '#4b5563') + '">' + e(sub) + '</div>' : '') +
+    '</td></tr></table>';
+}
+
+/** Label / value rows. rows: [label, value, strong?] (values already plain text). */
+function detailRows(rows) {
+  var e = escapeHtml;
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;margin:18px 0 6px">' +
+    rows.filter(Boolean).map(function (r) {
+      var strong = r[2];
+      var td = 'padding:9px 0;border-top:1px solid ' + (strong ? '#d1d5db' : '#f0f1f3') + ';';
+      return '<tr><td style="' + td + 'color:' + (strong ? '#111827;font-weight:700' : '#6b7280') + '">' + e(r[0]) + '</td>' +
+        '<td style="' + td + 'text-align:right;color:#111827' + (strong ? ';font-weight:700' : '') + '">' + e(r[1]) + '</td></tr>';
+    }).join('') + '</table>';
+}
+
+/**
+ * One layout for every invoicing email. The company is the sender (its logo,
+ * name, brand color and contact details); SkidSling signs the footer.
+ *   org, title (tab title), preheader (inbox preview line), label (top right,
+ *   e.g. "Invoice"), body (HTML), sender: 'company' | 'skidsling'
+ */
+function emailShell(a) {
+  var e = escapeHtml;
+  var org = a.org || {};
+  var fromSkid = a.sender === 'skidsling';
+  var color = fromSkid ? SKIDSLING_GREEN : brandColor(org);
+  var logo = fromSkid ? SKIDSLING_URL + '/logo.png' : safeUrl(org.logoUrl);
+  var name = fromSkid ? 'SkidSling' : (org.name || '');
+  var brand = logo
+    ? '<img src="' + e(logo) + '" alt="' + e(name) + '" height="' + (fromSkid ? 36 : 44) + '" style="display:block;height:' + (fromSkid ? 36 : 44) + 'px;max-width:200px;border:0">'
+    : '<div style="font-size:20px;font-weight:800;color:#111827">' + e(name) + '</div>';
+  var p = org.payments || {};
+  var contact = [org.name, org.phone, (p.billingEmail || org.email)].filter(Boolean).map(e).join(' &nbsp;&middot;&nbsp; ');
+  return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<meta name="color-scheme" content="light"><title>' + e(a.title || '') + '</title></head>' +
+    '<body style="margin:0;padding:0;background:#f3f4f6;font-family:' + FONT + ';color:#1f2937">' +
+    '<div style="display:none;max-height:0;overflow:hidden;opacity:0">' + e(a.preheader || '') + '</div>' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6"><tr><td align="center" style="padding:32px 12px">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden">' +
+    '<tr><td style="height:5px;background:' + color + ';font-size:0;line-height:0">&nbsp;</td></tr>' +
+    '<tr><td style="padding:26px 32px 0"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' +
+    '<td style="vertical-align:middle">' + brand + '</td>' +
+    (a.label ? '<td style="vertical-align:middle;text-align:right;font-size:12px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:' + color + '">' + e(a.label) + '</td>' : '') +
+    '</tr></table></td></tr>' +
+    '<tr><td style="padding:22px 32px 30px;font-size:15px;line-height:1.55">' + a.body + '</td></tr>' +
+    (!fromSkid && contact ? '<tr><td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #eef0f3;font-size:12px;color:#6b7280;text-align:center">' + contact + '</td></tr>' : '') +
+    '</table>' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr>' +
+    '<td style="vertical-align:middle;padding-right:7px"><a href="' + SKIDSLING_URL + '"><img src="' + SKIDSLING_URL + '/logo.png" alt="SkidSling" width="18" height="18" style="display:block;border:0"></a></td>' +
+    '<td style="vertical-align:middle;font-size:12px;color:#6b7280">' + (fromSkid ? 'SkidSling payments' : 'Invoicing by') +
+    ' <a href="' + SKIDSLING_URL + '" style="color:' + SKIDSLING_GREEN + ';font-weight:700;text-decoration:none">SkidSling</a></td></tr></table>' +
+    (fromSkid ? '' : '<div style="max-width:480px;font-size:11px;color:#9ca3af;margin-top:6px;line-height:1.5">Sent on behalf of ' + e(org.name || 'the sender') +
+      '. Payments are processed by Stripe; nobody will ever ask for your card or bank details by email.</div>') +
+    '</td></tr></table></body></html>';
+}
+
 /**
  * Subject and HTML for an invoice or reminder email. Every value is escaped:
  * names, POs and notes are tenant/customer text.
@@ -883,30 +986,29 @@ function invoiceEmailContent(a) {
     lead = 'Our records show invoice ' + num + poText + ' for ' + amount + ' was due on ' + dueText +
       ' and is now ' + st.daysOverdue + ' days past due. If you have already sent payment, thank you - please disregard this note.';
   }
-  var payUrl = a.payUrl && /^https?:\/\/[^\s"'<>]+$/.test(a.payUrl) ? a.payUrl : '';
-  var row = function (k, v, strong) {
-    var st2 = 'padding:' + (strong ? '8px' : '4px') + ' 0;' + (strong ? 'font-weight:700;border-top:2px solid #222;' : '');
-    return '<tr><td style="' + st2 + (strong ? '' : 'color:#555') + '">' + e(k) + '</td><td style="' + st2 + 'text-align:right">' + e(v) + '</td></tr>';
-  };
-  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + e(subject) + '</title></head>' +
-    '<body style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;background:#f5f5f5;margin:0;padding:0;color:#222">' +
-    '<div style="max-width:560px;margin:30px auto;background:#fff;border-radius:8px;padding:28px">' +
-    '<div style="font-size:18px;font-weight:700;margin-bottom:18px">' + e(org.name || '') + '</div>' +
-    '<p>Hello ' + e(who) + ',</p><p>' + e(lead) + '</p>' +
-    '<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:15px">' +
-    row('Invoice', num) +
-    (o.customerPO ? row('Your PO', o.customerPO) : '') +
-    row('Invoice total', formatCents(st.totalCents)) +
-    (st.paidCents > 0 ? row('Paid so far', formatCents(st.paidCents)) : '') +
-    row('Balance due', formatCents(st.balanceCents), true) +
-    (dueText ? row('Due date', dueText) : '') +
-    '</table>' +
-    (payUrl ? '<div style="text-align:center;margin:26px 0"><a href="' + e(payUrl) + '" style="display:inline-block;background:#0d7a52;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:700;font-size:16px">Pay ' + e(amount) + ' online</a>' +
-      '<div style="font-size:12px;color:#777;margin-top:8px">Bank transfer (ACH) or card, processed securely by Stripe.</div></div>' : '') +
-    '<p style="font-size:14px;color:#555">The invoice is attached as a PDF. Questions about it? Just reply to this email.</p>' +
-    '<p style="font-size:14px">Thank you,<br>' + e(org.name || '') + (org.phone ? '<br>' + e(org.phone) : '') + '</p>' +
-    '</div><div style="text-align:center;font-size:11px;color:#999;margin-bottom:30px">Sent by SkidSling on behalf of ' + e(org.name || '') + '</div>' +
-    '</body></html>';
+  var payUrl = safeUrl(a.payUrl);
+  var color = brandColor(org);
+  var overdue = st.daysOverdue > 0;
+  var sub = overdue ? st.daysOverdue + ' day' + (st.daysOverdue === 1 ? '' : 's') + ' past due' + (dueText ? ' (due ' + dueText + ')' : '')
+    : (dueText ? 'Due ' + dueText : '');
+  var label = a.kind === 'invoice' ? 'Invoice' : (a.final ? 'Final notice' : (overdue ? 'Past due' : 'Reminder'));
+  var body =
+    '<p style="margin:0 0 12px">Hello ' + e(who) + ',</p>' +
+    '<p style="margin:0">' + e(lead) + '</p>' +
+    amountPanel(st.paidCents > 0 ? 'Balance due' : 'Amount due', amount, sub, overdue) +
+    (payUrl ? emailButton(payUrl, 'Pay ' + amount + ' online', color) +
+      '<div style="text-align:center;font-size:12px;color:#6b7280">Card or bank transfer (ACH) &middot; secured by Stripe</div>' : '') +
+    detailRows([
+      ['Invoice', num],
+      o.customerPO ? ['Your PO', o.customerPO] : null,
+      ['Invoice total', formatCents(st.totalCents)],
+      st.paidCents > 0 ? ['Paid so far', formatCents(st.paidCents)] : null,
+      ['Balance due', formatCents(st.balanceCents), true]
+    ]) +
+    '<p style="margin:18px 0 0;font-size:14px;color:#4b5563">The invoice PDF is attached. Questions about it? Just reply to this email.</p>' +
+    '<p style="margin:16px 0 0;font-size:14px">Thank you,<br><strong>' + e(org.name || '') + '</strong></p>';
+  var html = emailShell({ org: org, title: subject, label: label, body: body,
+    preheader: (payUrl ? 'Pay ' + amount + ' online' : amount + ' due') + (sub ? ' - ' + sub : '') + '. Invoice ' + num + ' from ' + orgName + '.' });
   return { subject: subject, html: html };
 }
 
@@ -1026,25 +1128,51 @@ function statementEmailContent(a) {
   var overdue = s.invoices.filter(function (x) { return x.daysOverdue > 0; }).length;
   var subject = 'Statement from ' + (org.name || 'us') + ': ' + s.invoices.length + ' open invoice' + (s.invoices.length === 1 ? '' : 's') +
     ', ' + total + (overdue ? ' (' + overdue + ' past due)' : '');
-  var payUrl = a.payUrl && /^https?:\/\/[^\s"'<>]+$/.test(a.payUrl) ? a.payUrl : '';
+  var payUrl = safeUrl(a.payUrl);
+  var cell = 'padding:10px 0;border-top:1px solid #f0f1f3;vertical-align:top;';
   var rows = s.invoices.map(function (x) {
-    return '<tr><td style="padding:6px 0;border-top:1px solid #eee">' + e(x.orderNumber) + (x.customerPO ? '<br><span style="color:#777;font-size:12px">PO ' + e(x.customerPO) + '</span>' : '') + '</td>' +
-      '<td style="padding:6px 0;border-top:1px solid #eee">' + e(prettyDate(x.dueDate)) + (x.daysOverdue > 0 ? '<br><span style="color:#c62828;font-size:12px">' + x.daysOverdue + ' days past due</span>' : '') + '</td>' +
-      '<td style="padding:6px 0;border-top:1px solid #eee;text-align:right">' + e(formatCents(x.balanceCents)) + (x.pendingCents > 0 ? '<br><span style="color:#b26a00;font-size:12px">' + e(formatCents(x.pendingCents)) + ' clearing</span>' : '') + '</td></tr>';
+    return '<tr><td style="' + cell + '">' + e(x.orderNumber) + (x.customerPO ? '<br><span style="color:#6b7280;font-size:12px">PO ' + e(x.customerPO) + '</span>' : '') + '</td>' +
+      '<td style="' + cell + '">' + e(prettyDate(x.dueDate)) + (x.daysOverdue > 0 ? '<br><span style="color:#b91c1c;font-size:12px;font-weight:600">' + x.daysOverdue + ' days past due</span>' : '') + '</td>' +
+      '<td style="' + cell + 'text-align:right">' + e(formatCents(x.balanceCents)) + (x.pendingCents > 0 ? '<br><span style="color:#b45309;font-size:12px">' + e(formatCents(x.pendingCents)) + ' clearing</span>' : '') + '</td></tr>';
   }).join('');
-  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + e(subject) + '</title></head>' +
-    '<body style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;background:#f5f5f5;margin:0;padding:0;color:#222">' +
-    '<div style="max-width:560px;margin:30px auto;background:#fff;border-radius:8px;padding:28px">' +
-    '<div style="font-size:18px;font-weight:700;margin-bottom:18px">' + e(org.name || '') + '</div>' +
-    '<p>Hello ' + e(who) + ',</p><p>Here is a statement of your open invoices with us.</p>' +
-    '<table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:14px"><tr style="color:#777;font-size:12px;text-align:left"><th>Invoice</th><th>Due</th><th style="text-align:right">Balance</th></tr>' +
-    rows + '<tr><td colspan="2" style="padding:10px 0;font-weight:700;border-top:2px solid #222">Total due</td><td style="padding:10px 0;text-align:right;font-weight:700;border-top:2px solid #222">' + e(total) + '</td></tr></table>' +
-    (payUrl ? '<div style="text-align:center;margin:24px 0"><a href="' + e(payUrl) + '" style="display:inline-block;background:#0d7a52;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:700;font-size:16px">Pay ' + e(total) + ' online</a>' +
-      '<div style="font-size:12px;color:#777;margin-top:8px">One payment covers every invoice above, oldest first.</div></div>' : '') +
-    '<p style="font-size:14px;color:#555">Questions, or already paid? Just reply to this email.</p>' +
-    '<p style="font-size:14px">Thank you,<br>' + e(org.name || '') + (org.phone ? '<br>' + e(org.phone) : '') + '</p>' +
-    '</div><div style="text-align:center;font-size:11px;color:#999;margin-bottom:30px">Sent by SkidSling on behalf of ' + e(org.name || '') + '</div></body></html>';
+  var count = s.invoices.length + ' open invoice' + (s.invoices.length === 1 ? '' : 's');
+  var body =
+    '<p style="margin:0 0 12px">Hello ' + e(who) + ',</p>' +
+    '<p style="margin:0">Here is a statement of your open invoices with ' + e(org.name || 'us') + '.</p>' +
+    amountPanel('Total due', total, count + (overdue ? ' · ' + overdue + ' past due' : ''), overdue > 0) +
+    (payUrl ? emailButton(payUrl, 'Pay ' + total + ' online', brandColor(org)) +
+      '<div style="text-align:center;font-size:12px;color:#6b7280">One payment covers every invoice below, oldest first &middot; secured by Stripe</div>' : '') +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;margin:20px 0 6px">' +
+    '<tr style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6b7280"><td style="padding-bottom:6px">Invoice</td><td style="padding-bottom:6px">Due</td><td style="padding-bottom:6px;text-align:right">Balance</td></tr>' +
+    rows + '<tr><td colspan="2" style="padding:10px 0;font-weight:700;border-top:1px solid #d1d5db">Total due</td><td style="padding:10px 0;text-align:right;font-weight:700;border-top:1px solid #d1d5db">' + e(total) + '</td></tr></table>' +
+    '<p style="margin:18px 0 0;font-size:14px;color:#4b5563">Questions, or already paid? Just reply to this email.</p>' +
+    '<p style="margin:16px 0 0;font-size:14px">Thank you,<br><strong>' + e(org.name || '') + '</strong></p>';
+  var html = emailShell({ org: org, title: subject, label: 'Statement', body: body,
+    preheader: total + ' across ' + count + (overdue ? ', ' + overdue + ' past due' : '') + '.' });
   return { subject: subject, html: html };
+}
+
+/**
+ * The note to the COMPANY when a payment event happens (never the customer).
+ * SkidSling is the sender here. kind: PAYMENT_RECEIVED | PAYMENT_PENDING |
+ * PAYMENT_FAILED | PAYMENT_REFUNDED | PAYMENT_DISPUTED
+ */
+function paymentNoticeContent(a) {
+  var e = escapeHtml;
+  var org = a.org || {};
+  var looks = {
+    PAYMENT_RECEIVED: ['Payment received', '#0d7a52'], PAYMENT_PENDING: ['Payment on the way', '#b45309'],
+    PAYMENT_FAILED: ['Payment failed', '#b91c1c'], PAYMENT_REFUNDED: ['Refund', '#4b5563'], PAYMENT_DISPUTED: ['Dispute opened', '#b91c1c']
+  }[a.kind] || ['Payment update', '#4b5563'];
+  var link = safeUrl(a.appBaseUrl) ? a.appBaseUrl.replace(/\/+$/, '') + '/collections' : '';
+  var body =
+    '<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:' + looks[1] + '1a;color:' + looks[1] + ';font-size:12px;font-weight:700">' + e(looks[0]) + '</div>' +
+    (a.amount ? amountPanel(a.label || 'Payment', a.amount, a.method ? 'by ' + a.method : '', a.kind === 'PAYMENT_FAILED' || a.kind === 'PAYMENT_DISPUTED') : '') +
+    '<p style="margin:14px 0 0">' + e(a.text) + '.</p>' +
+    (link ? emailButton(link, 'Open Collections', SKIDSLING_GREEN) : '') +
+    '<p style="margin:18px 0 0;font-size:12px;color:#9ca3af">For ' + e(org.name || 'your company') +
+    '. You get these because "Email the billing address when a payment arrives" is on in Settings &gt; Payments.</p>';
+  return { subject: a.text, html: emailShell({ org: org, sender: 'skidsling', title: a.text, label: 'Payments', body: body, preheader: a.text }) };
 }
 
 module.exports = {
@@ -1088,6 +1216,8 @@ module.exports = {
   verifyPayToken: verifyPayToken,
   invoicePayUrl: invoicePayUrl,
   statementPayUrl: statementPayUrl,
+  hexColor: hexColor,
+  paymentNoticeContent: paymentNoticeContent,
   cardSurchargeCents: cardSurchargeCents,
   paymentOptions: paymentOptions,
   invoiceLineName: invoiceLineName,

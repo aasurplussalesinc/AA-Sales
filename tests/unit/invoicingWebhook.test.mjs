@@ -292,3 +292,24 @@ test('daily job: a sent invoice past its due date becomes overdue; a paid one do
   assert.equal(h.db.data('purchaseOrders/o2').invoice.status, 'paid');
   assert.equal(stats.overdue, 1);
 });
+
+test('paid online BEFORE shipping: the order flips to Paid when it ships; Mark Unpaid is not undone', async () => {
+  const s = seed();
+  s['purchaseOrders/o1'].status = 'packed';
+  const h = build({ seed: s });
+  withCharge(h, 'pi_early', TOTAL);
+  await h.deliver(ev('checkout.session.completed', session('pi_early', TOTAL, 'paid')));
+  assert.equal(order(h).status, 'packed', 'not shipped yet, so still in the pick/pack flow');
+  assert.equal(order(h).invoice.status, 'paid');
+  const before = h.db.data('purchaseOrders/o1');
+  h.db.store['purchaseOrders/o1'].status = 'shipped';
+  assert.equal(await h.inv._internal.handleOrderChange('acme', 'o1', before, h.db.data('purchaseOrders/o1')), 'recomputed-paid-check');
+  assert.equal(order(h).status, 'paid');
+  assert.equal(order(h).paidVia, 'ledger');
+  assert.equal(order(h).paymentMethod, 'credit_card');
+  // A person uses Mark Unpaid (paid -> shipped): the trigger leaves it alone.
+  const paid = h.db.data('purchaseOrders/o1');
+  Object.assign(h.db.store['purchaseOrders/o1'], { status: 'shipped', paidAt: null, paymentMethod: '' });
+  await h.inv._internal.handleOrderChange('acme', 'o1', paid, h.db.data('purchaseOrders/o1'));
+  assert.equal(order(h).status, 'shipped');
+});

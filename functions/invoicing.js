@@ -792,9 +792,11 @@ module.exports = function createInvoicing(deps) {
         paymentId: payment.stripe && payment.stripe.paymentIntentId ? 'stripe_' + payment.stripe.paymentIntentId : null,
         orderIds: payment.orderIds || [], amountCents: payment.amountCents });
       if (p.notifyOnPayment && to) {
-        await sendEmail({ to: [to], internal: true, fromName: 'SkidSling', subject: lines[i].text,
-          html: '<p>' + CORE.escapeHtml(lines[i].text) + '.</p><p style="color:#777;font-size:13px">SkidSling payments &middot; ' +
-            CORE.escapeHtml(org.name || '') + '. You get these because "Email the billing address when a payment arrives" is on in Settings &gt; Payments.</p>' });
+        var isRefund = lines[i].action === 'PAYMENT_REFUNDED';
+        var notice = CORE.paymentNoticeContent({ org: org, kind: lines[i].action, text: lines[i].text, appBaseUrl: config().appBaseUrl,
+          amount: CORE.formatCents(isRefund ? payment.refundedCents : payment.amountCents), label: isRefund ? 'Refunded' : label,
+          method: isRefund ? '' : how });
+        await sendEmail({ to: [to], internal: true, fromName: 'SkidSling', subject: notice.subject, html: notice.html });
       }
     }
   }
@@ -1225,8 +1227,15 @@ module.exports = function createInvoicing(deps) {
       }
       return 'issued';
     }
+    // Paid online BEFORE it shipped: the payment could not flip it to 'paid'
+    // then (only shipped orders are), so do it now that it has shipped. Only
+    // a move INTO shipped from a pre-ship status - never after someone used
+    // Mark Unpaid (paid -> shipped), so a person's reversal is not undone.
+    var shippedAfterPaying = after.status === 'shipped' && before.status !== 'shipped' &&
+      before.status !== 'paid' && before.status !== 'cancelled' && (after.amountPaidCents || 0) > 0;
+    if (shippedAfterPaying) { await recomputeOrder(orgId, orderId, { flipStatus: true }); return 'recomputed-paid-check'; }
     if (inv.issuedAt || after.amountPaidCents !== undefined) {
-      var keys = ['items', 'tax', 'shipping', 'credit', 'discount', 'terms', 'invoiceDate', 'dueDate', 'status', 'paidVia'];
+      var keys =['items', 'tax', 'shipping', 'credit', 'discount', 'terms', 'invoiceDate', 'dueDate', 'status', 'paidVia'];
       var changed = keys.some(function (k) { return JSON.stringify(before[k]) !== JSON.stringify(after[k]); });
       if (changed) { await recomputeOrder(orgId, orderId); return 'recomputed'; }
     }

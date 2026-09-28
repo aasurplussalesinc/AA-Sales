@@ -23,6 +23,15 @@
         { "fieldPath": "orgId", "order": "ASCENDING" },
         { "fieldPath": "lowStockThreshold", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "movements",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "orgId", "order": "ASCENDING" },
+        { "fieldPath": "itemId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

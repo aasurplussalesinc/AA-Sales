@@ -1,5 +1,6 @@
 import { brandingFrom as sharedBrandingFrom, brandingHtml as sharedBrandingHtml } from '../functions/orderDocument.mjs';
 import { shouldClearShippingRates } from './parcelRates';
+import { stockChangeMovement } from './movementHistory';
 import { collection, addDoc, getDocs, getDoc, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc, setDoc } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
@@ -629,7 +630,7 @@ export const OrgDB = {
 
     const lastByItem = {};
     (movements || []).forEach(m => {
-      if (!m.itemId) return;
+      if (!m.itemId || m.type === 'IMPORT') return; // an import rewriting counts isn't activity
       const t = m.timestamp || 0;
       if (!lastByItem[m.itemId] || t > lastByItem[m.itemId]) lastByItem[m.itemId] = t;
     });
@@ -701,20 +702,26 @@ export const OrgDB = {
     // Put it back where it came from when a shelf is known, so the totals stay
     // derived from the shelves rather than drifting apart.
     const code = this.canonicalLocationCode(opts.location || '');
+    const note = opts.reason || opts.note || 'Stock adjustment';
+    // The shelf helpers log their own movement; only the plain stock write
+    // below needs one here (logging both counted the units twice).
     if (code && amount > 0) {
-      await this.addStockAtLocation(itemId, code, amount);
+      await this.addStockAtLocation(itemId, code, amount, { note });
+      return { previous: cur, stock: next };
     } else if (code && amount < 0) {
-      await this.removeStockAtLocation(itemId, code, Math.abs(amount));
-    } else {
-      await updateDoc(ref, { stock: next, updatedAt: Date.now() });
+      await this.removeStockAtLocation(itemId, code, Math.abs(amount), { note });
+      return { previous: cur, stock: next };
     }
+    await updateDoc(ref, { stock: next, updatedAt: Date.now() });
 
     await this.logMovement({
-      itemId, itemName: snap.data().name || '', quantity: Math.abs(amount),
+      itemId, itemName: snap.data().name || '',
+      sku: snap.data().partNumber || '', grade: snap.data().grade || '',
+      quantity: Math.abs(amount),
       type: amount > 0 ? 'RECEIVE' : 'PICK',
-      toLocation: amount > 0 ? (code || '') : '',
-      fromLocation: amount < 0 ? (code || '') : '',
-      note: opts.reason || opts.note || 'Stock adjustment'
+      toLocation: '', fromLocation: '',
+      beforeQty: cur, afterQty: next,
+      note
     });
     return { previous: cur, stock: next };
   },
@@ -789,7 +796,22 @@ export const OrgDB = {
       itemName: itemData.name,
       partNumber: itemData.partNumber
     });
-    
+
+    // Opening stock is a quantity change like any other; without it an
+    // item's history can never add up to its quantity.
+    const opening = parseInt(itemData.stock) || 0;
+    if (opening > 0) {
+      try {
+        await this.logMovement({
+          itemId: ref.id, itemName: itemData.name || '',
+          sku: itemData.partNumber || '', grade: itemData.grade || '',
+          type: 'CREATE', quantity: opening, beforeQty: 0, afterQty: opening,
+          toLocation: this.canonicalLocationCode(itemData.location || ''),
+          note: 'Item created'
+        });
+      } catch (e) { console.warn('CREATE movement not logged:', e.message); }
+    }
+
     return ref.id;
   },
 
@@ -801,13 +823,13 @@ export const OrgDB = {
     let before = null;
     if (updates && (updates.price !== undefined || updates.cost !== undefined ||
                     updates.grade !== undefined || updates.name !== undefined ||
-                    updates.category !== undefined)) {
+                    updates.category !== undefined || updates.stock !== undefined)) {
       try {
         const snapBefore = await getDoc(ref);
         if (snapBefore.exists()) {
           const d = snapBefore.data();
           before = {};
-          ['price', 'cost', 'grade', 'name', 'category'].forEach(k => {
+          ['price', 'cost', 'grade', 'name', 'category', 'stock'].forEach(k => {
             if (updates[k] !== undefined) before[k] = d[k] ?? null;
           });
         }
@@ -1220,7 +1242,7 @@ export const OrgDB = {
   },
 
   // Add qty at a shelf (receiving). Blank code routes to staging.
-  async addStockAtLocation(itemId, code, qty) {
+  async addStockAtLocation(itemId, code, qty, meta = {}) {
     const amount = parseInt(qty) || 0;
     if (amount <= 0) throw new Error('Quantity must be greater than zero');
     const snap = await getDoc(doc(db, 'items', itemId));
@@ -1229,10 +1251,18 @@ export const OrgDB = {
     let target = this.canonicalLocationCode(code || '');
     if (!target) { const st = await this.getOrCreateStagingLocation(); target = st.locationCode || this.STAGING_CODE; }
     const entries = this.itemLocations(item);
+    // Shelf total, not item.stock: the write below re-derives stock from the
+    // shelves, so this is the before that matches the after.
+    const beforeQty = entries.reduce((s, e) => s + e.qty, 0);
     const hit = entries.find(e => e.code === target);
     if (hit) hit.qty += amount; else entries.push({ code: target, qty: amount });
     const res = await this.setItemLocations(itemId, entries);
-    await this.logMovement({ itemId, itemName: item.name, quantity: amount, type: 'RECEIVE', toLocation: target });
+    await this.logMovement({
+      itemId, itemName: item.name, sku: item.partNumber || '', grade: item.grade || '',
+      quantity: amount, type: 'RECEIVE', toLocation: target,
+      beforeQty, afterQty: res.stock,
+      ...(meta.note ? { note: meta.note } : {})
+    });
     return res;
   },
 
@@ -1253,12 +1283,16 @@ export const OrgDB = {
     let hit = entries.find(e => e.code === target);
     if (!hit) hit = entries.slice().sort((a, b) => b.qty - a.qty)[0];
     if (!hit) return null;
+    const beforeQty = entries.reduce((s, e) => s + e.qty, 0); // shelf total, as addStockAtLocation
     hit.qty -= amount;
     const res = await this.setItemLocations(itemId, entries.filter(e => e.qty > 0));
     await this.logMovement({
-      itemId, itemName: item.name, quantity: amount, type: 'PICK', fromLocation: hit.code,
+      itemId, itemName: item.name, sku: item.partNumber || '', grade: item.grade || '',
+      quantity: amount, type: 'PICK', fromLocation: hit.code,
+      beforeQty, afterQty: res.stock,
       ...(meta.orderId ? { orderId: meta.orderId } : {}),
-      ...(meta.orderNumber ? { orderNumber: meta.orderNumber } : {})
+      ...(meta.orderNumber ? { orderNumber: meta.orderNumber } : {}),
+      ...(meta.note ? { note: meta.note } : {})
     });
     return res;
   },
@@ -1293,8 +1327,8 @@ export const OrgDB = {
       const remaining = entries.filter(e => e.code !== from && e.qty > 0);
       await this.setItemLocations(it.id, remaining);
       await this.logMovement({
-        itemId: it.id, itemName: it.name, quantity: qty,
-        type: 'MOVE', fromLocation: from, toLocation: to
+        itemId: it.id, itemName: it.name, sku: it.partNumber || '', grade: it.grade || '',
+        quantity: qty, type: 'MOVE', fromLocation: from, toLocation: to
       });
 
       movedItems++; movedUnits += qty;
@@ -1320,7 +1354,10 @@ export const OrgDB = {
     const dst = entries.find(e => e.code === to);
     if (dst) dst.qty += amount; else entries.push({ code: to, qty: amount });
     const res = await this.setItemLocations(itemId, entries.filter(e => e.qty > 0));
-    await this.logMovement({ itemId, itemName: item.name, quantity: amount, type: 'MOVE', fromLocation: from, toLocation: to });
+    await this.logMovement({
+      itemId, itemName: item.name, sku: item.partNumber || '', grade: item.grade || '',
+      quantity: amount, type: 'MOVE', fromLocation: from, toLocation: to
+    });
     return res;
   },
 
@@ -2009,9 +2046,20 @@ export const OrgDB = {
           const snap = await getDoc(doc(db, 'items', line.itemId));
           if (snap.exists()) {
             const cur = parseInt(snap.data().stock) || 0;
+            const next = Math.max(0, cur - qty);
             await updateDoc(doc(db, 'items', line.itemId), {
-              stock: Math.max(0, cur - qty), updatedAt: Date.now()
+              stock: next, updatedAt: Date.now()
             });
+            try {
+              await this.logMovement({
+                itemId: line.itemId, itemName: snap.data().name || line.itemName || '',
+                sku: snap.data().partNumber || '', grade: snap.data().grade || '',
+                quantity: qty, type: 'PICK', fromLocation: '',
+                beforeQty: cur, afterQty: next,
+                orderId, ...(order.poNumber ? { orderNumber: order.poNumber } : {}),
+                note: 'No shelf entry - stock total reduced directly'
+              });
+            } catch (e) { console.warn('PICK movement not logged for', line.itemName, e.message); }
           }
         } catch (e) {
           console.warn('stock fallback failed for', line.itemName, e.message);
@@ -2175,7 +2223,18 @@ export const OrgDB = {
     if (!currentOrgId) throw new Error('No organization selected');
     
     const user = auth.currentUser;
+    // Every movement carries sku + grade: items can share a name exactly
+    // (a NEW and a #1 of the same parka), and the name alone can't tell them
+    // apart. Callers that have the item pass them; otherwise read it here.
+    let extra = {};
+    if (movementData.itemId && movementData.sku === undefined) {
+      try {
+        const s = await getDoc(doc(db, 'items', movementData.itemId));
+        if (s.exists()) extra = { sku: s.data().partNumber || '', grade: s.data().grade || '' };
+      } catch (e) { /* history must never block the stock write it records */ }
+    }
     await addDoc(collection(db, 'movements'), {
+      ...extra,
       ...movementData,
       orgId: currentOrgId,
       userId: user?.uid || null,
@@ -2218,6 +2277,83 @@ export const OrgDB = {
     }
   },
   
+  // Every movement for the given items, all time, newest first. Used when the
+  // Movements page is searched for a SKU so its history isn't cut off by the
+  // 500-row default view.
+  async getMovementsForItems(itemIds) {
+    if (!currentOrgId) return [];
+    const out = [];
+    for (const itemId of [...new Set(itemIds || [])].filter(Boolean)) {
+      const base = [collection(db, 'movements'), where('orgId', '==', currentOrgId), where('itemId', '==', itemId)];
+      let snap;
+      try {
+        snap = await getDocs(query(...base, orderBy('timestamp', 'desc')));
+      } catch (e) {
+        // Index (orgId, itemId, timestamp) not deployed yet - equality only.
+        snap = await getDocs(query(...base));
+      }
+      snap.docs.forEach(d => out.push({ id: d.id, ...d.data() }));
+    }
+    return out.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+  },
+
+  // For paths that write an item's stock/shelves directly (edit form, grid,
+  // CSV import): take stockSnapshot() before the write and call
+  // logStockChange() after it. One movement is logged with before/after when
+  // the total or any shelf changed. Never throws - history must not block
+  // the save it records.
+  async stockSnapshot(itemId) {
+    try {
+      const snap = await getDoc(doc(db, 'items', itemId));
+      return snap.exists() ? this.stockState(snap.data()) : null;
+    } catch (e) { return null; }
+  },
+
+  stockState(item) {
+    return {
+      name: item.name || '', sku: item.partNumber || '', grade: item.grade || '',
+      stock: parseInt(item.stock) || 0,
+      locations: this.itemLocations(item)
+    };
+  },
+
+  // After a CSV import: one IMPORT movement per pre-existing item whose total
+  // or shelves changed. Items the import created log CREATE in createItem.
+  async logImportChanges(beforeItems) {
+    try {
+      const after = await this.getItems();
+      const byId = new Map((beforeItems || []).map(i => [i.id, i]));
+      let logged = 0;
+      for (const a of after) {
+        const b = byId.get(a.id);
+        if (!b) continue;
+        const mv = stockChangeMovement(this.stockState(b), this.stockState(a), { type: 'IMPORT', reason: 'CSV import' });
+        if (!mv) continue;
+        await this.logMovement({ itemId: a.id, itemName: a.name || '', sku: a.partNumber || '', grade: a.grade || '', ...mv });
+        logged++;
+      }
+      return logged;
+    } catch (e) {
+      console.warn('Import history not fully logged:', e.message);
+      return 0;
+    }
+  },
+
+  async logStockChange(itemId, before, type, reason) {
+    if (!before) return null;
+    try {
+      const after = await this.stockSnapshot(itemId);
+      if (!after) return null;
+      const mv = stockChangeMovement(before, after, { type, reason });
+      if (!mv) return null;
+      await this.logMovement({ itemId, itemName: after.name, sku: after.sku, grade: after.grade, ...mv });
+      return mv;
+    } catch (e) {
+      console.warn('Stock change not logged for', itemId, e.message);
+      return null;
+    }
+  },
+
   // ==================== COUNTS (ORG-SCOPED) ====================
   
   async getCounts() {

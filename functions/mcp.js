@@ -18,6 +18,7 @@
 
 var INV = require('./inventory');
 var ORD = require('./orders');
+var HIST = require('./itemHistory');
 
 module.exports = function createMcpFunction(deps) {
   var functions = deps.functions;
@@ -259,6 +260,23 @@ module.exports = function createMcpFunction(deps) {
         additionalProperties: false
       },
       annotations: { title: 'Create Draft Order', readOnlyHint: false, destructiveHint: true }
+    },
+    {
+      name: 'get_item_history',
+      title: 'Get Item Stock History',
+      description: 'Read the stock history (movements ledger) of one item: every pick, receive, move, adjustment, import and restore, newest first, with time, quantity, shelves, user, order and reason. Look up by exact `sku` or by `itemId`. When several items share a SKU (usually different grades) each is returned separately. `summary` totals each movement type and compares the net change the ledger implies with the current quantity, so an unlogged change shows up as a mismatch. Older stock edits made through the API/MCP or the item edit form were recorded only in the audit log; those appear under `auditLogOnlyEdits`. Read-only.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          sku: { type: 'string', description: 'Exact SKU / part number' },
+          itemId: { type: 'string', description: 'The item id returned by search_items' },
+          since: { type: 'string', description: 'Only movements at or after this ISO date/time, e.g. 2026-09-01' },
+          until: { type: 'string', description: 'Only movements before this ISO date/time' },
+          limit: { type: 'integer', minimum: 1, maximum: 1000, description: 'Max movements per item, newest first (default 200, cap 1000)' }
+        },
+        additionalProperties: false
+      },
+      annotations: { title: 'Get Item Stock History', readOnlyHint: true }
     },
     {
       name: 'adjust_item_quantity',
@@ -640,6 +658,116 @@ module.exports = function createMcpFunction(deps) {
       return order;
     }
 
+    if (name === 'get_item_history') {
+      var hLimit = Math.min(Math.max(parseInt(args.limit) || 200, 1), 1000);
+      var since = args.since ? Date.parse(String(args.since)) : null;
+      var until = args.until ? Date.parse(String(args.until)) : null;
+      if (args.since && isNaN(since)) throw new Error('`since` is not a valid ISO date: ' + args.since);
+      if (args.until && isNaN(until)) throw new Error('`until` is not a valid ISO date: ' + args.until);
+      var hRead = 0;
+
+      // Resolve the item(s). Tenant isolation: every item must belong to the
+      // key's org, and the movements query below is scoped to it as well.
+      var hItems = [];
+      if (args.itemId) {
+        var hRef = await db.collection('items').doc(String(args.itemId)).get();
+        hRead++;
+        if (!hRef.exists || hRef.data().orgId !== auth.orgId) throw new Error('Item not found: ' + args.itemId);
+        hItems.push({ id: hRef.id, data: hRef.data() });
+      } else if (args.sku) {
+        var hSnap = await db.collection('items').where('orgId', '==', auth.orgId)
+          .where('partNumber', '==', String(args.sku).trim()).get();
+        hRead += hSnap.size;
+        hSnap.docs.forEach(function (d) { hItems.push({ id: d.id, data: d.data() }); });
+        if (!hItems.length) throw new Error('No item with SKU ' + args.sku);
+      } else {
+        throw new Error('Pass `sku` or `itemId`.');
+      }
+
+      var orderNumbers = {};
+      var results = [];
+      var indexMissing = false;
+      for (var hi = 0; hi < hItems.length; hi++) {
+        var hid = hItems[hi].id;
+        var hd = hItems[hi].data;
+        var mq = db.collection('movements').where('orgId', '==', auth.orgId).where('itemId', '==', hid);
+        var movDocs;
+        try {
+          var iq = mq.orderBy('timestamp', 'desc');
+          if (since !== null) iq = iq.where('timestamp', '>=', since);
+          if (until !== null) iq = iq.where('timestamp', '<', until);
+          var ms = await iq.limit(hLimit + 1).get();
+          movDocs = ms.docs;
+        } catch (e) {
+          // Composite index (orgId, itemId, timestamp desc) not deployed yet:
+          // read this item's whole ledger with equality filters and sort here.
+          if (!/index/i.test(e.message || '')) throw e;
+          indexMissing = true;
+          var fs = await mq.get();
+          hRead += fs.size;
+          movDocs = fs.docs.filter(function (d) {
+            var t = Number(d.data().timestamp) || 0;
+            return (since === null || t >= since) && (until === null || t < until);
+          }).sort(function (a, b) {
+            return (Number(b.data().timestamp) || 0) - (Number(a.data().timestamp) || 0);
+          }).slice(0, hLimit + 1);
+        }
+        if (!indexMissing) hRead += movDocs.length;
+        var truncated = movDocs.length > hLimit;
+        if (truncated) movDocs = movDocs.slice(0, hLimit);
+        var raw = movDocs.map(function (d) { return { id: d.id, data: d.data() }; });
+
+        // Order numbers for PICK movements tagged with an order id but written
+        // before the number was stamped alongside it.
+        for (var ri = 0; ri < raw.length; ri++) {
+          var oid2 = raw[ri].data.orderId;
+          if (!oid2 || raw[ri].data.orderNumber || orderNumbers[oid2] !== undefined) continue;
+          orderNumbers[oid2] = '';
+          var os = await db.collection('purchaseOrders').doc(String(oid2)).get();
+          hRead++;
+          if (os.exists && os.data().orgId === auth.orgId) orderNumbers[oid2] = os.data().poNumber || '';
+        }
+
+        // Stock edits recorded only in the audit log (API/MCP adjustments and
+        // item edits made before those paths wrote movements).
+        var auditSnap = await db.collection('activityLog').where('orgId', '==', auth.orgId)
+          .where('details.itemId', '==', hid).get();
+        hRead += auditSnap.size;
+        var audit = auditSnap.docs.map(function (d) { return HIST.auditStockChange(d.data()); })
+          .filter(function (a) {
+            return a && (since === null || a.timestamp >= since) && (until === null || a.timestamp < until);
+          });
+        var auditOnly = HIST.unmatchedAuditEdits(audit, raw.map(function (r) { return r.data; }))
+          .sort(function (a, b) { return b.timestamp - a.timestamp; });
+
+        var hItem = publicItem(hid, hd);
+        results.push({
+          item: { id: hid, sku: hItem.sku, name: hItem.name, grade: hItem.grade,
+                  quantity: hItem.quantity, locations: hItem.locations,
+                  createdAt: hd.createdAt || null },
+          summary: HIST.summarizeHistory(raw.map(function (r) { return r.data; }), hItem.quantity, {
+            coversFullHistory: since === null && until === null && !truncated,
+            auditOnlyEdits: auditOnly
+          }),
+          returned: raw.length,
+          truncated: truncated,
+          movements: raw.map(function (r) { return HIST.formatMovement(r.id, r.data, orderNumbers); }),
+          auditLogOnlyEdits: auditOnly
+        });
+      }
+
+      return {
+        matched: results.length,
+        note: results.length > 1
+          ? 'More than one item shares this SKU - they are usually different grades. Report them separately.'
+          : undefined,
+        indexMissing: indexMissing || undefined,
+        documentsRead: hRead,
+        live: true,
+        items: results
+      };
+    }
+
     if (name === 'adjust_item_quantity') {
       if (auth.scope !== 'write') throw new Error('This API key is read-only. Ask Alan for a write-scoped key to make adjustments.');
       if (!args.reason || !String(args.reason).trim()) throw new Error('A reason is required - it lands in the audit log.');
@@ -657,6 +785,11 @@ module.exports = function createMcpFunction(deps) {
       await INV.writeItemLocations(db, iref.id, plan.derived.locations);
       invalidateCache(auth.orgId);
 
+      var adjNow = Date.now();
+      var adjUser = 'MCP: ' + (auth.label || auth.keyId);
+      await db.collection('movements').add(HIST.adjustMovement(
+        c, iref.id, auth.orgId, plan, beforeShelves, String(args.reason), 'mcp', adjUser, adjNow));
+
       await db.collection('activityLog').add({
         orgId: auth.orgId,
         action: 'ITEM_UPDATED',
@@ -667,9 +800,9 @@ module.exports = function createMcpFunction(deps) {
           shelf: plan.shelf, shelfBefore: plan.shelfBefore, shelfAfter: plan.shelfAfter,
           source: 'mcp', apiKey: auth.label, reason: String(args.reason)
         },
-        userEmail: 'MCP: ' + (auth.label || auth.keyId),
-        timestamp: Date.now(),
-        createdAt: new Date().toISOString()
+        userEmail: adjUser,
+        timestamp: adjNow,
+        createdAt: new Date(adjNow).toISOString()
       });
 
       return {

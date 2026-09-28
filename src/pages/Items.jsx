@@ -760,10 +760,11 @@ export default function Items() {
   // Save edited item
   const saveEditedItem = async () => {
     if (!editingItem) return;
-    
+
     try {
+      const stockBefore = await DB.stockSnapshot(editingItem.id);
       let totalStock = 0;
-      
+
       if (editUseMultiLocation) {
         totalStock = editLocationBreakdown.reduce((sum, lb) => sum + (parseInt(lb.quantity) || 0), 0);
       } else {
@@ -821,6 +822,7 @@ export default function Items() {
         // nothing, so the item kept showing on its old shelf.
         await DB.setItemLocations(editingItem.id, []);
       }
+      await DB.logStockChange(editingItem.id, stockBefore, 'ADJUST', 'Item edited');
 
       setShowEditItem(false);
       setEditingItem(null);
@@ -1163,6 +1165,10 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
         // could never complete — the import silently aborted every time. Show a
         // real modal with the summary instead and run the work when it's accepted.
         const applyImport = async () => {
+        // Stock history: the import writes quantities and shelves in several
+        // passes, so compare every existing item before vs after and log one
+        // IMPORT movement per item whose quantity or shelves changed.
+        const beforeImport = await DB.getItems();
         // Apply updates (preserves doc IDs, so pick lists / orders keep working)
         let updated = 0;
         for (const u of toUpdate) {
@@ -1343,8 +1349,10 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
             `\nUse Actions → Edit on those items to change where their stock sits.`;
         }
 
+        await DB.logImportChanges(beforeImport);
+
         toast(successMsg);
-        
+
         await loadData(); // Refresh the list
         };  // ← end applyImport
 
@@ -1465,6 +1473,7 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
             const spots = DB.itemLocations(item);
             const isMulti = spots.length > 1;
             const stockChanged = String(item.stock || 0) !== String(original.stock || 0);
+            const stockBefore = (stockChanged || locationChanged) ? await DB.stockSnapshot(item.id) : null;
 
             const clearingLocation = locationChanged && !itemLocation;
             const liveStock = spots.reduce((sum, e) => sum + e.qty, 0) || (parseInt(item.stock) || 0);
@@ -1509,6 +1518,7 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                 await DB.setItemLocations(item.id, [{ code: spots[0].code, qty: parseInt(item.stock) || 0 }]);
               }
             }
+            if (stockBefore) await DB.logStockChange(item.id, stockBefore, 'ADJUST', 'Items grid edit');
           }
         }
       }
@@ -1577,7 +1587,11 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
       await DB.logMovement({
         itemId: adjustingItem.id,
         itemName: adjustingItem.name,
+        sku: adjustingItem.partNumber || '',
+        grade: adjustingItem.grade || '',
         quantity: qty,
+        beforeQty: currentStock,
+        afterQty: newStock,
         type: adjustingItem.adjustType === 'add' ? 'ADD' : 'ADJUST',
         notes: `Quick ${adjustingItem.adjustType}: ${qty}`,
         timestamp: Date.now()

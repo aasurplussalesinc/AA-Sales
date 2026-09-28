@@ -847,6 +847,8 @@ export default function PurchaseOrders() {
             itemId: item.itemId,
             itemName: item.itemName,
             quantity: item.restoreQty,
+            beforeQty: parseInt(dbItem.stock) || 0,
+            afterQty: parseInt(newStock) || 0,
             type: 'RESTORE',
             notes: `Restored from deleted order ${orderToDelete.poNumber}`,
             timestamp: Date.now()

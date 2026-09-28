@@ -1,12 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { OrgDB as DB } from '../orgDb';
+import { enrichMovements, itemsWithExactSku, movementMatchesSearch, movementTypeOptions } from '../movementHistory';
 
 export default function Movements() {
   const [movements, setMovements] = useState([]);
+  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterUser, setFilterUser] = useState('');
+  // Full, all-time history for an exact SKU typed into the search box. The
+  // default view is capped at the latest 500 movements.
+  const [skuHistory, setSkuHistory] = useState(null); // { key, movements }
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     loadMovements();
@@ -14,26 +20,52 @@ export default function Movements() {
 
   const loadMovements = async () => {
     setLoading(true);
-    const data = await DB.getMovements();
+    const [data, itemList] = await Promise.all([DB.getMovements(), DB.getItems()]);
     setMovements(data);
+    setItems(itemList || []);
+    setSkuHistory(null);
     setLoading(false);
   };
+
+  const itemsById = useMemo(() => {
+    const m = {};
+    items.forEach(i => { m[i.id] = i; });
+    return m;
+  }, [items]);
+
+  const exactSkuItems = useMemo(() => itemsWithExactSku(items, search), [items, search]);
+  const exactSkuIds = useMemo(() => new Set(exactSkuItems.map(i => i.id)), [exactSkuItems]);
+  const skuKey = exactSkuItems.map(i => i.id).sort().join(',');
+
+  useEffect(() => {
+    if (!skuKey) { setSkuHistory(null); return; }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setHistoryLoading(true);
+      try {
+        const all = await DB.getMovementsForItems(skuKey.split(','));
+        if (!cancelled) setSkuHistory({ key: skuKey, movements: all });
+      } catch (e) {
+        console.error('Item history failed:', e);
+      } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [skuKey]);
 
   const formatDate = (timestamp) => {
     return new Date(timestamp).toLocaleString();
   };
 
-  const users = [...new Set(movements.map(m => m.userEmail).filter(Boolean))].sort();
-  const types = [...new Set(movements.map(m => m.type).filter(Boolean))].sort();
+  const usingHistory = !!(skuHistory && skuHistory.key === skuKey && skuKey);
+  const source = enrichMovements(usingHistory ? skuHistory.movements : movements, itemsById);
 
-  const filtered = movements.filter(m => {
-    if (search) {
-      const s = search.toLowerCase();
-      const matchItem = (m.itemName || '').toLowerCase().includes(s);
-      const matchFrom = (m.fromLocation || '').toLowerCase().includes(s);
-      const matchTo = (m.toLocation || '').toLowerCase().includes(s);
-      if (!matchItem && !matchFrom && !matchTo) return false;
-    }
+  const users = [...new Set(source.map(m => m.userEmail).filter(Boolean))].sort();
+  const types = movementTypeOptions(source);
+
+  const filtered = source.filter(m => {
+    if (!movementMatchesSearch(m, search, exactSkuIds)) return false;
     if (filterType && m.type !== filterType) return false;
     if (filterUser && m.userEmail !== filterUser) return false;
     return true;
@@ -55,7 +87,7 @@ export default function Movements() {
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           <input
             type="text"
-            placeholder="🔍 Search by item name, from location, to location..."
+            placeholder="🔍 Search by SKU (exact SKU = full history), item name, grade, location, order..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             style={{
@@ -94,7 +126,12 @@ export default function Movements() {
         </div>
 
         <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 12 }}>
-          Showing {filtered.length} of {movements.length} movements
+          {usingHistory
+            ? <>Full history for SKU <strong>{search.trim()}</strong>
+                {exactSkuItems.length > 1 && <> ({exactSkuItems.length} items share this SKU — see the Grade column)</>}
+                : showing {filtered.length} of {source.length} movements, all time</>
+            : <>Showing {filtered.length} of {movements.length} movements (latest {movements.length}). Type an exact SKU to load that item's full history.</>}
+          {historyLoading && <> · loading full history…</>}
         </p>
 
         <div className="data-table">
@@ -103,11 +140,15 @@ export default function Movements() {
               <tr>
                 <th>Timestamp</th>
                 <th>User</th>
+                <th>SKU</th>
                 <th>Item</th>
+                <th>Grade</th>
                 <th>From</th>
                 <th>To</th>
                 <th>Quantity</th>
+                <th>Before → After</th>
                 <th>Type</th>
+                <th>Order / Note</th>
               </tr>
             </thead>
             <tbody>
@@ -115,24 +156,41 @@ export default function Movements() {
                 <tr key={mov.id}>
                   <td style={{ fontSize: 12 }}>{formatDate(mov.timestamp)}</td>
                   <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>{mov.userEmail || 'Unknown'}</td>
+                  <td style={{ fontSize: 12, fontWeight: 600 }}>
+                    {mov.sku
+                      ? <span style={{ cursor: 'pointer', textDecoration: 'underline dotted' }} title="Show this SKU's full history"
+                          onClick={() => setSearch(mov.sku)}>{mov.sku}</span>
+                      : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
                   <td style={{ fontWeight: 500 }}>{mov.itemName}</td>
+                  <td style={{ fontSize: 12 }}>{mov.grade || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                   <td style={{ fontSize: 12 }}>{mov.fromLocation || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                   <td style={{ fontSize: 12 }}>{mov.toLocation || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                   <td style={{ fontWeight: 600 }}>{mov.quantity}</td>
+                  <td style={{ fontSize: 12 }}>
+                    {mov.beforeQty !== undefined && mov.afterQty !== undefined
+                      ? `${mov.beforeQty} → ${mov.afterQty}`
+                      : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                  </td>
                   <td>
                     <span style={{
                       padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700,
-                      background: mov.type === 'ADD' ? '#4CAF50' : mov.type === 'PICK' ? '#f44336' : '#2196F3',
+                      background: (mov.type === 'ADD' || mov.type === 'RECEIVE' || mov.type === 'CREATE' || mov.type === 'RESTORE') ? '#4CAF50'
+                        : mov.type === 'PICK' ? '#f44336'
+                        : (mov.type === 'ADJUST' || mov.type === 'IMPORT') ? '#FF9800' : '#2196F3',
                       color: 'white'
                     }}>
                       {mov.type}
                     </span>
                   </td>
+                  <td style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {[...new Set([mov.orderNumber, mov.reason, mov.notes || mov.note].filter(Boolean))].join(' · ') || '—'}
+                  </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan="7">
+                  <td colSpan="11">
                     <div className="empty-state">
                       <p>{search || filterType || filterUser ? 'No movements match your search' : 'No movements recorded yet'}</p>
                     </div>

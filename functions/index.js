@@ -2771,6 +2771,7 @@ exports.parseReceipt = functions
 
 var crypto = require('crypto');
 var INV = require('./inventory');
+var HIST = require('./itemHistory');
 var ORD = require('./orders');
 var PDF = require('./pdf');
 
@@ -3133,6 +3134,10 @@ exports.api = functions
         }
 
         await INV.writeItemLocations(db, ref.id, plan.derived.locations);
+        var adjNow = Date.now();
+        await db.collection('movements').add(HIST.adjustMovement(
+          c, ref.id, auth.orgId, plan, beforeShelves, body.reason || '', 'api',
+          'API: ' + (auth.label || auth.keyId), adjNow));
         await db.collection('activityLog').add({
           orgId: auth.orgId, action: 'ITEM_UPDATED',
           details: {
@@ -3143,7 +3148,7 @@ exports.api = functions
             source: 'api', apiKey: auth.label, reason: body.reason || ''
           },
           userEmail: 'API: ' + (auth.label || auth.keyId),
-          timestamp: Date.now(), createdAt: new Date().toISOString()
+          timestamp: adjNow, createdAt: new Date(adjNow).toISOString()
         });
 
         return res.json({

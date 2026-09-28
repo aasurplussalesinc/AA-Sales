@@ -60,6 +60,8 @@ export default function PickInventory({ item, location, onClose, onSuccess }) {
         fromLocation: selectedLocation,
         toLocation: null,
         quantity: quantity,
+        beforeQty: parseInt(currentStock) || 0,
+        afterQty: Math.max(0, (parseInt(currentStock) || 0) - quantity),
         type: 'PICK',
         timestamp: Date.now()
       });

@@ -37,6 +37,8 @@ export default function Customers() {
     phone2: '',
     phone2Type: 'Office',
     address: '',
+    addressUnit: '',
+    attention: '',
     city: '',
     state: '',
     zipCode: '',
@@ -89,6 +91,8 @@ export default function Customers() {
       phone2: customer.phone2 || '',
       phone2Type: customer.phone2Type || 'Office',
       address: customer.address || '',
+      addressUnit: customer.addressUnit || '',
+      attention: customer.attention || '',
       city: customer.city || '',
       state: customer.state || '',
       zipCode: customer.zipCode || '',
@@ -250,6 +254,8 @@ export default function Customers() {
           'email': ['email', 'e-mail', 'email address'],
           'phone': ['phone', 'phone number', 'tel', 'telephone'],
           'address': ['address', 'street', 'street address'],
+          'addressUnit': ['unit / suite / apt', 'unit/suite/apt', 'unit', 'suite', 'apt', 'apartment', 'address 2', 'address2', 'address line 2', 'street 2', 'street2', 'addressunit'],
+          'attention': ['attention (attn)', 'attention', 'attn', 'attn:', 'attention to', 'attn to'],
           'city': ['city'],
           'state': ['state', 'province', 'state/province'],
           'zipCode': ['zip code', 'zipcode', 'zip', 'postal code', 'postal', 'postcode'],
@@ -279,6 +285,10 @@ export default function Customers() {
             zipCode: columnIndices.zipCode !== undefined ? values[columnIndices.zipCode]?.trim() : '',
             country: columnIndices.country !== undefined ? values[columnIndices.country]?.trim() : ''
           };
+          // Unit and attention are only written when the file has those columns,
+          // so re-importing an older CSV does not blank them on existing customers.
+          if (columnIndices.addressUnit !== undefined) customer.addressUnit = values[columnIndices.addressUnit]?.trim() || '';
+          if (columnIndices.attention !== undefined) customer.attention = values[columnIndices.attention]?.trim() || '';
 
           if (customer.company || customer.customerName) {
             newCustomers.push(customer);
@@ -344,7 +354,7 @@ export default function Customers() {
 
   // Export CSV with stats
   const exportToCSV = async () => {
-    const headers = ['Company', 'Customer Name', 'Address Short', 'Email', 'Phone', 'Address', 'City', 'State', 'Zip Code', 'Country', 'Unpaid Invoice Amount', 'Paid Invoice Amount'];
+    const headers = ['Company', 'Customer Name', 'Address Short', 'Email', 'Phone', 'Address', 'Unit / Suite / Apt', 'Attention (ATTN)', 'City', 'State', 'Zip Code', 'Country', 'Unpaid Invoice Amount', 'Paid Invoice Amount'];
 
     const rows = await Promise.all(customers.map(async (c) => {
       const custOrders = orders.filter(o => o.customerId === c.id);
@@ -358,6 +368,8 @@ export default function Customers() {
         c.email || '',
         c.phone || '',
         c.address || '',
+        c.addressUnit || '',
+        c.attention || '',
         c.city || '',
         c.state || '',
         c.zipCode || '',
@@ -647,6 +659,31 @@ export default function Customers() {
                 onChange={e => setEditForm({ ...editForm, address: e.target.value })}
                 style={{ width: '100%' }}
               />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 15 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Unit / Suite / Apt</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Suite 25"
+                  value={editForm.addressUnit || ''}
+                  onChange={e => setEditForm({ ...editForm, addressUnit: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Attention (ATTN)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Person or department (optional)"
+                  value={editForm.attention || ''}
+                  onChange={e => setEditForm({ ...editForm, attention: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px', gap: 10, marginBottom: 15 }}>
@@ -1287,7 +1324,7 @@ export default function Customers() {
               setEditForm({
                 company: '', customerName: '', addressShort: '', email: '',
                 phone: '', phoneType: 'Cell', phone2: '', phone2Type: 'Office',
-                address: '', city: '', state: '', zipCode: '', country: '', notes: ''
+                address: '', addressUnit: '', attention: '', city: '', state: '', zipCode: '', country: '', notes: ''
               });
               setShowCreate(true);
             }}>
@@ -1428,6 +1465,31 @@ export default function Customers() {
                 onChange={e => setEditForm({ ...editForm, address: e.target.value })}
                 style={{ width: '100%' }}
               />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 15 }}>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Unit / Suite / Apt</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="e.g. Suite 25"
+                  value={editForm.addressUnit || ''}
+                  onChange={e => setEditForm({ ...editForm, addressUnit: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Attention (ATTN)</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Person or department (optional)"
+                  value={editForm.attention || ''}
+                  onChange={e => setEditForm({ ...editForm, attention: e.target.value })}
+                  style={{ width: '100%' }}
+                />
+              </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px', gap: 10, marginBottom: 15 }}>

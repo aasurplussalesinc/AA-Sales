@@ -117,11 +117,15 @@ module.exports = function createMcpFunction(deps) {
     {
       name: 'list_orders',
       title: 'List Orders',
-      description: 'List purchase orders, newest first. Filter by status: draft, confirmed, paid, packed, shipped, cancelled.',
+      description: 'List purchase orders, newest first. Filter by status: draft, confirmed, paid, packed, shipped, cancelled. ' +
+        'Orders with a shipping label include `shipping`: carrier, service, trackingNumber, trackingUrl, and one tracking number per box for multi-box shipments ' +
+        '(the same data as the Shipping tab). An order shipped on the customer\'s own carrier account without a label made in SkidSling has no `shipping`.',
       inputSchema: {
         type: 'object',
         properties: {
           status: { type: 'string', description: 'Exact status to filter by' },
+          customer: { type: 'string', description: 'Only orders whose customer name contains this text (case-insensitive)' },
+          orderNumber: { type: 'string', description: 'Only this order, e.g. AA6676' },
           limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Max orders to return (default 50)' }
         },
         additionalProperties: false
@@ -482,12 +486,30 @@ module.exports = function createMcpFunction(deps) {
       var osnap = await db.collection('purchaseOrders').where('orgId', '==', auth.orgId).get();
       var orders = osnap.docs.map(function (d) {
         var o = d.data();
-        return { id: d.id, orderNumber: o.poNumber || '', customerPO: o.customerPO || '',
+        var row = { id: d.id, orderNumber: o.poNumber || '', customerPO: o.customerPO || '',
                  customer: o.customerName || '', status: o.status || '',
                  createdAt: o.createdAt || null, total: parseFloat(o.total) || 0,
                  itemCount: (o.items || []).length };
+        var lbl = o.shippingLabel;
+        if (lbl && (lbl.trackingNumber || lbl.labelStatus)) {
+          var rate = lbl.selectedRate || {};
+          row.shipping = {
+            carrier: rate.provider || null,
+            service: (rate.servicelevel && rate.servicelevel.name) || null,
+            labelStatus: lbl.labelStatus || null,
+            trackingNumber: lbl.trackingNumber || null,
+            trackingUrl: lbl.trackingUrl || null,
+            boxes: (lbl.allLabels || []).map(function (b) { return b.trackingNumber; }).filter(Boolean)
+          };
+        }
+        return row;
       });
       if (args.status) orders = orders.filter(function (o) { return o.status === args.status; });
+      if (args.customer) {
+        var cq = String(args.customer).toLowerCase();
+        orders = orders.filter(function (o) { return o.customer.toLowerCase().indexOf(cq) !== -1; });
+      }
+      if (args.orderNumber) orders = orders.filter(function (o) { return o.orderNumber.toUpperCase() === String(args.orderNumber).toUpperCase(); });
       orders.sort(function (a, b) { return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0); });
       var lim3 = Math.min(Math.max(parseInt(args.limit) || 50, 1), 200);
       return { matched: orders.length, returned: Math.min(lim3, orders.length), documentsRead: osnap.size, orders: orders.slice(0, lim3) };

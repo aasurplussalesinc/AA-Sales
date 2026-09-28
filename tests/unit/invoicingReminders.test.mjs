@@ -300,3 +300,34 @@ test('the daily email cap stops sending and says so', async () => {
   const log = Object.values(h.db.store).filter(v => v.action === 'INVOICE_NOT_SENT');
   assert.match(log[0].details.message, /Daily email limit/);
 });
+
+// ---- test-mode safety net ------------------------------------------------------------
+
+test('test mode: invoice email goes to the company billing address, never the customer', async () => {
+  const h = build({ seed: seed({ sendOnShip: true }), now: at('2026-09-01'), env: { INVOICE_TEST_REDIRECT: '' } });
+  assert.equal(await ship(h), 'sent');
+  const m = h.emails[0];
+  assert.deepEqual(m.to, ['ar@acme.test'], 'redirected to the company');
+  assert.ok(m.subject.startsWith('[TEST - would go to ap@buyer.test] '), m.subject);
+});
+
+test('test mode: INVOICE_TEST_RECIPIENT wins; live mode sends to the customer', async () => {
+  const t = build({ seed: seed({ sendOnShip: true }), now: at('2026-09-01'), env: { INVOICE_TEST_REDIRECT: '', INVOICE_TEST_RECIPIENT: 'Owner@Acme.test' } });
+  await ship(t);
+  assert.deepEqual(t.emails[0].to, ['owner@acme.test']);
+  const s = seed({ sendOnShip: true });
+  s['organizations/acme'].payments.mode = 'live';
+  const l = build({ seed: s, now: at('2026-09-01'), env: { INVOICE_TEST_REDIRECT: '', INVOICING_MODE: 'live', STRIPE_CONNECT_SECRET_KEY: 'sk_live_fake' } });
+  await ship(l);
+  assert.deepEqual(l.emails[0].to, ['ap@buyer.test']);
+  assert.ok(!l.emails[0].subject.startsWith('[TEST'));
+});
+
+test('test mode with no company address: nothing is sent', async () => {
+  const s = seed({ sendOnShip: true });
+  delete s['organizations/acme'].payments.billingEmail;
+  delete s['organizations/acme'].email;
+  const h = build({ seed: s, now: at('2026-09-01'), env: { INVOICE_TEST_REDIRECT: '' } });
+  await ship(h);
+  assert.equal(h.emails.length, 0);
+});

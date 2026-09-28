@@ -128,7 +128,8 @@ function build(opts) {
     STRIPE_CONNECT_WEBHOOK_SECRET: 'whsec_connect_fake',
     INVOICE_LINK_SECRET: 'link-secret-for-tests',
     APP_BASE_URL: 'https://app.test',
-    BREVO_API_KEY: 'brevo-fake'
+    BREVO_API_KEY: 'brevo-fake',
+    INVOICE_TEST_REDIRECT: 'off'   // tests check real recipients; the redirect has its own tests
   }, opts.env || {});
   var AUTHZ = createAuthz({ functions: functions, db: db });
   var inv = createInvoicing({

@@ -733,8 +733,25 @@ module.exports = function createInvoicing(deps) {
     });
   }
 
+  // Test-mode safety net: until INVOICING_MODE is "live", customer email never
+  // reaches the customer. It goes to INVOICE_TEST_RECIPIENT, else to the
+  // company's own billing address (the reply-to), with the intended recipients
+  // in the subject. No address to fall back on = not sent. Email to the company
+  // itself (msg.internal) is left alone. INVOICE_TEST_REDIRECT=off disables it
+  // (unit tests only).
+  function testRedirect(msg) {
+    if (config().mode === 'live' || msg.internal) return msg;
+    if (String(env.INVOICE_TEST_REDIRECT || '').trim().toLowerCase() === 'off') return msg;
+    var fixed = String(env.INVOICE_TEST_RECIPIENT || '').trim().toLowerCase();
+    var safe = CORE.isEmail(fixed) ? fixed : (msg.replyTo && CORE.isEmail(msg.replyTo) ? msg.replyTo : null);
+    if (!safe) return null;
+    return Object.assign({}, msg, { to: [safe], subject: '[TEST - would go to ' + msg.to.join(', ') + '] ' + msg.subject });
+  }
+
   async function sendEmail(msg) {
     if (!msg.to || !msg.to.length) return { success: false, error: 'No email address' };
+    msg = testRedirect(msg);
+    if (!msg) return { success: false, error: 'Test mode: invoice email only goes to your own billing email, and none is set (Settings > Payments)' };
     if (!(await takeEmailQuota(1))) return { success: false, capped: true, error: 'Daily email limit reached - it will go out tomorrow' };
     return sendEmailImpl(msg);
   }
@@ -775,7 +792,7 @@ module.exports = function createInvoicing(deps) {
         paymentId: payment.stripe && payment.stripe.paymentIntentId ? 'stripe_' + payment.stripe.paymentIntentId : null,
         orderIds: payment.orderIds || [], amountCents: payment.amountCents });
       if (p.notifyOnPayment && to) {
-        await sendEmail({ to: [to], fromName: 'SkidSling', subject: lines[i].text,
+        await sendEmail({ to: [to], internal: true, fromName: 'SkidSling', subject: lines[i].text,
           html: '<p>' + CORE.escapeHtml(lines[i].text) + '.</p><p style="color:#777;font-size:13px">SkidSling payments &middot; ' +
             CORE.escapeHtml(org.name || '') + '. You get these because "Email the billing address when a payment arrives" is on in Settings &gt; Payments.</p>' });
       }

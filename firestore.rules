@@ -100,7 +100,13 @@ service cloud.firestore {
       return !request.resource.data.diff(resource.data).affectedKeys().hasAny([
         'plan', 'status', 'trialEndsAt', 'trialExpiredAt', 'gracePeriodEndsAt',
         'subscriptionId', 'customerId', 'stripeCustomerId', 'stripeSubscriptionId',
-        'subscriptionStartedAt', 'billingCycle', 'pendingDeletionAt', 'createdBy'
+        'subscriptionStartedAt', 'billingCycle', 'pendingDeletionAt', 'createdBy',
+        // Invoicing (Stripe Connect): the connected account, its flags and the
+        // org's collection settings are written only by Cloud Functions
+        // (invoicing.js), which validate them. A client that could set
+        // payments.stripeAccountId could point its customers' payments at an
+        // account it does not own.
+        'payments'
       ]);
     }
     match /organizations/{orgId} {
@@ -332,6 +338,37 @@ service cloud.firestore {
       allow create: if isStaff(request.resource.data.orgId);
       allow update: if isStaff(resource.data.orgId) && staysInOrg();
       allow delete: if isManager(resource.data.orgId);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // PAYMENTS — the invoicing ledger (Stripe and manual payments)
+    // Readable by the org's staff. Written only by Cloud Functions: a
+    // payment moves an order's balance, so a client must not be able to
+    // mint, edit or delete one. Manual payments go through the
+    // invoiceRecordManualPayment callable, which checks the role.
+    // ═══════════════════════════════════════════════════════════
+    match /payments/{paymentId} {
+      allow read: if isStaff(resource.data.orgId);
+      allow create, update, delete: if false;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // STRIPE (Connect) — server-only bookkeeping
+    // stripeEvents: processed webhook event ids (idempotency).
+    // stripeAccounts: connected account id -> org, the tenant boundary for
+    // every webhook event. invoiceEmailQuota / invoiceStatements: send caps.
+    // ═══════════════════════════════════════════════════════════
+    match /stripeEvents/{eventId} {
+      allow read, write: if false;
+    }
+    match /stripeAccounts/{accountId} {
+      allow read, write: if false;
+    }
+    match /invoiceEmailQuota/{day} {
+      allow read, write: if false;
+    }
+    match /invoiceStatements/{statementId} {
+      allow read, write: if false;
     }
 
     // ═══════════════════════════════════════════════════════════

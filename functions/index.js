@@ -1054,6 +1054,9 @@ for (const [plan, cycles] of Object.entries(PRICE_IDS)) {
   }
 }
 
+// Subscription webhook event handling (SkidSling's own billing). See stripeBilling.js.
+const BILLING = require('./stripeBilling')({ db, admin, PRICE_TO_PLAN });
+
 // ── Create Stripe Checkout Session ──
 exports.createCheckoutSession = functions.https.onCall(async (data, context) => {
   if (!context.auth) {
@@ -1186,112 +1189,10 @@ exports.stripeWebhook = functions.https.onRequest(async (req, res) => {
   console.log('Stripe event received:', event.type);
 
   try {
-    switch (event.type) {
-
-      // ── Payment succeeded — activate subscription ──
-      case 'checkout.session.completed': {
-        const session = event.data.object;
-        const orgId = session.metadata?.orgId;
-        const plan = session.metadata?.plan;
-        const billingCycle = session.metadata?.billingCycle || 'monthly';
-
-        if (orgId && plan) {
-          await db.collection('organizations').doc(orgId).update({
-            plan: plan,
-            billingCycle: billingCycle,
-            status: 'active',
-            stripeSubscriptionId: session.subscription,
-            stripeCustomerId: session.customer,
-            subscriptionStartedAt: admin.firestore.FieldValue.serverTimestamp(),
-            trialEndsAt: null,
-          });
-          console.log(`Activated ${plan} (${billingCycle}) for org ${orgId}`);
-        }
-        break;
-      }
-
-      // ── Subscription updated (upgrade/downgrade) ──
-      case 'customer.subscription.updated': {
-        const sub = event.data.object;
-        const orgSnap = await db.collection('organizations')
-          .where('stripeCustomerId', '==', sub.customer)
-          .limit(1).get();
-
-        if (!orgSnap.empty) {
-          const orgRef = orgSnap.docs[0].ref;
-          // Map Stripe price ID back to our { plan, billingCycle }
-          const priceId = sub.items.data[0]?.price?.id;
-          const mapped = priceId ? PRICE_TO_PLAN[priceId] : null;
-
-          const updateData = {
-            stripeSubscriptionId: sub.id,
-            status: sub.status === 'active' ? 'active' : sub.status,
-          };
-          if (mapped) {
-            updateData.plan = mapped.plan;
-            updateData.billingCycle = mapped.billingCycle;
-          }
-
-          await orgRef.update(updateData);
-          console.log(`Updated subscription for customer ${sub.customer}`);
-        }
-        break;
-      }
-
-      // ── Subscription cancelled or payment failed ──
-      case 'customer.subscription.deleted': {
-        const sub = event.data.object;
-        const orgSnap = await db.collection('organizations')
-          .where('stripeCustomerId', '==', sub.customer)
-          .limit(1).get();
-
-        if (!orgSnap.empty) {
-          await orgSnap.docs[0].ref.update({
-            plan: 'expired',
-            status: 'cancelled',
-            stripeSubscriptionId: null,
-          });
-          console.log(`Cancelled subscription for customer ${sub.customer}`);
-        }
-        break;
-      }
-
-      // ── Payment failed ──
-      case 'invoice.payment_failed': {
-        const invoice = event.data.object;
-        const orgSnap = await db.collection('organizations')
-          .where('stripeCustomerId', '==', invoice.customer)
-          .limit(1).get();
-
-        if (!orgSnap.empty) {
-          await orgSnap.docs[0].ref.update({
-            status: 'past_due',
-          });
-          console.log(`Payment failed for customer ${invoice.customer}`);
-        }
-        break;
-      }
-
-      // ── Payment recovered ──
-      case 'invoice.payment_succeeded': {
-        const invoice = event.data.object;
-        if (invoice.billing_reason === 'subscription_cycle') {
-          const orgSnap = await db.collection('organizations')
-            .where('stripeCustomerId', '==', invoice.customer)
-            .limit(1).get();
-
-          if (!orgSnap.empty) {
-            await orgSnap.docs[0].ref.update({
-              status: 'active',
-            });
-          }
-        }
-        break;
-      }
-
-      default:
-        console.log(`Unhandled event: ${event.type}`);
-    }
+    // The event handling lives in ./stripeBilling.js, unchanged, so it can be
+    // pinned by tests/unit/billingWebhook.test.mjs. It ignores connected-account
+    // events (event.account), which belong to stripeConnectWebhook (invoicing).
+    await BILLING.handleBillingEvent(event);
 
     res.json({ received: true });
   } catch (error) {
@@ -3358,3 +3259,15 @@ exports.mcp = require('./mcp')({
   resolveApiKey: resolveApiKey,
   publicItem: publicItem
 });
+
+// ── Invoicing & automatic collections (Stripe Connect) ────────────────────
+// A separate module with its own Stripe key, webhook and secret - SkidSling's
+// own subscription billing above is not involved. See invoicing.js and
+// docs/PLAN_stripe_invoicing.md.
+var INVOICING = require('./invoicing')({ functions: functions, db: db, AUTHZ: AUTHZ });
+exports.paymentsConnectStart = INVOICING.paymentsConnectStart;
+exports.paymentsOAuthComplete = INVOICING.paymentsOAuthComplete;
+exports.paymentsRefreshAccount = INVOICING.paymentsRefreshAccount;
+exports.paymentsDisconnect = INVOICING.paymentsDisconnect;
+exports.paymentsSaveSettings = INVOICING.paymentsSaveSettings;
+exports.stripeConnectWebhook = INVOICING.stripeConnectWebhook;

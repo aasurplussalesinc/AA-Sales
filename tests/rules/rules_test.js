@@ -25,6 +25,10 @@ put('expenses/exp1', { orgId:'acme', amount:100 });
 put('apiKeys/key1',  { orgId:'acme', hash:'x', scope:'read', revoked:false, updatedAt:1 });
 put('movements/mv1', { orgId:'acme', delta:-1 });
 put('activityLog/log1', { orgId:'acme', action:'x' });
+put('payments/pay1', { orgId:'acme', orderId:'po1', orderIds:['po1'], amountCents:5000, status:'succeeded', source:'stripe' });
+put('payments/pay2', { orgId:'victim', orderId:'po2', orderIds:['po2'], amountCents:7000, status:'succeeded', source:'manual' });
+put('stripeEvents/evt_1', { orgId:'acme', type:'payment_intent.succeeded', processedAt:1 });
+put('stripeAccounts/acct_1', { orgId:'acme', accountId:'acct_1', mode:'test', active:true });
 
 const U = (uid, email, verified) => ({ uid, token:{ email: email || (uid + '@x.com'), email_verified: verified === undefined ? true : verified } });
 const alice = U('alice'), dave = U('dave'), carol = U('carol'), erin = U('erin'), frank = U('frank');
@@ -189,6 +193,29 @@ T('movements cannot be deleted', false, { path:P+'movements/mv1', op:'delete', a
 T('activity log cannot be rewritten', false, { path:P+'activityLog/log1', op:'update', auth:alice, resource:D('activityLog/log1'), request_resource:{ orgId:'acme', action:'y' } });
 T('staff cannot read the activity log', false, { path:P+'activityLog/log1', op:'get', auth:carol, resource:D('activityLog/log1') });
 T('manager reads the activity log', true, { path:P+'activityLog/log1', op:'get', auth:dave, resource:D('activityLog/log1') });
+
+// ---- invoicing: org payment settings are server-owned ------------------------
+T('admin cannot point payments at another Stripe account', false, { path:P+'organizations/acme', op:'update', auth:alice, resource:acmeOrg, request_resource:orgWith({ payments:{ enabled:true, stripeAccountId:'acct_hijack' } }) });
+T('admin cannot switch online payments on from the client', false, { path:P+'organizations/acme', op:'update', auth:alice, resource:Object.assign({}, acmeOrg, { payments:{ enabled:false } }), request_resource:orgWith({ payments:{ enabled:true } }) });
+T('admin still edits other org settings with payments present', true, { path:P+'organizations/acme', op:'update', auth:alice, resource:Object.assign({}, acmeOrg, { payments:{ enabled:true } }), request_resource:Object.assign({}, acmeOrg, { payments:{ enabled:true }, name:'Acme Inc', updatedAt:2 }) });
+
+// ---- invoicing: payments ledger ---------------------------------------------
+T('staff reads own org payment', true, { path:P+'payments/pay1', op:'get', auth:carol, resource:D('payments/pay1') });
+T('staff cannot read another org payment', false, { path:P+'payments/pay2', op:'get', auth:carol, resource:D('payments/pay2') });
+T('admin of another org cannot read payment', false, { path:P+'payments/pay1', op:'get', auth:bob, resource:D('payments/pay1') });
+T('removed member cannot read payments', false, { path:P+'payments/pay1', op:'get', auth:erin, resource:D('payments/pay1') });
+T('unauthenticated cannot read payments', false, { path:P+'payments/pay1', op:'get', auth:null, resource:D('payments/pay1') });
+T('staff lists own org payments', true, { path:P+'payments/pay1', op:'list', auth:carol, resource:D('payments/pay1') });
+T('client cannot create a payment, even in own org', false, { path:P+'payments/pay9', op:'create', auth:alice, request_resource:{ orgId:'acme', orderId:'po1', amountCents:100000, status:'succeeded' } });
+T('client cannot edit a payment', false, { path:P+'payments/pay1', op:'update', auth:alice, resource:D('payments/pay1'), request_resource:Object.assign({}, D('payments/pay1'), { amountCents:1 }) });
+T('client cannot delete a payment', false, { path:P+'payments/pay1', op:'delete', auth:alice, resource:D('payments/pay1') });
+
+// ---- invoicing: server-only Stripe bookkeeping ------------------------------
+T('stripeEvents not readable by the org admin', false, { path:P+'stripeEvents/evt_1', op:'get', auth:alice, resource:D('stripeEvents/evt_1') });
+T('stripeEvents not writable', false, { path:P+'stripeEvents/evt_2', op:'create', auth:alice, request_resource:{ orgId:'acme', type:'x' } });
+T('stripeAccounts not readable', false, { path:P+'stripeAccounts/acct_1', op:'get', auth:alice, resource:D('stripeAccounts/acct_1') });
+T('stripeAccounts cannot be claimed from the client', false, { path:P+'stripeAccounts/acct_evil', op:'create', auth:bob, request_resource:{ orgId:'victim', accountId:'acct_evil' } });
+T('email quota not writable', false, { path:P+'invoiceEmailQuota/2026-09-28', op:'update', auth:alice, resource:{ count:1 }, request_resource:{ count:0 } });
 
 // ---- catch-all --------------------------------------------------------------
 T('unknown collection is closed', false, { path:P+'secrets/s1', op:'get', auth:alice, resource:{ orgId:'acme' } });

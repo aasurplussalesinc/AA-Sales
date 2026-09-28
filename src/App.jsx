@@ -4,6 +4,7 @@ import LandingPage from './pages/LandingPage';
 import OrgLogin from './pages/OrgLogin';
 import SubscriptionRequired from './pages/SubscriptionRequired';
 import OrgSettings from './pages/OrgSettings';
+import PaymentsSettings from './pages/PaymentsSettings';
 import Dashboard from './pages/Dashboard';
 import Items from './pages/Items';
 import Locations from './pages/Locations';
@@ -354,6 +355,11 @@ function AppRoutes() {
       <Route path="/settings" element={
         <ProtectedRoute>
           <AppLayout><OrgSettings /></AppLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/settings/payments" element={
+        <ProtectedRoute>
+          <AppLayout><PaymentsSettings /></AppLayout>
         </ProtectedRoute>
       } />
       

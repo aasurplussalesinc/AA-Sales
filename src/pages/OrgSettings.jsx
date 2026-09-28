@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../OrgAuthContext';
 import { OrgDB } from '../orgDb';
 
@@ -285,6 +286,17 @@ export default function OrgSettings() {
           <strong>👑 Owner Account</strong> - You have unlimited free access
         </div>
       )}
+
+      {/* Invoicing & online payments (Stripe Connect) live on their own page. */}
+      <div style={{ background: 'var(--bg-surface)', padding: 15, borderRadius: 8, marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <strong>💵 Payments &amp; invoicing</strong>
+          <span style={{ marginLeft: 10, fontSize: 13, color: 'var(--text-muted)' }}>
+            {organization?.payments?.enabled ? 'On' : 'Off'} &middot; connect Stripe, pay-online links, automatic reminders
+          </span>
+        </div>
+        <Link to="/settings/payments" className="btn btn-primary" style={{ textDecoration: 'none' }}>Open payment settings</Link>
+      </div>
 
       {message && (
         <div style={{ background: 'var(--bg-success)', padding: 15, borderRadius: 8, marginBottom: 20 }}>

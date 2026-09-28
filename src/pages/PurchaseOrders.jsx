@@ -753,10 +753,30 @@ export default function PurchaseOrders() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelRestoreInventory, setCancelRestoreInventory] = useState(false);
 
+  // What "return to stock" would put back, read from the ledger (PICK
+  // movements tagged with this order minus RESTOREs already written for it).
+  // null while loading.
+  const [restorePlan, setRestorePlan] = useState(null);
+  const loadRestorePlan = (order) => {
+    setRestorePlan(null);
+    DB.planOrderRestore(order)
+      .then(plan => setRestorePlan(plan))
+      .catch(e => setRestorePlan({ lines: [], error: e.message }));
+  };
+  const restoreSummary = (res) => {
+    const lines = (res.restored || []).map(r => `+${r.qty} ${r.sku ? r.sku + ' ' : ''}${r.itemName} -> ${r.shelf}`);
+    let msg = lines.length ? 'Returned to stock:\n' + lines.join('\n') : 'Nothing was returned to stock.';
+    if (res.skipped === 'already-restored') msg += '\n(Everything picked for this order had already been restored.)';
+    if (res.unverifiable) msg += '\nThis order is marked as deducted but no pick for it is recorded in the stock history, so nothing was restored automatically. Check the items and adjust them by hand if needed.';
+    if (res.errors && res.errors.length) msg += '\n\nNOT restored:\n' + res.errors.join('\n');
+    return msg;
+  };
+
   const openCancelOrder = (order) => {
     setOrderToCancel(order);
     setCancelReason('');
     setCancelRestoreInventory(false);
+    loadRestorePlan(order);
     setShowCancelConfirm(true);
   };
 
@@ -764,17 +784,14 @@ export default function PurchaseOrders() {
     if (!orderToCancel) return;
     try {
       if (cancelRestoreInventory) {
-        const restorableItems = getRestorableItems(orderToCancel);
-        for (const item of restorableItems) {
-          if (item.itemId) {
-            await DB.adjustItemStock(item.itemId, item.qtyToRestore, {
-              reason: 'Order cancelled',
-              notes: `Restored from cancelled order ${orderToCancel.poNumber}`,
-              userId: user?.uid,
-              userEmail: user?.email
-            });
-          }
+        // Only what the ledger says this order took and hasn't had back.
+        const res = await DB.restoreOrderStock(orderToCancel.id, { reason: 'cancelled' });
+        if (res.errors && res.errors.length) {
+          alert(restoreSummary(res) + '\n\nThe order was NOT cancelled. Fix the problem and try again - lines already restored will not be restored twice.');
+          loadRestorePlan(orderToCancel);
+          return;
         }
+        alert(restoreSummary(res));
       }
       await DB.markPOCancelled(orderToCancel.id, cancelReason);
       setShowCancelConfirm(false);
@@ -803,57 +820,29 @@ export default function PurchaseOrders() {
   const deleteOrder = async (order) => {
     setOrderToDelete(order);
     setDeleteRestoreInventory(false);
+    loadRestorePlan(order);
     setShowDeleteConfirm(true);
-  };
-
-  // Check if order has any picked/packed/shipped quantities
-  const getRestorableItems = (order) => {
-    if (!order?.items) return [];
-    
-    // Get linked pick list to check picked quantities
-    const linkedPickList = pickLists.find(pl => pl.purchaseOrderId === order.id);
-    const pickedQtyMap = {};
-    if (linkedPickList?.items) {
-      linkedPickList.items.forEach(plItem => {
-        pickedQtyMap[plItem.itemId] = plItem.pickedQty || 0;
-      });
-    }
-    
-    return order.items
-      .map(item => {
-        const qtyShipped = parseInt(item.qtyShipped) || 0;
-        const qtyPicked = pickedQtyMap[item.itemId] || 0;
-        const restoreQty = Math.max(qtyShipped, qtyPicked);
-        return { ...item, restoreQty };
-      })
-      .filter(item => item.restoreQty > 0 && item.itemId);
   };
 
   const confirmDelete = async () => {
     if (!orderToDelete) return;
-    
-    const restorableItems = getRestorableItems(orderToDelete);
-    
-    // If restoring inventory, add back the picked/shipped quantities
-    if (deleteRestoreInventory && restorableItems.length > 0) {
-      for (const item of restorableItems) {
-        const dbItem = items.find(i => i.id === item.itemId);
-        if (dbItem) {
-          const newStock = (dbItem.stock || 0) + item.restoreQty;
-          await DB.updateItemStock(item.itemId, newStock);
-          
-          // Log the restoration
-          await DB.logMovement({
-            itemId: item.itemId,
-            itemName: item.itemName,
-            quantity: item.restoreQty,
-            beforeQty: parseInt(dbItem.stock) || 0,
-            afterQty: parseInt(newStock) || 0,
-            type: 'RESTORE',
-            notes: `Restored from deleted order ${orderToDelete.poNumber}`,
-            timestamp: Date.now()
-          });
+
+    // Restore BEFORE deleting: the restore reads the order and tags its
+    // movements with the order id. It used to add the order's shipped/picked
+    // quantities onto the stock total with no shelf, no check that the units
+    // had actually been taken, and no memory of an earlier restore.
+    if (deleteRestoreInventory) {
+      try {
+        const res = await DB.restoreOrderStock(orderToDelete.id, { reason: 'deleted' });
+        if (res.errors && res.errors.length) {
+          alert(restoreSummary(res) + '\n\nThe order was NOT deleted. Fix the problem and try again - lines already restored will not be restored twice.');
+          loadRestorePlan(orderToDelete);
+          return;
         }
+        alert(restoreSummary(res));
+      } catch (e) {
+        alert('Could not restore stock: ' + e.message + '\n\nThe order was NOT deleted.');
+        return;
       }
     }
     
@@ -2642,12 +2631,12 @@ ${raw(labelsHtml)}
                 />
               </div>
 
-              {orderToCancel.packingComplete && (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 13, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={cancelRestoreInventory} onChange={e => setCancelRestoreInventory(e.target.checked)} />
-                  <span>Return packed/shipped quantities back to inventory stock</span>
-                </label>
-              )}
+              <RestorePlanBox
+                plan={restorePlan}
+                checked={cancelRestoreInventory}
+                onChange={setCancelRestoreInventory}
+                label="Return picked quantities back to the shelves they came from"
+              />
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button
@@ -2691,37 +2680,12 @@ ${raw(labelsHtml)}
               </p>
             )}
             
-            {getRestorableItems(orderToDelete).length > 0 && (
-              <div style={{
-                padding: 15, background: 'var(--bg-badge-orange)', borderRadius: 8, marginBottom: 20,
-                border: '1px solid #ffb74d'
-              }}>
-                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={deleteRestoreInventory}
-                    onChange={e => setDeleteRestoreInventory(e.target.checked)}
-                    style={{ marginTop: 3, width: 18, height: 18 }}
-                  />
-                  <div>
-                    <strong style={{ color: 'var(--text-badge-orange)' }}>Restore inventory</strong>
-                    <p style={{ margin: '5px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>
-                      Add picked/shipped quantities back to stock. Use this if the order was cancelled or returned.
-                    </p>
-                    {deleteRestoreInventory && (
-                      <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-badge-green)' }}>
-                        Will restore:
-                        <ul style={{ margin: '5px 0', paddingLeft: 20 }}>
-                          {getRestorableItems(orderToDelete).map(i => (
-                            <li key={i.itemId}>+{i.restoreQty} {i.itemName}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </label>
-              </div>
-            )}
+            <RestorePlanBox
+              plan={restorePlan}
+              checked={deleteRestoreInventory}
+              onChange={setDeleteRestoreInventory}
+              label="Restore inventory - put the picked quantities back on the shelves they came from"
+            />
             
             <div style={{ display: 'flex', gap: 10 }}>
               <button
@@ -2882,6 +2846,48 @@ ${raw(labelsHtml)}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// The "return to stock" choice on the cancel and delete dialogs. Shows exactly
+// what the ledger says would go back (per item and shelf), or why nothing will.
+function RestorePlanBox({ plan, checked, onChange, label }) {
+  const box = {
+    padding: 12, background: 'var(--bg-badge-orange)', borderRadius: 8, marginBottom: 16,
+    border: '1px solid #ffb74d', fontSize: 13, color: 'var(--text-primary)'
+  };
+  if (!plan) return <div style={{ marginBottom: 16, fontSize: 13, color: 'var(--text-muted)' }}>Checking stock history...</div>;
+  if (plan.error) return <div style={box}>Could not read this order's stock history ({plan.error}), so stock can't be restored from here.</div>;
+  if (!plan.lines || !plan.lines.length) {
+    if (plan.skipped === 'already-restored') {
+      return <div style={box}>Everything picked for this order has already been returned to stock.</div>;
+    }
+    if (plan.unverifiable) {
+      return <div style={box}>This order is marked as deducted, but no pick for it is recorded in the stock history (it may predate order-tagged picks), so nothing can be restored automatically. Check the items and adjust them by hand if needed.</div>;
+    }
+    return null; // nothing was ever taken for this order - nothing to offer
+  }
+  return (
+    <div style={box}>
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+        <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} style={{ marginTop: 3, width: 18, height: 18 }} />
+        <div>
+          <strong>{label}</strong>
+          <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12 }}>
+            {plan.lines.map((l, i) => (
+              <li key={l.itemId + ':' + l.pickShelf + ':' + i}>
+                +{l.qty} {l.sku ? l.sku + ' ' : ''}{l.itemName}{l.grade ? ' (' + l.grade + ')' : ''} {'->'} {l.pickShelf || 'primary shelf, else STAGING'}
+              </li>
+            ))}
+          </ul>
+          {plan.restoredUnits > 0 && (
+            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+              {plan.restoredUnits} of {plan.pickedUnits} picked units were already restored and won't be added again.
+            </div>
+          )}
+        </div>
+      </label>
     </div>
   );
 }

@@ -145,6 +145,22 @@ module.exports = function createMcpFunction(deps) {
       annotations: { title: 'Find Data Problems', readOnlyHint: true }
     },
     {
+      name: 'find_stock_mismatches',
+      title: 'Find Stock Mismatches',
+      description: 'Find items whose stock history does not add up since a date: each movement\'s before-quantity should equal the previous movement\'s after-quantity, and the last after-quantity should equal the current quantity. A break means the quantity changed with nothing logged (e.g. stock put back twice, or an edit that bypassed the ledger). Only items with at least one movement since the date are checked. Paged: pass nextCursor back as cursor. Read-only - reports, never fixes; use get_item_history for the full ledger of one SKU.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          since: { type: 'string', description: 'Check movements at or after this ISO date/time, e.g. 2026-08-20 (default: 30 days ago)' },
+          limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Items checked per page (default 50)' },
+          cursor: { type: 'string', description: 'nextCursor from the previous page' },
+          maxMovements: { type: 'integer', minimum: 100, maximum: 20000, description: 'Newest movements read since the date (default 5000). If the result says truncated, narrow the date instead.' }
+        },
+        additionalProperties: false
+      },
+      annotations: { title: 'Find Stock Mismatches', readOnlyHint: true }
+    },
+    {
       name: 'update_draft_order',
       title: 'Update Draft Order',
       description: 'Revise an order that is still a draft - quantities, customer details, terms, notes, tax or shipping. Only drafts can be changed; an order that has been confirmed, picked, packed or shipped is a record of what happened and is edited in SkidSling instead. Passing `lines` replaces the whole line list, so include every line you want to keep. Use this when a customer comes back with quantities on a quote.',
@@ -575,6 +591,83 @@ module.exports = function createMcpFunction(deps) {
           examples: gradeInName.slice(0, cap).map(function (i) { return { id: i.id, sku: i.sku, name: i.name }; })
         },
         note: 'Reported only. Nothing here has been changed.'
+      };
+    }
+
+    if (name === 'find_stock_mismatches') {
+      var sinceMs = args.since ? Date.parse(String(args.since)) : Date.now() - 30 * 86400000;
+      if (!isFinite(sinceMs)) throw new Error('since must be an ISO date, e.g. 2026-08-20');
+      var pageSize = Math.min(Math.max(parseInt(args.limit) || 50, 1), 200);
+      var maxMov = Math.min(Math.max(parseInt(args.maxMovements) || 5000, 100), 20000);
+      var offset = Math.max(parseInt(args.cursor) || 0, 0);
+      var smRead = 0, smIndexMissing = false, smTruncated = false, smDocs;
+      var smBase = db.collection('movements').where('orgId', '==', auth.orgId);
+      try {
+        var smSnap = await smBase.where('timestamp', '>=', sinceMs).orderBy('timestamp', 'desc').limit(maxMov + 1).get();
+        smRead += smSnap.size;
+        smDocs = smSnap.docs;
+      } catch (e) {
+        // Index (orgId, timestamp desc) not deployed yet: equality only,
+        // filtered here. Costs a read of the org's whole ledger.
+        if (!/index/i.test(e.message || '')) throw e;
+        smIndexMissing = true;
+        var smAll = await smBase.get();
+        smRead += smAll.size;
+        smDocs = smAll.docs.filter(function (d) { return (Number(d.data().timestamp) || 0) >= sinceMs; })
+          .sort(function (a, b) { return (Number(b.data().timestamp) || 0) - (Number(a.data().timestamp) || 0); });
+      }
+      if (smDocs.length > maxMov) { smTruncated = true; smDocs = smDocs.slice(0, maxMov); }
+      var effectiveSince = smDocs.length ? Number(smDocs[smDocs.length - 1].data().timestamp) || sinceMs : sinceMs;
+
+      var byItem = {};
+      smDocs.forEach(function (d) {
+        var m = d.data();
+        if (!m.itemId) return;
+        (byItem[m.itemId] = byItem[m.itemId] || []).push(Object.assign({ id: d.id }, m));
+      });
+      var itemIds = Object.keys(byItem).sort();
+      var pageIds = itemIds.slice(offset, offset + pageSize);
+      var itemDocs = pageIds.length ? await db.getAll.apply(db, pageIds.map(function (x) { return db.collection('items').doc(x); })) : [];
+      smRead += itemDocs.length;
+
+      var mismatches = [], missing = [];
+      itemDocs.forEach(function (d) {
+        var movs = byItem[d.id];
+        if (!d.exists || d.data().orgId !== auth.orgId) {
+          missing.push({ itemId: d.id, sku: (movs[0] && movs[0].sku) || '', name: (movs[0] && movs[0].itemName) || '', movementsSince: movs.length });
+          return;
+        }
+        var pi = publicItem(d.id, d.data());
+        var rec = HIST.reconcileLedger(movs, pi.quantity);
+        if (rec.reconciles) return;
+        mismatches.push({
+          id: pi.id, sku: pi.sku, name: pi.name, grade: pi.grade,
+          quantity: pi.quantity, shelfSum: shelfSum(pi), shelves: pi.locations,
+          movementsSince: rec.movementCount,
+          firstRecordedBefore: rec.firstRecordedBefore,
+          lastRecordedAfter: rec.lastRecordedAfter,
+          unloggedSinceLastMovement: rec.unloggedSinceLastMovement,
+          movementsWithUnknownDirection: rec.movementsWithUnknownDirection,
+          chainBreaks: rec.chainBreaks.slice(0, 10),
+          chainBreakCount: rec.chainBreaks.length
+        });
+      });
+      var nextOffset = offset + pageIds.length;
+      return {
+        since: new Date(sinceMs).toISOString(),
+        effectiveSince: new Date(effectiveSince).toISOString(),
+        truncated: smTruncated || undefined,
+        indexMissing: smIndexMissing || undefined,
+        movementsRead: smDocs.length,
+        itemsWithMovements: itemIds.length,
+        checkedThisPage: pageIds.length,
+        mismatchCount: mismatches.length,
+        mismatches: mismatches,
+        itemsDeletedOrOtherOrg: missing.length ? missing : undefined,
+        nextCursor: nextOffset < itemIds.length ? String(nextOffset) : null,
+        documentsRead: smRead,
+        note: 'Reported only. Nothing has been changed. unloggedChange in a chain break is recordedBefore minus the previous after: positive means stock rose with nothing logged. A break can also come from two writers disagreeing about the total on an item whose quantity did not match its shelves. Movements written before 2026-09-28 often lack before/after, which weakens the check for older dates.' +
+          (smTruncated ? ' Truncated: only the newest ' + maxMov + ' movements were read, so the check starts at effectiveSince. Narrow the date or raise maxMovements.' : '')
       };
     }
 

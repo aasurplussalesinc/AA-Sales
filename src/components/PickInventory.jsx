@@ -12,27 +12,43 @@ export default function PickInventory({ item, location, onClose, onSuccess }) {
     loadData();
   }, []);
 
+  // What the item holds on a shelf, from the item's own `locations` (the
+  // truth). This used to read the location document's retired inventory map,
+  // which no longer tracks anything.
+  const codeOf = (locs, locId) => {
+    const l = (locs || []).find(x => x.id === locId);
+    return l ? DB.canonicalLocationCode(DB.locationCodeOf(l)) : '';
+  };
+  const qtyAt = async (locs, locId) => {
+    const code = codeOf(locs, locId);
+    if (!code) return 0;
+    const fresh = (await DB.getItem(item.id)) || item;
+    const hit = DB.itemLocations(fresh).find(e => e.code === code);
+    return hit ? hit.qty : 0;
+  };
+
   const loadData = async () => {
     const locs = await DB.getLocations();
     setLocations(locs);
-    
+
     if (selectedLocation) {
-      const inventory = await DB.getInventory(selectedLocation);
-      setCurrentQty(inventory[item.id] || 0);
+      setCurrentQty(await qtyAt(locs, selectedLocation));
     }
   };
 
   const handleLocationChange = async (locId) => {
     setSelectedLocation(locId);
-    if (locId) {
-      const inventory = await DB.getInventory(locId);
-      setCurrentQty(inventory[item.id] || 0);
-    }
+    setCurrentQty(locId ? await qtyAt(locations, locId) : 0);
   };
 
   const handlePick = async () => {
     if (!selectedLocation) {
       alert('Select a location');
+      return;
+    }
+
+    if (quantity <= 0) {
+      alert('Enter a quantity greater than zero');
       return;
     }
 
@@ -44,27 +60,13 @@ export default function PickInventory({ item, location, onClose, onSuccess }) {
     setLoading(true);
     
     try {
-      const newQty = currentQty - quantity;
-      
-      // Update location inventory
-      await DB.updateCount(selectedLocation, item.id, newQty);
-      
-      // Update item stock
-      const currentStock = item.stock || 0;
-      await DB.updateItemStock(item.id, Math.max(0, currentStock - quantity));
-      
-      // Log movement
-      await DB.logMovement({
-        itemId: item.id,
-        itemName: item.name,
-        fromLocation: selectedLocation,
-        toLocation: null,
-        quantity: quantity,
-        beforeQty: parseInt(currentStock) || 0,
-        afterQty: Math.max(0, (parseInt(currentStock) || 0) - quantity),
-        type: 'PICK',
-        timestamp: Date.now()
-      });
+      // One shelf-aware write: the units come off this shelf, the total is
+      // re-derived from the shelves, and one PICK movement is logged with
+      // before/after. It used to write the retired location map and `stock`
+      // separately, so the shelves never changed.
+      const code = codeOf(locations, selectedLocation);
+      const res = await DB.removeStockAtLocation(item.id, code, quantity, { note: 'Scanner pick' });
+      if (!res) throw new Error('This item has no stock on any shelf');
 
       onSuccess?.();
       onClose();
@@ -134,7 +136,7 @@ export default function PickInventory({ item, location, onClose, onSuccess }) {
           type="number"
           className="form-input"
           value={quantity}
-          onChange={e => setQuantity(parseInt(e.target.value) || 0)}
+          onChange={e => setQuantity(Number(e.target.value) || 0)}
           min="1"
           max={currentQty}
           style={{marginBottom: 20}}

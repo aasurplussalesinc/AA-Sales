@@ -13,22 +13,29 @@ export default function MoveLocation({ item, location, onClose, onSuccess }) {
     loadData();
   }, []);
 
+  // Available on the source shelf, from the item's own `locations` (the
+  // truth), not the location document's retired inventory map.
+  const qtyAt = async (locs, locId) => {
+    const l = (locs || []).find(x => x.id === locId);
+    const code = l ? DB.canonicalLocationCode(DB.locationCodeOf(l)) : '';
+    if (!code) return 0;
+    const fresh = (await DB.getItem(item.id)) || item;
+    const hit = DB.itemLocations(fresh).find(e => e.code === code);
+    return hit ? hit.qty : 0;
+  };
+
   const loadData = async () => {
     const locs = await DB.getLocations();
     setLocations(locs);
-    
+
     if (fromLocation) {
-      const inventory = await DB.getInventory(fromLocation);
-      setCurrentQty(inventory[item.id] || 0);
+      setCurrentQty(await qtyAt(locs, fromLocation));
     }
   };
 
   const handleFromChange = async (locId) => {
     setFromLocation(locId);
-    if (locId) {
-      const inventory = await DB.getInventory(locId);
-      setCurrentQty(inventory[item.id] || 0);
-    }
+    setCurrentQty(locId ? await qtyAt(locations, locId) : 0);
   };
 
   const handleMove = async () => {

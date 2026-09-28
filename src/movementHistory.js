@@ -6,17 +6,18 @@
 // "PARKA PRIMALOFT GEN III FOLIAGE ARMY LR"), so every movement written from
 // 2026-09-28 carries `sku` and `grade`, and older ones are filled in from the
 // item for display.
+import { toQty } from './stockLedger.js';
 
 // Every type the app, API and MCP write. The Movements filter lists these
 // plus anything else found in the data.
-export const MOVEMENT_TYPES = ['ADD', 'ADJUST', 'CREATE', 'IMPORT', 'MOVE', 'PICK', 'RECEIVE', 'RESTORE'];
+export const MOVEMENT_TYPES = ['ADD', 'ADJUST', 'COUNT', 'CREATE', 'IMPORT', 'MOVE', 'PICK', 'RECEIVE', 'RESTORE'];
 
 function shelfMap(entries) {
   const m = {};
   (entries || []).forEach(e => {
     const code = String(e.code || '');
     if (!code) return;
-    m[code] = (m[code] || 0) + (parseInt(e.qty) || 0);
+    m[code] = (m[code] || 0) + toQty(e.qty);
   });
   return m;
 }
@@ -25,9 +26,10 @@ function shelfMap(entries) {
 // grid, CSV import). `before` / `after` are { stock, locations: [{code, qty}] }
 // with codes already canonical. Returns null when neither the total nor any
 // shelf changed, so a save that touched only the name or price logs nothing.
+// meta.type 'AUTO' picks MOVE when the total is unchanged, else ADJUST.
 export function stockChangeMovement(before, after, meta = {}) {
-  const bq = parseInt(before && before.stock) || 0;
-  const aq = parseInt(after && after.stock) || 0;
+  const bq = toQty(before && before.stock);
+  const aq = toQty(after && after.stock);
   const bm = shelfMap(before && before.locations);
   const am = shelfMap(after && after.locations);
   const codes = [...new Set([...Object.keys(bm), ...Object.keys(am)])].sort();
@@ -35,7 +37,7 @@ export function stockChangeMovement(before, after, meta = {}) {
   const up = codes.filter(c => (am[c] || 0) > (bm[c] || 0));
   if (bq === aq && !down.length && !up.length) return null;
   const out = {
-    type: meta.type || 'ADJUST',
+    type: meta.type === 'AUTO' ? (bq === aq ? 'MOVE' : 'ADJUST') : (meta.type || 'ADJUST'),
     quantity: Math.abs(aq - bq),
     beforeQty: bq,
     afterQty: aq,

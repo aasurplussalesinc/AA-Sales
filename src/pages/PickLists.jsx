@@ -348,7 +348,7 @@ export default function PickLists() {
       if (list.purchaseOrderId && shouldFlagStockDeducted(linesAttempted, linesDeducted)) {
         try {
           await DB.updatePurchaseOrder(list.purchaseOrderId, {
-            stockDeducted: true, stockDeductedAt: Date.now()
+            stockDeducted: true, stockDeductedAt: Date.now(), stockRestored: false
           });
         } catch (e) {
           console.warn('could not flag order as stock-deducted:', e.message);

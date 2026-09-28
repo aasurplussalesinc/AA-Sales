@@ -608,7 +608,7 @@ export default function Items() {
     if (useMultiLocation) {
       // Calculate total from breakdown
       const validLocations = newItem.locationBreakdown.filter(lb => lb.location && lb.quantity > 0);
-      totalStock = validLocations.reduce((sum, lb) => sum + parseInt(lb.quantity) || 0, 0);
+      totalStock = validLocations.reduce((sum, lb) => sum + (Number(lb.quantity) || 0), 0);
       locationInfo = validLocations.map(lb => `${lb.location}: ${lb.quantity}`).join(', ') || '(none)';
     } else {
       totalStock = parseInt(newItem.stock) || 0;
@@ -786,7 +786,7 @@ export default function Items() {
           location: editingItem.location || '',
           lowStockThreshold: editingItem.lowStockThreshold ?? 0,
           reorderPoint: editingItem.reorderPoint ?? 0
-        });
+        }, { log: false }); // logged once below, for the whole save
       } else {
         await DB.updateItem(editingItem.id, {
           partNumber: editingItem.partNumber,
@@ -1177,9 +1177,13 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
         }
         // Apply creates
         let added = 0;
+        const createdIds = [];
         for (const item of toCreate) {
           const { _provided, ...cleanItem } = item; // drop internal tracking flag
-          await DB.createItem(cleanItem);
+          // No CREATE movement yet: the location pass below may still change
+          // this item. logImportChanges writes one CREATE with the final
+          // quantity and shelves once the whole import has run.
+          createdIds.push(await DB.createItem(cleanItem, { logCreate: false }));
           added++;
         }
         const result = { updated, added };
@@ -1251,7 +1255,7 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
               }
 
               if (e.loc) {
-                await DB.updateItemWithSync(item.id, { location: e.code, stock: qtyToSet });
+                await DB.updateItemWithSync(item.id, { location: e.code, stock: qtyToSet }, { log: false }); // logImportChanges logs it
                 locationAssignments++;
               } else {
                 // Location code didn't match any Locations record — still set the dropdown text, flag it.
@@ -1349,7 +1353,7 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
             `\nUse Actions → Edit on those items to change where their stock sits.`;
         }
 
-        await DB.logImportChanges(beforeImport);
+        await DB.logImportChanges(beforeImport, createdIds);
 
         toast(successMsg);
 
@@ -1509,7 +1513,7 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                 ...base,
                 stock: parseInt(item.stock) || 0,
                 location: itemLocation
-              });
+              }, { log: false }); // logged once below with the grid edit
             } else {
               // Location untouched — write the fields only, leave shelves alone.
               await DB.updateItem(item.id, { ...base, stock: parseInt(item.stock) || 0 });
@@ -1571,31 +1575,22 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
       return;
     }
     
-    const currentStock = parseInt(adjustingItem.stock) || 0;
-    const newStock = adjustingItem.adjustType === 'add' 
-      ? currentStock + qty 
-      : Math.max(0, currentStock - qty);
-    
-    const action = adjustingItem.adjustType === 'add' ? 'Add' : 'Remove';
     if (!confirmStep('adjust:' + (adjustingItem?.id || 'x'))) {
       return;
     }
-    
-    // Update directly in Firebase (not just local state)
+
+    // Shelf-aware: this used to write `stock` alone, so the total and the
+    // shelves drifted apart. Now the units go onto / come off a shelf and the
+    // total is re-derived from the shelves. No shelf chosen: additions go to
+    // STAGING, removals come off the primary shelf first.
     try {
-      await DB.updateItem(adjustingItem.id, { stock: newStock });
-      await DB.logMovement({
-        itemId: adjustingItem.id,
-        itemName: adjustingItem.name,
-        sku: adjustingItem.partNumber || '',
-        grade: adjustingItem.grade || '',
-        quantity: qty,
-        beforeQty: currentStock,
-        afterQty: newStock,
-        type: adjustingItem.adjustType === 'add' ? 'ADD' : 'ADJUST',
-        notes: `Quick ${adjustingItem.adjustType}: ${qty}`,
-        timestamp: Date.now()
+      const isAdd = adjustingItem.adjustType === 'add';
+      const res = await DB.quickAdjustStock(adjustingItem.id, isAdd ? 'add' : 'remove', qty, {
+        shelf: adjustingItem.adjustShelf || ''
       });
+      if (!isAdd && res && res.removed !== undefined && res.removed < qty) {
+        toast(`Only ${res.removed} could be removed - that is all the shelf held.`);
+      }
       setAdjustingItem(null);
       await loadData();
     } catch (error) {
@@ -4116,6 +4111,25 @@ PART-004,Discontinued Item,B,Parts,0,5.00,NONE,0,0`;
                     }
                   </div>
                 </div>
+              </div>
+
+              {/* Shelf */}
+              <div style={{ marginBottom: 12, fontSize: 12 }}>
+                <label style={{ display: 'block', color: 'var(--text-muted)', marginBottom: 4 }}>
+                  {adjustingItem.adjustType === 'add' ? 'Add to shelf' : 'Remove from shelf'}
+                </label>
+                <select
+                  value={adjustingItem.adjustShelf || ''}
+                  onChange={e => setAdjustingItem({ ...adjustingItem, adjustShelf: e.target.value })}
+                  style={{ width: '100%', padding: 6, borderRadius: 4, border: '1px solid var(--border)' }}
+                >
+                  <option value="">
+                    {adjustingItem.adjustType === 'add' ? 'STAGING (not yet put away)' : 'Primary shelf first, then the others'}
+                  </option>
+                  {DB.itemLocations(adjustingItem).map(e => (
+                    <option key={e.code} value={e.code}>{e.code} ({e.qty})</option>
+                  ))}
+                </select>
               </div>
 
               {/* Quick buttons */}

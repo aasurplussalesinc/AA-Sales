@@ -12,9 +12,13 @@
  *   ADJUST   Items tab quick "remove" (legacy: no before/after, always a removal),
  *            and from 2026-09-28 every direct edit / API / MCP adjustment, which
  *            carry beforeQty/afterQty
- *   RESTORE  stock put back when an order is deleted
+ *   RESTORE  stock put back when an order is cancelled or deleted (from
+ *            2026-09-28 tagged with orderId and only for units that order's
+ *            PICK movements actually took)
  *   IMPORT   CSV import changed an existing item's quantity or shelves
- *   CREATE   item created with opening stock
+ *   CREATE   item created with opening stock (a CSV-created item: its final
+ *            quantity after the import)
+ *   COUNT    physical count set one shelf's quantity (shelfBefore/shelfAfter)
  */
 
 // Direction of a movement that has no before/after recorded.
@@ -189,7 +193,90 @@ function adjustMovement(item, itemId, orgId, plan, beforeShelves, reason, source
   };
 }
 
+// Walk an item's movements in time order and check they chain: each
+// movement's beforeQty should equal the previous movement's afterQty, and the
+// last afterQty should equal the current quantity. A break means stock changed
+// between two movements with nothing logged (the SKU 4634 signature: +N with no
+// movement), or two writers disagreed about the total. Movements without
+// before/after carry the running total forward by their known direction; one
+// whose direction is unknown stops the check until the next movement that has
+// a beforeQty. Pure; the caller supplies the movements (any order).
+function reconcileLedger(movements, currentQty) {
+  var list = (movements || []).slice().sort(function (a, b) { return millis(a.timestamp) - millis(b.timestamp); });
+  // Movements written in the same millisecond can come back in either order;
+  // within a tie, prefer the one that continues the chain.
+  var ordered = [];
+  var running = null;
+  var i = 0;
+  while (i < list.length) {
+    var j = i;
+    while (j < list.length && millis(list[j].timestamp) === millis(list[i].timestamp)) j++;
+    var group = list.slice(i, j);
+    var r = running;
+    while (group.length) {
+      var k = 0;
+      if (r !== null) {
+        for (var g = 0; g < group.length; g++) { if (num(group[g].beforeQty) === r) { k = g; break; } }
+      } else {
+        // No chain yet: start with the one no other member leads into.
+        for (var h = 0; h < group.length; h++) {
+          var bh = num(group[h].beforeQty);
+          var fed = bh !== null && group.some(function (o, oi) { return oi !== h && num(o.afterQty) === bh; });
+          if (!fed) { k = h; break; }
+        }
+      }
+      var m = group.splice(k, 1)[0];
+      ordered.push(m);
+      var a = num(m.afterQty);
+      var d = movementDelta(m);
+      r = a !== null ? a : (r !== null && d !== null ? r + d : null);
+    }
+    running = r;
+    i = j;
+  }
+
+  var breaks = [], unknown = 0, net = 0;
+  running = null;
+  var first = null;
+  ordered.forEach(function (m) {
+    var b = num(m.beforeQty), a = num(m.afterQty), d = movementDelta(m);
+    if (b !== null) {
+      if (first === null) first = b;
+      if (running !== null && b !== running) {
+        var ts = millis(m.timestamp);
+        breaks.push({
+          time: ts ? new Date(ts).toISOString() : null,
+          movementId: m.id || null,
+          type: m.type || '',
+          expectedBefore: running,
+          recordedBefore: b,
+          unloggedChange: b - running
+        });
+      }
+    }
+    if (d === null) { unknown++; running = a; return; }
+    net += d;
+    if (a !== null) running = a;
+    else if (running !== null) running += d;
+    else if (b !== null) running = b + d;
+  });
+  var cur = parseInt(currentQty) || 0;
+  var endDiff = running === null ? null : cur - running;
+  return {
+    movementCount: ordered.length,
+    firstRecordedBefore: first,
+    lastRecordedAfter: running,
+    netChangeFromMovements: net,
+    movementsWithUnknownDirection: unknown,
+    currentQuantity: cur,
+    chainBreaks: breaks,
+    unloggedSinceLastMovement: endDiff,
+    reconciles: breaks.length === 0 && (endDiff === null || endDiff === 0)
+  };
+}
+
 module.exports = {
+  reconcileLedger: reconcileLedger,
   movementDelta: movementDelta,
   auditStockChange: auditStockChange,
   unmatchedAuditEdits: unmatchedAuditEdits,

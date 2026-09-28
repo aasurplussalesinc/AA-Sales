@@ -1,7 +1,11 @@
 import { brandingFrom as sharedBrandingFrom, brandingHtml as sharedBrandingHtml } from '../functions/orderDocument.mjs';
 import { shouldClearShippingRates } from './parcelRates';
 import { stockChangeMovement } from './movementHistory';
-import { collection, addDoc, getDocs, getDoc, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc, setDoc } from 'firebase/firestore';
+import {
+  toQty, cleanEntries, sumEntries, seedUnshelved, addAtShelf, removeFromShelf,
+  applyCount, planQuickAdjust, planOrderRestore as planOrderRestoreFromLedger, restoreShelf
+} from './stockLedger';
+import { collection, addDoc, getDocs, getDoc, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc, setDoc, runTransaction } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
 
@@ -687,43 +691,57 @@ export const OrgDB = {
       .sort((a, b) => b.movementCount - a.movementCount || b.totalPicked - a.totalPicked);
   },
 
-  // Used when a cancelled order restores stock.
+  // Signed stock change for one item. Shelf-aware: a positive delta goes onto
+  // `opts.location` (else STAGING), a negative one comes off `opts.location`
+  // (else the primary shelf, spilling onto the others), and the total is
+  // re-derived from the shelves. Logs one movement with before/after.
+  // (Cancelled orders no longer come through here - see restoreOrderStock.)
   async adjustItemStock(itemId, delta, opts = {}) {
     if (!currentOrgId || !itemId) return null;
-    const amount = parseInt(delta) || 0;
+    const amount = toQty(delta);
     if (amount === 0) return null;
-
-    const ref = doc(db, 'items', itemId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-    const cur = parseInt(snap.data().stock) || 0;
-    const next = Math.max(0, cur + amount);
-
-    // Put it back where it came from when a shelf is known, so the totals stay
-    // derived from the shelves rather than drifting apart.
-    const code = this.canonicalLocationCode(opts.location || '');
-    const note = opts.reason || opts.note || 'Stock adjustment';
-    // The shelf helpers log their own movement; only the plain stock write
-    // below needs one here (logging both counted the units twice).
-    if (code && amount > 0) {
-      await this.addStockAtLocation(itemId, code, amount, { note });
-      return { previous: cur, stock: next };
-    } else if (code && amount < 0) {
-      await this.removeStockAtLocation(itemId, code, Math.abs(amount), { note });
-      return { previous: cur, stock: next };
-    }
-    await updateDoc(ref, { stock: next, updatedAt: Date.now() });
-
-    await this.logMovement({
-      itemId, itemName: snap.data().name || '',
-      sku: snap.data().partNumber || '', grade: snap.data().grade || '',
-      quantity: Math.abs(amount),
-      type: amount > 0 ? 'RECEIVE' : 'PICK',
-      toLocation: '', fromLocation: '',
-      beforeQty: cur, afterQty: next,
-      note
+    const res = await this.quickAdjustStock(itemId, amount > 0 ? 'add' : 'remove', Math.abs(amount), {
+      shelf: opts.location || '',
+      note: opts.reason || opts.note || 'Stock adjustment',
+      type: amount > 0 ? 'RECEIVE' : 'PICK'
     });
-    return { previous: cur, stock: next };
+    return res ? { previous: res.before, stock: res.after } : null;
+  },
+
+  // Items tab quick +/- (and adjustItemStock). `type` is 'add' or 'remove'.
+  // With no shelf chosen, additions go to STAGING and removals come off the
+  // primary shelf first. Stock always equals the sum of the shelves afterwards.
+  async quickAdjustStock(itemId, type, qty, opts = {}) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const amount = toQty(qty);
+    if (amount <= 0) throw new Error('Quantity must be greater than zero');
+    const snap = await getDoc(doc(db, 'items', itemId));
+    if (!snap.exists()) throw new Error('Item not found');
+    const item = snap.data();
+    if (item.orgId && item.orgId !== currentOrgId) throw new Error('Item not found');
+    const shelf = this.canonicalLocationCode(opts.shelf || '');
+    const plan = planQuickAdjust(this.itemLocations(item), {
+      type: type === 'add' ? 'add' : 'remove', qty: amount, shelf,
+      stock: item.stock, stagingCode: this.STAGING_CODE, seedCode: this.unshelvedSeedCode(item)
+    });
+    if (plan.after === plan.before && !plan.seeded) return { before: plan.before, after: plan.after, changed: false };
+    if (plan.toLocation === this.STAGING_CODE || (plan.seeded && this.unshelvedSeedCode(item) === this.STAGING_CODE)) {
+      try { await this.getOrCreateStagingLocation(); } catch (e) { /* the shelf code is enough */ }
+    }
+    const res = await this.setItemLocations(itemId, plan.entries);
+    const units = Math.abs(plan.after - plan.before);
+    await this.logMovement({
+      itemId, itemName: item.name || '', sku: item.partNumber || '', grade: item.grade || '',
+      type: opts.type || (type === 'add' ? 'ADD' : 'ADJUST'),
+      quantity: units,
+      ...(units !== amount ? { requestedQty: amount } : {}),
+      beforeQty: plan.before, afterQty: res.stock,
+      fromLocation: plan.fromLocation, toLocation: plan.toLocation,
+      ...(plan.seeded ? { seededToStaging: plan.seeded } : {}),
+      note: (opts.note || `Quick ${type === 'add' ? 'add' : 'remove'}: ${amount}`) +
+        (plan.seeded ? ` (${plan.seeded} unshelved units first placed in ${this.unshelvedSeedCode(item)})` : '')
+    });
+    return { before: plan.before, after: res.stock, removed: plan.removed, added: plan.added, changed: true, locations: res.locations };
   },
 
   async getItemHistory(itemId) {
@@ -779,7 +797,9 @@ export const OrgDB = {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
-  async createItem(itemData) {
+  // opts.logCreate === false: the caller logs the opening stock itself (the CSV
+  // import logs one CREATE per new item with its final quantity and shelves).
+  async createItem(itemData, opts = {}) {
     if (!currentOrgId) throw new Error('No organization selected');
     
     const user = auth.currentUser;
@@ -799,8 +819,8 @@ export const OrgDB = {
 
     // Opening stock is a quantity change like any other; without it an
     // item's history can never add up to its quantity.
-    const opening = parseInt(itemData.stock) || 0;
-    if (opening > 0) {
+    const opening = toQty(itemData.stock);
+    if (opening > 0 && opts.logCreate !== false) {
       try {
         await this.logMovement({
           itemId: ref.id, itemName: itemData.name || '',
@@ -849,12 +869,23 @@ export const OrgDB = {
     await this.logActivity('ITEM_DELETED', { itemId });
   },
 
+  // Writes the total only, without shelves or a movement. Nothing in the app
+  // calls this any more (scanner pick and order delete-restore used to); use
+  // quickAdjustStock / removeStockAtLocation / restoreOrderStock instead.
   async updateItemStock(itemId, newStock) {
     const ref = doc(db, 'items', itemId);
     await updateDoc(ref, {
-      stock: parseInt(newStock),
+      stock: Math.max(0, toQty(newStock)),
       updatedAt: Date.now()
     });
+  },
+
+  // One item, fresh, only if it belongs to the current org.
+  async getItem(itemId) {
+    if (!currentOrgId || !itemId) return null;
+    const snap = await getDoc(doc(db, 'items', itemId));
+    if (!snap.exists() || snap.data().orgId !== currentOrgId) return null;
+    return { id: snap.id, ...snap.data() };
   },
 
   async getItemByPartNumber(partNumber) {
@@ -1203,13 +1234,19 @@ export const OrgDB = {
     if (!item) return [];
     if (Array.isArray(item.locations)) {
       return item.locations
-        .map(e => ({ code: this.canonicalLocationCode(e.code || e.location || ''), qty: parseInt(e.qty ?? e.quantity) || 0 }))
+        .map(e => ({ code: this.canonicalLocationCode(e.code || e.location || ''), qty: toQty(e.qty ?? e.quantity) }))
         .filter(e => e.code && e.qty > 0);
     }
     // legacy shape: single location string + total stock
-    const stock = parseInt(item.stock) || 0;
+    const stock = toQty(item.stock);
     const code = this.canonicalLocationCode(item.location || '');
     return (code && stock > 0) ? [{ code, qty: stock }] : [];
+  },
+
+  // Where stock that sits on no shelf is put before a shelf write (see
+  // seedUnshelved): the item's own location field if it has one, else STAGING.
+  unshelvedSeedCode(item) {
+    return this.canonicalLocationCode((item && item.location) || '') || this.STAGING_CODE;
   },
 
   // Write the array back, recomputing the derived fields in one go.
@@ -1218,7 +1255,7 @@ export const OrgDB = {
     const clean = [];
     (entries || []).forEach(e => {
       const code = this.canonicalLocationCode(e.code || '');
-      const qty = parseInt(e.qty) || 0;
+      const qty = toQty(e.qty);
       if (!code || qty <= 0) return;
       const found = clean.find(c => c.code === code);
       if (found) found.qty += qty; else clean.push({ code, qty });
@@ -1242,25 +1279,31 @@ export const OrgDB = {
   },
 
   // Add qty at a shelf (receiving). Blank code routes to staging.
+  // meta: { note, type (default RECEIVE), orderId, orderNumber, pickShelf }.
+  // An item holding stock with no shelf at all gets that stock placed in
+  // STAGING first, so rewriting the shelves can't silently drop it.
   async addStockAtLocation(itemId, code, qty, meta = {}) {
-    const amount = parseInt(qty) || 0;
+    const amount = toQty(qty);
     if (amount <= 0) throw new Error('Quantity must be greater than zero');
     const snap = await getDoc(doc(db, 'items', itemId));
     if (!snap.exists()) throw new Error('Item not found');
     const item = { id: itemId, ...snap.data() };
     let target = this.canonicalLocationCode(code || '');
     if (!target) { const st = await this.getOrCreateStagingLocation(); target = st.locationCode || this.STAGING_CODE; }
-    const entries = this.itemLocations(item);
+    const seed = seedUnshelved(this.itemLocations(item), item.stock, this.unshelvedSeedCode(item));
     // Shelf total, not item.stock: the write below re-derives stock from the
     // shelves, so this is the before that matches the after.
-    const beforeQty = entries.reduce((s, e) => s + e.qty, 0);
-    const hit = entries.find(e => e.code === target);
-    if (hit) hit.qty += amount; else entries.push({ code: target, qty: amount });
-    const res = await this.setItemLocations(itemId, entries);
+    const plan = addAtShelf(seed.entries, target, amount);
+    const res = await this.setItemLocations(itemId, plan.entries);
     await this.logMovement({
       itemId, itemName: item.name, sku: item.partNumber || '', grade: item.grade || '',
-      quantity: amount, type: 'RECEIVE', toLocation: target,
-      beforeQty, afterQty: res.stock,
+      quantity: amount, type: meta.type || 'RECEIVE', toLocation: target,
+      beforeQty: plan.before, afterQty: res.stock,
+      shelfBefore: plan.shelfBefore, shelfAfter: plan.shelfAfter,
+      ...(seed.seeded ? { seededToStaging: seed.seeded } : {}),
+      ...(meta.orderId ? { orderId: meta.orderId } : {}),
+      ...(meta.orderNumber ? { orderNumber: meta.orderNumber } : {}),
+      ...(meta.pickShelf !== undefined ? { pickShelf: meta.pickShelf } : {}),
       ...(meta.note ? { note: meta.note } : {})
     });
     return res;
@@ -1273,28 +1316,29 @@ export const OrgDB = {
   // audit has to guess by matching item, quantity and time, and two orders
   // shipping the same SKU in the same week are indistinguishable.
   async removeStockAtLocation(itemId, code, qty, meta = {}) {
-    const amount = parseInt(qty) || 0;
+    const amount = toQty(qty);
     if (amount <= 0) return null;
     const snap = await getDoc(doc(db, 'items', itemId));
     if (!snap.exists()) return null;
     const item = { id: itemId, ...snap.data() };
     const entries = this.itemLocations(item);
-    let target = this.canonicalLocationCode(code || '');
-    let hit = entries.find(e => e.code === target);
-    if (!hit) hit = entries.slice().sort((a, b) => b.qty - a.qty)[0];
-    if (!hit) return null;
-    const beforeQty = entries.reduce((s, e) => s + e.qty, 0); // shelf total, as addStockAtLocation
-    hit.qty -= amount;
-    const res = await this.setItemLocations(itemId, entries.filter(e => e.qty > 0));
+    if (!entries.length) return null;
+    const target = this.canonicalLocationCode(code || '');
+    const plan = removeFromShelf(entries, target, amount, { spill: !!meta.spill });
+    const res = await this.setItemLocations(itemId, plan.entries);
+    // quantity is what actually came off. A shelf holding less than was asked
+    // for used to log the full request, overstating the pick in the ledger.
     await this.logMovement({
       itemId, itemName: item.name, sku: item.partNumber || '', grade: item.grade || '',
-      quantity: amount, type: 'PICK', fromLocation: hit.code,
-      beforeQty, afterQty: res.stock,
+      quantity: plan.removed, type: meta.type || 'PICK',
+      fromLocation: plan.taken.map(t => t.code).join(', ') || plan.shelf,
+      beforeQty: plan.before, afterQty: res.stock,
+      ...(plan.removed !== amount ? { requestedQty: amount } : {}),
       ...(meta.orderId ? { orderId: meta.orderId } : {}),
       ...(meta.orderNumber ? { orderNumber: meta.orderNumber } : {}),
       ...(meta.note ? { note: meta.note } : {})
     });
-    return res;
+    return { ...res, removed: plan.removed };
   },
 
   // Move qty between shelves — total stock unchanged.
@@ -1625,18 +1669,24 @@ export const OrgDB = {
   },
 
   // Sync item's location field to location inventory
-  async syncItemToLocation(itemId, locationCode, quantity) {
+  // opts.log === false: the caller takes its own before/after snapshot and logs
+  // one movement for the whole save (edit form, grid, CSV import), so logging
+  // here too would count the change twice. Otherwise one MOVE (total
+  // unchanged) or ADJUST movement is logged with before/after.
+  async syncItemToLocation(itemId, locationCode, quantity, opts = {}) {
+    const before = opts.log === false ? null : await this.stockSnapshot(itemId);
     // Item-owned model: put the whole quantity at one shelf (exclusive move).
     const code = this.canonicalLocationCode(locationCode || '');
-    const qty = parseInt(quantity) || 0;
+    const qty = toQty(quantity);
     // A BLANK location means "this item is nowhere" — clear its shelves.
     // Returning early here made clearing a location a silent no-op, so the
     // item kept showing on its old shelf in Locations and on the Map.
     if (!code) {
       await this.setItemLocations(itemId, []);
-      return;
+    } else {
+      await this.setItemLocations(itemId, qty > 0 ? [{ code, qty }] : []);
     }
-    await this.setItemLocations(itemId, qty > 0 ? [{ code, qty }] : []);
+    if (before) await this.logStockChange(itemId, before, 'AUTO', opts.reason || 'Item assigned to ' + (code || 'no shelf'));
   },
 
   async syncLocationToItem(itemId, locationCode) {
@@ -1657,13 +1707,16 @@ export const OrgDB = {
     return await this.removeStockAtLocation(itemId, locationCode, qty);
   },
 
-  async updateItemWithSync(itemId, updates) {    const ref = doc(db, 'items', itemId);
-    
+  // opts.log === false when the caller logs the save itself (see syncItemToLocation).
+  async updateItemWithSync(itemId, updates, opts = {}) {
+    const ref = doc(db, 'items', itemId);
+
     // Get current item to know the stock
     const itemSnap = await getDoc(ref);
     const currentItem = itemSnap.exists() ? itemSnap.data() : {};
-    const stock = updates.stock !== undefined ? updates.stock : (currentItem.stock || 0);
-    
+    const before = (opts.log === false || !itemSnap.exists()) ? null : this.stockState(currentItem);
+    const stock = toQty(updates.stock !== undefined ? updates.stock : currentItem.stock);
+
     // Normalize location if provided
     if (updates.location) {
       updates.location = this.normalizeLocationCode(updates.location);
@@ -1676,9 +1729,10 @@ export const OrgDB = {
     
     // If location changed, sync to locations
     if (updates.location !== undefined) {
-      await this.syncItemToLocation(itemId, updates.location, stock);
+      await this.syncItemToLocation(itemId, updates.location, stock, { log: false });
     }
-    
+    if (before) await this.logStockChange(itemId, before, 'AUTO', opts.reason || 'Item updated');
+
     await this.logActivity('ITEM_UPDATED', { itemId, updates });
   },
 
@@ -1966,7 +2020,7 @@ export const OrgDB = {
         l.locationCode || `${l.warehouse}-R${l.rack}-${l.letter}${l.shelf}`);
       const inv = l.inventory || {};
       Object.keys(inv).forEach(id => {
-        const q = parseInt(inv[id]) || 0;
+        const q = toQty(inv[id]);
         if (q > 0 && code) (legacy[id] = legacy[id] || []).push({ code, qty: q });
       });
     });
@@ -1980,7 +2034,7 @@ export const OrgDB = {
       if (now.length > 1) continue;             // still split — nothing lost
 
       const legacyTotal = was.reduce((s, e) => s + e.qty, 0);
-      const nowTotal = now.reduce((s, e) => s + e.qty, 0) || (parseInt(it.stock) || 0);
+      const nowTotal = now.reduce((s, e) => s + e.qty, 0) || toQty(it.stock);
 
       const row = {
         id: it.id, sku: it.partNumber, name: it.name,
@@ -2003,7 +2057,9 @@ export const OrgDB = {
         if (share > 0) { rebuilt.push({ code: e.code, qty: share }); remaining -= share; }
       });
       if (rebuilt.length > 1 && rebuilt.reduce((s, e) => s + e.qty, 0) === nowTotal) {
+        const before = this.stockState(it);
         await this.setItemLocations(it.id, rebuilt);
+        await this.logStockChange(it.id, before, 'AUTO', 'Split shelves recovered from pre-migration snapshot');
         restored.push({ ...row, rebuiltAs: rebuilt.map(e => `${e.code}:${e.qty}`).join(', ') });
       } else {
         noSnapshot.push(row);
@@ -2028,7 +2084,7 @@ export const OrgDB = {
       if (line.source !== 'inventory' && line.source !== 'inventory_contract') continue;
       // What was actually taken: what the picker counted, else what was packed,
       // else what was ordered.
-      const qty = parseInt(line.pickedQty) || parseInt(line.qtyShipped) || parseInt(line.quantity) || 0;
+      const qty = toQty(line.pickedQty) || toQty(line.qtyShipped) || toQty(line.quantity);
       if (qty <= 0 || !line.itemId) continue;
 
       const from = line.pickedFrom || line.location || '';
@@ -2045,7 +2101,7 @@ export const OrgDB = {
         try {
           const snap = await getDoc(doc(db, 'items', line.itemId));
           if (snap.exists()) {
-            const cur = parseInt(snap.data().stock) || 0;
+            const cur = toQty(snap.data().stock);
             const next = Math.max(0, cur - qty);
             await updateDoc(doc(db, 'items', line.itemId), {
               stock: next, updatedAt: Date.now()
@@ -2072,7 +2128,10 @@ export const OrgDB = {
 
     await this.updatePurchaseOrder(orderId, {
       stockDeducted: true,
-      stockDeductedAt: Date.now()
+      stockDeductedAt: Date.now(),
+      // New stock is out for this order, so an earlier restore no longer
+      // covers it (restoreOrderStock also checks the ledger itself).
+      stockRestored: false
     });
 
     return { deducted, units, report };
@@ -2312,22 +2371,31 @@ export const OrgDB = {
   stockState(item) {
     return {
       name: item.name || '', sku: item.partNumber || '', grade: item.grade || '',
-      stock: parseInt(item.stock) || 0,
+      stock: toQty(item.stock),
       locations: this.itemLocations(item)
     };
   },
 
   // After a CSV import: one IMPORT movement per pre-existing item whose total
-  // or shelves changed. Items the import created log CREATE in createItem.
-  async logImportChanges(beforeItems) {
+  // or shelves changed, and one CREATE per item the import created, carrying
+  // its FINAL quantity and shelves. (The import creates items with createItem
+  // { logCreate: false } and may then change them in its location pass; a
+  // CREATE at creation time would miss that later change.)
+  // `createdIds`: the ids the import created. Only those get a CREATE here, so
+  // an item someone else adds while the import runs isn't logged twice.
+  async logImportChanges(beforeItems, createdIds = []) {
     try {
       const after = await this.getItems();
       const byId = new Map((beforeItems || []).map(i => [i.id, i]));
+      const created = new Set(createdIds || []);
+      const EMPTY = { stock: 0, locations: [] };
       let logged = 0;
       for (const a of after) {
         const b = byId.get(a.id);
-        if (!b) continue;
-        const mv = stockChangeMovement(this.stockState(b), this.stockState(a), { type: 'IMPORT', reason: 'CSV import' });
+        if (!b && !created.has(a.id)) continue;
+        const mv = b
+          ? stockChangeMovement(this.stockState(b), this.stockState(a), { type: 'IMPORT', reason: 'CSV import' })
+          : stockChangeMovement(EMPTY, this.stockState(a), { type: 'CREATE', reason: 'Item created by CSV import' });
         if (!mv) continue;
         await this.logMovement({ itemId: a.id, itemName: a.name || '', sku: a.partNumber || '', grade: a.grade || '', ...mv });
         logged++;
@@ -2364,34 +2432,132 @@ export const OrgDB = {
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
 
-  async updateCount(locationId, itemId, count) {
+  // A physical count at one shelf. The count is authoritative: that shelf's
+  // entry in item.locations is set to the counted number (dropped at 0, added
+  // if the item wasn't listed there), stock is re-derived as the sum of the
+  // shelves, and a COUNT movement records the shelf and item before/after.
+  //
+  // The location document's old `inventory` map is no longer written. Those
+  // maps were retired by the unify migration; the only code still reading
+  // them is recoverSplitLocations, which uses them as a frozen pre-migration
+  // snapshot (writing a count into it would corrupt that snapshot). The
+  // scanner screens that used to read them now read item.locations.
+  async updateCount(locationId, itemId, count, meta = {}) {
     if (!currentOrgId) throw new Error('No organization selected');
-
-    // SINGLE SOURCE OF TRUTH: write to the location document's inventory map,
-    // which is what the Items tab, voice, pick lists and catalog all read.
-    const locRef = doc(db, 'locations', locationId);
-    const snap = await getDoc(locRef);
+    const snap = await getDoc(doc(db, 'locations', locationId));
     if (!snap.exists()) throw new Error('Location not found');
-    const inv = { ...(snap.data().inventory || {}) };
-    const qty = Math.max(0, parseInt(count) || 0);
-    if (qty === 0) delete inv[itemId]; else inv[itemId] = qty;
-    await updateDoc(locRef, { inventory: inv, updatedAt: Date.now() });
+    if (snap.data().orgId && snap.data().orgId !== currentOrgId) throw new Error('Location not found');
+    return await this.countItemAtShelf(itemId, this.locationCodeOf(snap.data()), count, meta);
+  },
 
-    // Keep the item's own primary-location field sensible for the Items tab.
-    const code = this.locationCodeOf(snap.data());
-    const itemRef = doc(db, 'items', itemId);
-    const itemSnap = await getDoc(itemRef);
-    if (itemSnap.exists()) {
-      const cur = itemSnap.data();
-      if (qty > 0) {
-        if (!cur.location) await updateDoc(itemRef, { location: code, updatedAt: Date.now() });
-      } else if (this.canonicalLocationCode(cur.location) === this.canonicalLocationCode(code)) {
-        // Cleared this location and it was the item's primary — repoint to another
-        // location that still holds it, if any.
-        const locs = await this.getLocations();
-        const other = locs.find(l => l.id !== locationId && l.inventory && (parseInt(l.inventory[itemId]) || 0) > 0);
-        await updateDoc(itemRef, { location: other ? this.locationCodeOf(other) : '', updatedAt: Date.now() });
+  async countItemAtShelf(itemId, code, count, meta = {}) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const shelf = this.canonicalLocationCode(code || '');
+    if (!shelf) throw new Error('A shelf is required for a count');
+    const snap = await getDoc(doc(db, 'items', itemId));
+    if (!snap.exists()) throw new Error('Item not found');
+    const item = snap.data();
+    if (item.orgId && item.orgId !== currentOrgId) throw new Error('Item not found');
+    // Unshelved stock (stock with no shelf at all) is kept - on the item's
+    // location field if it has one, else STAGING - rather than wiped by a
+    // count of some other shelf.
+    const seed = seedUnshelved(this.itemLocations(item), item.stock, this.unshelvedSeedCode(item));
+    const plan = applyCount(seed.entries, shelf, count);
+    const storedStock = toQty(item.stock);
+    if (!plan.changed && !seed.seeded && storedStock === plan.after) {
+      return { changed: false, shelf, shelfQty: plan.shelfAfter, stock: plan.after };
+    }
+    const res = await this.setItemLocations(itemId, plan.entries);
+    await this.logMovement({
+      itemId, itemName: item.name || '', sku: item.partNumber || '', grade: item.grade || '',
+      type: 'COUNT',
+      quantity: Math.abs(plan.shelfAfter - plan.shelfBefore),
+      shelf, shelfBefore: plan.shelfBefore, shelfAfter: plan.shelfAfter,
+      // Item totals. beforeQty is the shelf sum the count was applied to; when
+      // the stored stock field disagreed with it, that is recorded too.
+      beforeQty: plan.before, afterQty: res.stock,
+      ...(storedStock !== plan.before ? { storedStockBefore: storedStock } : {}),
+      ...(seed.seeded ? { seededToStaging: seed.seeded } : {}),
+      fromLocation: plan.shelfAfter < plan.shelfBefore ? shelf : '',
+      toLocation: plan.shelfAfter > plan.shelfBefore ? shelf : '',
+      note: meta.note || `Counted ${plan.shelfAfter} at ${shelf}`
+    });
+    return { changed: true, shelf, shelfQty: plan.shelfAfter, stock: res.stock, before: plan.before };
+  },
+
+  // ── Order restores (cancel / delete with "return to stock") ─────────────
+  // Every movement tagged with this order's id, oldest first.
+  async getOrderMovements(orderId) {
+    if (!currentOrgId || !orderId) return [];
+    const snap = await getDocs(query(collection(db, 'movements'),
+      where('orgId', '==', currentOrgId), where('orderId', '==', orderId)));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => toQty(a.timestamp) - toQty(b.timestamp));
+  },
+
+  // What restoring this order would put back, from the ledger (PICK movements
+  // for the order minus RESTORE movements already written for it). Read-only.
+  async planOrderRestore(orderOrId) {
+    const order = typeof orderOrId === 'string' ? await this.getPurchaseOrder(orderOrId) : orderOrId;
+    if (!order) return { lines: [], skipped: 'no-order', unverifiable: false, outstandingUnits: 0 };
+    const movements = await this.getOrderMovements(order.id);
+    return planOrderRestoreFromLedger(order, movements);
+  },
+
+  // Put back what this order actually took, onto the shelf it was taken from
+  // (a pick with no shelf recorded goes to the item's primary shelf, else
+  // STAGING). Guarded against double restores three ways: a short-lived claim
+  // on the order (two tabs / double click), the ledger (only picked minus
+  // already-restored units), and the order's stockRestored flag. An order
+  // with no tagged PICK movement restores nothing.
+  async restoreOrderStock(orderId, opts = {}) {
+    if (!currentOrgId) throw new Error('No organization selected');
+    const ref = doc(db, 'purchaseOrders', orderId);
+    const CLAIM_MS = 2 * 60 * 1000;
+    const claimedAt = Date.now();
+    await runTransaction(db, async (tx) => {
+      const s = await tx.get(ref);
+      if (!s.exists() || s.data().orgId !== currentOrgId) throw new Error('Order not found');
+      const c = toQty(s.data().stockRestoreClaimAt);
+      if (c && claimedAt - c < CLAIM_MS) throw new Error('Stock for this order is already being restored - try again in a minute.');
+      tx.update(ref, { stockRestoreClaimAt: claimedAt });
+    });
+
+    try {
+      const snap = await getDoc(ref);
+      const order = { id: orderId, ...snap.data() };
+      const plan = await this.planOrderRestore(order);
+      const why = opts.reason === 'deleted' ? 'deleted' : 'cancelled';
+      const results = [], errors = [];
+      for (const line of plan.lines) {
+        try {
+          const isnap = await getDoc(doc(db, 'items', line.itemId));
+          if (!isnap.exists()) { errors.push(`${line.sku || line.itemName}: item no longer exists`); continue; }
+          const shelf = restoreShelf(line.pickShelf, this.itemLocations(isnap.data()), this.STAGING_CODE);
+          const res = await this.addStockAtLocation(line.itemId, shelf, line.qty, {
+            type: 'RESTORE', orderId, orderNumber: order.poNumber || '',
+            pickShelf: line.pickShelf,
+            note: `Restored from ${why} order ${order.poNumber || orderId}` +
+              (line.pickShelf ? '' : ' (pick had no shelf recorded)')
+          });
+          results.push({ ...line, shelf, stock: res.stock });
+        } catch (e) {
+          errors.push(`${line.sku || line.itemName}: ${e.message}`);
+        }
       }
+      const units = results.reduce((sum, r) => sum + r.qty, 0);
+      const done = !errors.length;
+      const flags = {};
+      if (units > 0 || plan.skipped === 'already-restored') {
+        flags.stockRestored = done;
+        if (done) { flags.stockRestoredAt = Date.now(); flags.stockDeducted = false; }
+        flags.stockRestoredUnits = toQty(snap.data().stockRestoredUnits) + units;
+      }
+      await updateDoc(ref, { ...flags, stockRestoreClaimAt: null, updatedAt: Date.now() });
+      return { restored: results, units, errors, skipped: plan.skipped, unverifiable: plan.unverifiable };
+    } catch (e) {
+      try { await updateDoc(ref, { stockRestoreClaimAt: null }); } catch (e2) { /* the claim expires anyway */ }
+      throw e;
     }
   },
 

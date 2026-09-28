@@ -69,24 +69,14 @@ export default function Scanner() {
       const allItems = await DB.getItems();
       const locationCode = location.locationCode || `${location.warehouse}-R${location.rack}-${location.letter}${location.shelf}`;
       
-      // Get inventory from location.inventory object
+      // What sits on this shelf, from each item's own `locations` (the truth).
+      // This used to read location.inventory, a map retired by the unify
+      // migration, so it showed pre-migration quantities.
+      const shelf = DB.canonicalLocationCode(locationCode);
       const locationItems = [];
-      if (location.inventory) {
-        for (const [itemId, qty] of Object.entries(location.inventory)) {
-          if (qty > 0) {
-            const item = allItems.find(i => i.id === itemId);
-            if (item) {
-              locationItems.push({ ...item, qtyAtLocation: qty });
-            }
-          }
-        }
-      }
-      
-      // Also check items that have this location in their location field
       allItems.forEach(item => {
-        if (item.location === locationCode && !locationItems.find(li => li.id === item.id)) {
-          locationItems.push({ ...item, qtyAtLocation: item.stock || 0 });
-        }
+        const hit = DB.itemLocations(item).find(e => e.code === shelf);
+        if (hit && hit.qty > 0) locationItems.push({ ...item, qtyAtLocation: hit.qty });
       });
       
       setScannedData({

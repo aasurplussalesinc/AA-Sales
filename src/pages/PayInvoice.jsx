@@ -23,6 +23,8 @@ export default function PayInvoice() {
   const [view, setView] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
+  const [partial, setPartial] = useState(false);
+  const [partialAmount, setPartialAmount] = useState('');
 
   const args = { orgId, t, ...(customerId ? { customerId } : { orderId }) };
 
@@ -42,7 +44,17 @@ export default function PayInvoice() {
   const payWith = async (method) => {
     setBusy('Opening secure checkout...'); setError('');
     try {
-      const r = await Invoices.payLinkCheckout({ ...args, method });
+      const extra = {};
+      if (partial && !customerId) {
+        const cents = Math.round(parseFloat(partialAmount) * 100);
+        if (!(cents >= 100) || cents > view.amountDueNowCents) {
+          setError('Enter an amount between $1.00 and ' + formatCents(view.amountDueNowCents) + '.');
+          setBusy('');
+          return;
+        }
+        extra.amountCents = cents;
+      }
+      const r = await Invoices.payLinkCheckout({ ...args, method, ...extra });
       window.location.href = r.url;
     } catch (e) {
       setError(e.message || 'Could not start the payment.');
@@ -120,9 +132,18 @@ export default function PayInvoice() {
             {view.canPay && (
               <div style={{ marginTop: 16 }}>
                 {view.pendingCents > 0 && <div style={{ fontSize: 13, color: '#b26a00' }}>{formatCents(view.pendingCents)} is already clearing by bank transfer.</div>}
+                {!isStatement && (
+                  <div style={{ fontSize: 13, margin: '6px 0' }}>
+                    <label><input type="checkbox" checked={partial} onChange={e => setPartial(e.target.checked)} /> Pay a different amount</label>
+                    {partial && (
+                      <span> $<input type="number" min="1" step="0.01" value={partialAmount} placeholder={(view.amountDueNowCents / 100).toFixed(2)}
+                        onChange={e => setPartialAmount(e.target.value)} style={{ width: 110, padding: 4, marginLeft: 2 }} /></span>
+                    )}
+                  </div>
+                )}
                 {view.options.map(o => (
                   <button key={o.method} style={{ ...btn, opacity: busy ? 0.6 : 1 }} disabled={!!busy} onClick={() => payWith(o.method)}>
-                    {o.label}: {formatCents(view.amountDueNowCents + (o.surchargeCents || 0))}
+                    {o.label}: {partial && parseFloat(partialAmount) > 0 ? formatCents(Math.round(parseFloat(partialAmount) * 100)) + (o.surchargeCents ? ' + fee' : '') : formatCents(view.amountDueNowCents + (o.surchargeCents || 0))}
                     {o.surchargeCents > 0 && <div style={{ fontSize: 12, fontWeight: 400 }}>includes {formatCents(o.surchargeCents)} card processing fee</div>}
                   </button>
                 ))}

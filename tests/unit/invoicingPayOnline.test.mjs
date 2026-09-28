@@ -188,3 +188,13 @@ test('a cancelled order: the link stops offering payment', async () => {
   assert.equal(view.status, 'void');
   await assert.rejects(h.inv.invoicePayLinkCheckout({ orgId: 'acme', orderId: 'o1', t }, {}), /cancelled/);
 });
+
+test('pay page: a customer may pay part of the balance, never more than is owed', async () => {
+  const h = build({ seed: seed() });
+  const { t } = await payLink(h);
+  await h.inv.invoicePayLinkCheckout({ orgId: 'acme', orderId: 'o1', t, amountCents: 60000 }, {});
+  const call = h.stripe.calls.find(c => c.fn === 'checkout.sessions.create');
+  assert.equal(call.params.line_items[0].price_data.unit_amount, 60000);
+  await assert.rejects(h.inv.invoicePayLinkCheckout({ orgId: 'acme', orderId: 'o1', t, amountCents: TOTAL + 1 }, {}), /between \$1\.00 and \$1,200\.00/);
+  await assert.rejects(h.inv.invoicePayLinkCheckout({ orgId: 'acme', orderId: 'o1', t, amountCents: 50 }, {}), /between/);
+});

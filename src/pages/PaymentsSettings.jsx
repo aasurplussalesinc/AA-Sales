@@ -42,7 +42,8 @@ export default function PaymentsSettings() {
         schedule: (p.autoSend && Array.isArray(p.autoSend.schedule) ? p.autoSend.schedule : [-3, 0, 7, 14, 30])
           .map(n => (n > 0 ? '+' + n : String(n))).join(', '),
         sendHour: p.autoSend && p.autoSend.sendHour != null ? p.autoSend.sendHour : 9,
-        timeZone: (p.autoSend && p.autoSend.timeZone) || 'America/New_York'
+        timeZone: (p.autoSend && p.autoSend.timeZone) || 'America/New_York',
+        statementMonthly: !!(p.autoSend && p.autoSend.statementMonthly)
       }
     });
   }, [organization?.id, organization?.payments]);
@@ -230,6 +231,11 @@ export default function PaymentsSettings() {
               <input type="checkbox" disabled={!isAdmin} checked={form.autoSend.reminders}
                 onChange={e => setForm({ ...form, autoSend: { ...form.autoSend, reminders: e.target.checked } })} />
               <span>Send payment reminders for unpaid invoices</span>
+            </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              <input type="checkbox" disabled={!isAdmin} checked={form.autoSend.statementMonthly}
+                onChange={e => setForm({ ...form, autoSend: { ...form.autoSend, statementMonthly: e.target.checked } })} />
+              <span>Email each customer who owes money a monthly statement (on the 1st) with one pay link for the total</span>
             </label>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <label style={{ fontSize: 13 }}>Reminder days (from the due date)<br />

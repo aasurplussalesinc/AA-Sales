@@ -758,7 +758,8 @@ function sanitizeAutoSend(a, cur) {
     reminders: a.reminders === true,
     schedule: normalizeSchedule(a.schedule !== undefined ? a.schedule : cur.schedule),
     sendHour: hour,
-    timeZone: tz
+    timeZone: tz,
+    statementMonthly: a.statementMonthly === true
   };
 }
 
@@ -909,6 +910,143 @@ function invoiceEmailContent(a) {
   return { subject: subject, html: html };
 }
 
+// ─────────────────────────────────────── statements & collections ────
+
+/** Oldest first: by due date, then invoice date, then number. */
+function oldestFirst(a, b) {
+  var ad = a.dueDay === null || a.dueDay === undefined ? Infinity : a.dueDay;
+  var bd = b.dueDay === null || b.dueDay === undefined ? Infinity : b.dueDay;
+  if (ad !== bd) return ad - bd;
+  var ai = a.issueDay === null || a.issueDay === undefined ? Infinity : a.issueDay;
+  var bi = b.issueDay === null || b.issueDay === undefined ? Infinity : b.issueDay;
+  if (ai !== bi) return ai - bi;
+  return String(a.orderNumber || '').localeCompare(String(b.orderNumber || ''));
+}
+
+/**
+ * Split one statement payment across a customer's open invoices, oldest
+ * first. Each invoice takes at most what is still collectible on it; anything
+ * left over is unallocated credit (never silently put on an invoice).
+ */
+function allocateOldestFirst(invoices, amountCents) {
+  var left = Math.max(0, Math.round(Number(amountCents) || 0));
+  var allocations = [];
+  (invoices || []).slice().sort(oldestFirst).forEach(function (inv) {
+    if (left <= 0) return;
+    var owe = Math.max(0, Math.round(Number(inv.collectibleCents !== undefined ? inv.collectibleCents : inv.balanceCents) || 0));
+    if (owe <= 0) return;
+    var take = Math.min(owe, left);
+    allocations.push({ orderId: inv.orderId, orderNumber: inv.orderNumber || '', cents: take });
+    left -= take;
+  });
+  return { allocations: allocations, unallocatedCents: left };
+}
+
+/** One statement line from an order (null if nothing is owed on it). */
+function statementLine(orderId, o, today, tz) {
+  var st = invoiceState(o, null, today, tz);
+  if (!st.issued || st.status === 'void' || st.balanceCents <= 0) return null;
+  return {
+    orderId: orderId, orderNumber: o.poNumber || '', customerPO: o.customerPO || '',
+    issueDay: invoiceIssueDay(o, tz), dueDay: st.dueDay, dueDate: st.dueDate,
+    totalCents: st.totalCents, paidCents: st.paidCents, balanceCents: st.balanceCents, pendingCents: st.pendingCents,
+    collectibleCents: st.collectibleCents, daysOverdue: st.daysOverdue, status: st.status,
+    payUrl: (o.invoice && o.invoice.payUrl) || null
+  };
+}
+
+/**
+ * The Collections view: every open invoice grouped by customer, aged into
+ * current / 1-30 / 31-60 / 61-90 / 90+, with the last and next reminder.
+ * `orders` are {id, data}; `customers` is a map id -> customer.
+ */
+function collectionsReport(orders, customers, opts) {
+  opts = opts || {};
+  var tz = opts.tz || DEFAULT_TZ;
+  var today = localDay(opts.now, tz);
+  var settings = opts.settings || {};
+  var groups = {};
+  var totals = { totalCents: 0, invoices: 0 };
+  AGING_BUCKETS.forEach(function (b) { totals[b] = 0; });
+  var zeroTotalShipped = [];
+  (orders || []).forEach(function (row) {
+    var o = row.data || {};
+    var st = invoiceState(o, null, today, tz);
+    if (st.issued && st.zeroTotal && st.status !== 'void' && !st.manualPaid) zeroTotalShipped.push(o.poNumber || row.id);
+    if (!st.issued || st.status === 'void' || st.balanceCents <= 0) return;
+    var cust = (o.customerId && customers && customers[o.customerId]) || null;
+    var key = o.customerId && cust ? 'id:' + o.customerId : 'name:' + String(o.customerName || '(no customer)').trim().toLowerCase();
+    var g = groups[key];
+    if (!g) {
+      g = groups[key] = {
+        key: key, customerId: cust ? o.customerId : null,
+        customerName: cust ? (cust.company || cust.customerName || o.customerName || '') : (o.customerName || '(no customer)'),
+        doNotRemind: !!(cust && cust.doNotRemind), remindByPhone: !!(cust && cust.remindByPhone),
+        billingEmails: cust ? emailList(cust.billingEmails && cust.billingEmails.length ? cust.billingEmails : cust.email) : emailList(o.customerEmail),
+        totalCents: 0, collectibleCents: 0, pendingCents: 0, oldestDaysOverdue: 0, invoices: []
+      };
+      AGING_BUCKETS.forEach(function (b) { g[b] = 0; });
+    }
+    var inv = o.invoice || {};
+    var bucket = agingBucket(st.daysOverdue);
+    var plan = planReminder({ settings: settings, invoice: inv, state: st, customer: cust, now: opts.now, tz: tz });
+    g.invoices.push({
+      orderId: row.id, orderNumber: o.poNumber || '', customerPO: o.customerPO || '',
+      status: st.status, totalCents: st.totalCents, paidCents: st.paidCents, balanceCents: st.balanceCents,
+      pendingCents: st.pendingCents, collectibleCents: st.collectibleCents, dueDate: st.dueDate, daysOverdue: st.daysOverdue,
+      bucket: bucket, sentAt: inv.sentAt || null, lastReminderAt: inv.lastReminderAt || null, reminderCount: inv.reminderCount || 0,
+      remindersPaused: !!inv.remindersPaused, nextReminder: plan.send ? { step: plan.step, date: dayToIso(today) } : plan.next,
+      reminderNote: plan.send ? null : plan.reason, disputed: !!inv.disputed
+    });
+    g[bucket] += st.balanceCents;
+    g.totalCents += st.balanceCents;
+    g.collectibleCents += st.collectibleCents;
+    g.pendingCents += st.pendingCents;
+    g.oldestDaysOverdue = Math.max(g.oldestDaysOverdue, st.daysOverdue);
+    totals[bucket] += st.balanceCents;
+    totals.totalCents += st.balanceCents;
+    totals.invoices++;
+  });
+  var list = Object.keys(groups).map(function (k) {
+    groups[k].invoices.sort(function (a, b) { return b.daysOverdue - a.daysOverdue; });
+    return groups[k];
+  });
+  list.sort(function (a, b) { return (b.oldestDaysOverdue - a.oldestDaysOverdue) || (b.totalCents - a.totalCents); });
+  return { today: dayToIso(today), totals: totals, customers: list, zeroTotalShipped: zeroTotalShipped };
+}
+
+/** Statement email: every open invoice for one customer, one pay link for the total. */
+function statementEmailContent(a) {
+  var e = escapeHtml;
+  var org = a.org || {};
+  var c = a.customer || {};
+  var s = a.statement || { invoices: [] };
+  var who = c.customerName || c.company || 'there';
+  var total = formatCents(s.collectibleCents);
+  var overdue = s.invoices.filter(function (x) { return x.daysOverdue > 0; }).length;
+  var subject = 'Statement from ' + (org.name || 'us') + ': ' + s.invoices.length + ' open invoice' + (s.invoices.length === 1 ? '' : 's') +
+    ', ' + total + (overdue ? ' (' + overdue + ' past due)' : '');
+  var payUrl = a.payUrl && /^https?:\/\/[^\s"'<>]+$/.test(a.payUrl) ? a.payUrl : '';
+  var rows = s.invoices.map(function (x) {
+    return '<tr><td style="padding:6px 0;border-top:1px solid #eee">' + e(x.orderNumber) + (x.customerPO ? '<br><span style="color:#777;font-size:12px">PO ' + e(x.customerPO) + '</span>' : '') + '</td>' +
+      '<td style="padding:6px 0;border-top:1px solid #eee">' + e(prettyDate(x.dueDate)) + (x.daysOverdue > 0 ? '<br><span style="color:#c62828;font-size:12px">' + x.daysOverdue + ' days past due</span>' : '') + '</td>' +
+      '<td style="padding:6px 0;border-top:1px solid #eee;text-align:right">' + e(formatCents(x.balanceCents)) + (x.pendingCents > 0 ? '<br><span style="color:#b26a00;font-size:12px">' + e(formatCents(x.pendingCents)) + ' clearing</span>' : '') + '</td></tr>';
+  }).join('');
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + e(subject) + '</title></head>' +
+    '<body style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;background:#f5f5f5;margin:0;padding:0;color:#222">' +
+    '<div style="max-width:560px;margin:30px auto;background:#fff;border-radius:8px;padding:28px">' +
+    '<div style="font-size:18px;font-weight:700;margin-bottom:18px">' + e(org.name || '') + '</div>' +
+    '<p>Hello ' + e(who) + ',</p><p>Here is a statement of your open invoices with us.</p>' +
+    '<table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:14px"><tr style="color:#777;font-size:12px;text-align:left"><th>Invoice</th><th>Due</th><th style="text-align:right">Balance</th></tr>' +
+    rows + '<tr><td colspan="2" style="padding:10px 0;font-weight:700;border-top:2px solid #222">Total due</td><td style="padding:10px 0;text-align:right;font-weight:700;border-top:2px solid #222">' + e(total) + '</td></tr></table>' +
+    (payUrl ? '<div style="text-align:center;margin:24px 0"><a href="' + e(payUrl) + '" style="display:inline-block;background:#0d7a52;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:700;font-size:16px">Pay ' + e(total) + ' online</a>' +
+      '<div style="font-size:12px;color:#777;margin-top:8px">One payment covers every invoice above, oldest first.</div></div>' : '') +
+    '<p style="font-size:14px;color:#555">Questions, or already paid? Just reply to this email.</p>' +
+    '<p style="font-size:14px">Thank you,<br>' + e(org.name || '') + (org.phone ? '<br>' + e(org.phone) : '') + '</p>' +
+    '</div><div style="text-align:center;font-size:11px;color:#999;margin-bottom:30px">Sent by SkidSling on behalf of ' + e(org.name || '') + '</div></body></html>';
+  return { subject: subject, html: html };
+}
+
 module.exports = {
   invoicingConfig: invoicingConfig,
   hmac: hmac,
@@ -968,5 +1106,11 @@ module.exports = {
   sanitizeAutoSend: sanitizeAutoSend,
   planReminder: planReminder,
   prettyDate: prettyDate,
-  invoiceEmailContent: invoiceEmailContent
+  invoiceEmailContent: invoiceEmailContent,
+  // statements & collections
+  oldestFirst: oldestFirst,
+  allocateOldestFirst: allocateOldestFirst,
+  statementLine: statementLine,
+  collectionsReport: collectionsReport,
+  statementEmailContent: statementEmailContent
 };

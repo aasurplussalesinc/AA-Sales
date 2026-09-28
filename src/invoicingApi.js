@@ -30,6 +30,11 @@ export const Invoices = {
   payLinkCheckout: call('invoicePayLinkCheckout')
 };
 
+export const Collections = {
+  getReport: call('collectionsGetReport'),
+  sendStatement: call('statementSend')
+};
+
 export const INVOICE_STATUS_LABELS = {
   draft: { label: 'Not sent', color: '#666', bg: '#eceff1' },
   sent: { label: 'Sent', color: '#1565c0', bg: '#e3f2fd' },

@@ -135,7 +135,9 @@ function build(opts) {
     functions: functions, db: db, AUTHZ: AUTHZ, env: env,
     now: function () { return clock.now; },
     stripeFactory: function () { return stripe; },
-    sendEmail: opts.sendEmail || async function (msg) { emails.push(msg); return { success: true, id: '<msg-' + emails.length + '@brevo>' }; },
+    // sendEmail: null runs the real Brevo sender (the test stubs node-fetch).
+    sendEmail: opts.sendEmail === null ? undefined
+      : (opts.sendEmail || async function (msg) { emails.push(msg); return { success: true, id: '<msg-' + emails.length + '@brevo>' }; }),
     renderPdf: async function (html) { pdfs.push(html); return Buffer.from('%PDF-fake'); }
   });
   function signed(event) {

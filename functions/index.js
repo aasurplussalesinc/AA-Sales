@@ -3283,3 +3283,5 @@ exports.invoiceSetReminderPause = INVOICING.invoiceSetReminderPause;
 exports.invoiceRunRemindersNow = INVOICING.invoiceRunRemindersNow;
 exports.invoiceRemindersScheduled = INVOICING.invoiceRemindersScheduled;
 exports.invoiceOnOrderUpdate = INVOICING.invoiceOnOrderUpdate;
+exports.statementSend = INVOICING.statementSend;
+exports.collectionsGetReport = INVOICING.collectionsGetReport;

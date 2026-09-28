@@ -89,7 +89,7 @@ test('planner: stops for paid, void, a clearing bank transfer, paused, do-not-re
 
 test('settings: automatic collections default off; schedule is validated', () => {
   const a = C.sanitizeAutoSend({});
-  assert.deepEqual(a, { sendOnShip: false, reminders: false, schedule: [-3, 0, 7, 14, 30], sendHour: 9, timeZone: 'America/New_York' });
+  assert.deepEqual(a, { sendOnShip: false, reminders: false, schedule: [-3, 0, 7, 14, 30], sendHour: 9, timeZone: 'America/New_York', statementMonthly: false });
   assert.deepEqual(C.sanitizeAutoSend({ schedule: '+30, -3, 7, 7' }).schedule, [-3, 7, 30]);
   assert.throws(() => C.sanitizeAutoSend({ schedule: '1.5' }), /whole numbers/);
   assert.throws(() => C.sanitizeAutoSend({ schedule: '400' }), /between/);

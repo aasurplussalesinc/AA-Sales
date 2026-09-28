@@ -85,7 +85,8 @@ module.exports = function createInvoicing(deps) {
   async function logActivity(orgId, action, details, who) {
     try {
       await db.collection('activityLog').add({
-        orgId: orgId, action: action, details: details || {},
+        // JSON round trip: Firestore refuses undefined values.
+        orgId: orgId, action: action, details: JSON.parse(JSON.stringify(details || {})),
         userEmail: who || 'SkidSling payments',
         timestamp: nowFn(), createdAt: new Date(nowFn()).toISOString()
       });
@@ -548,7 +549,24 @@ module.exports = function createInvoicing(deps) {
       return { kind: kind, cfg: cfg, org: org, payments: p, online: online, order: o, state: st,
                amountCents: st.collectibleCents, customerId: o.customerId || '' };
     }
-    throw invalid;   // statement links arrive with phase 5
+    // statement: one link for everything this customer owes
+    if (!CORE.verifyPayToken(cfg.linkSecret, 'statement', data.orgId, id, '', data.t)) throw invalid;
+    var stmt = await customerStatement(data.orgId, id, org);
+    return { kind: kind, cfg: cfg, org: org, payments: p, online: online, customer: stmt.customer, statement: stmt,
+             amountCents: stmt.collectibleCents, customerId: id };
+  }
+
+  async function customerStatement(orgId, customerId, org) {
+    var customer = await loadCustomer(orgId, customerId);
+    if (!customer) throw new HttpsError('not-found', 'This payment link is not valid. Please contact the company that sent it.');
+    var tz = orgTz(org);
+    var today = CORE.localDay(nowFn(), tz);
+    var snap = await db.collection('purchaseOrders').where('orgId', '==', orgId).where('customerId', '==', customerId).get();
+    var invoices = snap.docs.map(function (d) { return CORE.statementLine(d.id, d.data(), today, tz); }).filter(Boolean);
+    invoices.sort(CORE.oldestFirst);
+    var sum = function (k) { return invoices.reduce(function (t, x) { return t + x[k]; }, 0); };
+    return { customer: customer, invoices: invoices, balanceCents: sum('balanceCents'),
+             pendingCents: sum('pendingCents'), collectibleCents: sum('collectibleCents') };
   }
 
   // Why the pay button is not shown. Paid, or covered by a bank transfer still
@@ -580,7 +598,18 @@ module.exports = function createInvoicing(deps) {
         reason: payBlockedReason(canPay, st.status === 'void', r.amountCents, r.online)
       });
     }
-    return base;
+    var s = r.statement;
+    return Object.assign(base, {
+      customerName: s.customer ? (s.customer.company || s.customer.customerName || '') : '',
+      invoices: s.invoices.map(function (x) {
+        return { orderNumber: x.orderNumber, customerPO: x.customerPO, dueDate: x.dueDate, totalCents: x.totalCents,
+                 balanceCents: x.balanceCents, pendingCents: x.pendingCents, daysOverdue: x.daysOverdue };
+      }),
+      status: s.balanceCents > 0 ? 'open' : 'paid',
+      balanceCents: s.balanceCents, pendingCents: s.pendingCents, amountDueNowCents: r.amountCents,
+      canPay: canPay && options.length > 0, options: options,
+      reason: payBlockedReason(canPay, false, r.amountCents, r.online)
+    });
   }
 
   var invoicePayLinkStatus = functions.https.onCall(async function (data, context) {
@@ -595,6 +624,18 @@ module.exports = function createInvoicing(deps) {
     if (!view.canPay) throw new HttpsError('failed-precondition', view.reason || 'Nothing to pay on this invoice.');
     var option = view.options.find(function (o) { return o.method === data.method; }) || (view.options.length === 1 ? view.options[0] : null);
     if (!option) throw new HttpsError('invalid-argument', 'Choose how you want to pay.');
+    // A customer may pay part of an invoice (B2B customers often do). Card
+    // eligibility still follows the whole balance; any surcharge follows the
+    // amount actually paid.
+    var amountCents = r.amountCents;
+    if (r.kind === 'invoice' && data.amountCents !== undefined && data.amountCents !== null && data.amountCents !== '') {
+      var want = Math.round(Number(data.amountCents));
+      if (!(want >= 100) || want > r.amountCents) {
+        throw new HttpsError('invalid-argument', 'Enter an amount between $1.00 and ' + CORE.formatCents(r.amountCents) + '.');
+      }
+      amountCents = want;
+      if (option.surchargeCents) option = Object.assign({}, option, { surchargeCents: CORE.cardSurchargeCents(amountCents, r.payments.cardSurcharge) });
+    }
     var s = connectStripe();
     var customer = r.kind === 'invoice' ? await loadCustomer(data.orgId, r.customerId) : r.customer;
     var recipients = r.kind === 'invoice' ? billingRecipients(r.order, customer) : CORE.emailList(customer && (customer.billingEmails && customer.billingEmails.length ? customer.billingEmails : customer.email));
@@ -605,7 +646,7 @@ module.exports = function createInvoicing(deps) {
       kind: r.kind, orgId: data.orgId,
       orderId: r.kind === 'invoice' ? r.order.id : '', orderNumber: r.kind === 'invoice' ? (r.order.poNumber || '') : '',
       customerId: r.customerId || '',
-      amountCents: r.amountCents, option: option,
+      amountCents: amountCents, option: option,
       lineName: r.kind === 'invoice' ? CORE.invoiceLineName(r.order)
         : 'Statement - ' + r.statement.invoices.length + ' invoice' + (r.statement.invoices.length === 1 ? '' : 's'),
       customerEmail: recipients[0] || '',
@@ -629,9 +670,15 @@ module.exports = function createInvoicing(deps) {
 
   // ─────────────────────────────────────────────────────────── email ────
 
+  function invoiceFromEmail() {
+    var e = String(env.INVOICE_FROM_EMAIL || '').trim().toLowerCase();
+    return CORE.isEmail(e) ? e : 'billing@skidsling.com';
+  }
+
   // Brevo (the same transactional email service index.js uses). Invoice email
-  // is sent from SkidSling's verified sender under the company's name, with
-  // replies going to the company's billing address. Injected in tests.
+  // is sent from INVOICE_FROM_EMAIL (default billing@skidsling.com) under the
+  // company's name, with replies going to the company's billing address.
+  // Injected in tests.
   var sendEmailImpl = deps.sendEmail || async function brevoSend(msg) {
     var apiKey = env.BREVO_API_KEY;
     if (!apiKey) {
@@ -640,7 +687,12 @@ module.exports = function createInvoicing(deps) {
     }
     var fetch = require('node-fetch');
     var body = {
-      sender: { name: String(msg.fromName || 'SkidSling').slice(0, 70), email: env.INVOICE_EMAIL_FROM || 'info@skidsling.com' },
+      // Invoice, reminder and statement email comes FROM billing@skidsling.com
+      // (INVOICE_FROM_EMAIL; must be a verified Brevo sender on the
+      // authenticated skidsling.com domain) under the company's own name, with
+      // replies going to the company. Other SkidSling email (trial, welcome)
+      // keeps using info@skidsling.com in index.js.
+      sender: { name: String(msg.fromName || 'SkidSling').slice(0, 70), email: invoiceFromEmail() },
       to: msg.to.map(function (e) { return { email: e }; }),
       subject: msg.subject,
       htmlContent: msg.html
@@ -852,6 +904,7 @@ module.exports = function createInvoicing(deps) {
       } else if (!Array.isArray(after.orderIds) || !after.allocations || !after.allocations.length) {
         await allocateStatementPayment(tx, orgId, after);
       }
+      after = JSON.parse(JSON.stringify(after));      // no undefined values reach Firestore
       tx.set(ref, after);
       return { before: before, after: after };
     });
@@ -884,10 +937,26 @@ module.exports = function createInvoicing(deps) {
     return 'payment:' + out.after.status;
   }
 
-  // Statement payments (phase 5) cover several invoices; until then a
-  // statement payment has nothing to allocate.
+  /**
+   * A statement payment covers several invoices: split it oldest-first over
+   * what the customer owed when the payment first arrived, and freeze that
+   * split on the payment row (so later events never re-split it). Anything
+   * over the open balances stays as unallocated credit.
+   */
   async function allocateStatementPayment(tx, orgId, payment) {
     payment.orderIds = payment.orderIds || [];
+    if (payment.allocated) return;
+    if (payment.amountCents === undefined || !payment.customerId || !ID_RE.test(payment.customerId)) return;
+    var orgSnap = await tx.get(db.collection('organizations').doc(orgId));
+    var tz = orgTz(orgSnap.exists ? orgSnap.data() : {});
+    var today = CORE.localDay(nowFn(), tz);
+    var q = await tx.get(db.collection('purchaseOrders').where('orgId', '==', orgId).where('customerId', '==', payment.customerId));
+    var lines = q.docs.map(function (d) { return CORE.statementLine(d.id, d.data(), today, tz); }).filter(Boolean);
+    var a = CORE.allocateOldestFirst(lines, payment.amountCents);
+    payment.allocations = a.allocations;
+    payment.unallocatedCents = a.unallocatedCents;
+    payment.orderIds = a.allocations.map(function (x) { return x.orderId; });
+    payment.allocated = true;
   }
 
 
@@ -1074,14 +1143,23 @@ module.exports = function createInvoicing(deps) {
       for (var i = 0; i < snap.docs.length; i++) {
         var org = snap.docs[i].data();
         var a = (org.payments && org.payments.autoSend) || {};
-        if (!a.reminders) continue;
+        if (!a.reminders && !a.statementMonthly) continue;
         var hour = CORE.localHour(nowFn(), orgTz(org));
         var start = a.sendHour === undefined ? 9 : a.sendHour;
         if (hour < start || hour >= Math.max(start + 1, 18)) continue;
         try {
-          var r = await runRemindersForOrg(snap.docs[i].id, org, {});
-          stats.orgs++; stats.sent += r.sent;
-          if (r.capped) break;
+          stats.orgs++;
+          if (a.reminders) {
+            var r = await runRemindersForOrg(snap.docs[i].id, org, {});
+            stats.sent += r.sent;
+            if (r.capped) break;
+          }
+          // Statements go out on the 1st of the month (once - see sendStatement).
+          if (a.statementMonthly && CORE.dayToIso(CORE.localDay(nowFn(), orgTz(org))).slice(8) === '01') {
+            var m = await sendMonthlyStatements(snap.docs[i].id, org);
+            stats.sent += m.sent;
+            if (m.capped) break;
+          }
         } catch (e) { console.error('reminders for ' + snap.docs[i].id + ':', e); }
       }
       console.log('invoiceRemindersScheduled:', JSON.stringify(stats));
@@ -1150,6 +1228,105 @@ module.exports = function createInvoicing(deps) {
         return null;
       }
     });
+
+  // ─────────────────────────────── Phase 5: statements & collections ────
+
+  /**
+   * Email one customer a statement of every open invoice with ONE pay link
+   * for the total. At most one statement per customer per period (a day for
+   * "Send statement", a month for the automatic monthly run).
+   */
+  async function sendStatement(orgId, customerId, opts) {
+    opts = opts || {};
+    var org = await loadOrg(orgId);
+    var p = org.payments || {};
+    if (!p.enabled) return { sent: false, reason: 'Invoicing is turned off for this company (Settings > Payments).' };
+    var stmt = await customerStatement(orgId, customerId, org);
+    if (stmt.collectibleCents <= 0) return { sent: false, reason: 'Nothing is owed right now.' };
+    var c = stmt.customer;
+    var to = CORE.emailList(c.billingEmails && c.billingEmails.length ? c.billingEmails : c.email);
+    if (!to.length) return { sent: false, reason: 'No email address for this customer.' };
+    var tz = orgTz(org);
+    var todayIso = CORE.dayToIso(CORE.localDay(nowFn(), tz));
+    var period = opts.period || todayIso;
+    var claimRef = db.collection('invoiceStatements').doc(orgId + '_' + customerId + '_' + period);
+    var claimed = await db.runTransaction(async function (tx) {
+      var cur = await tx.get(claimRef);
+      if (cur.exists) return false;
+      tx.set(claimRef, { orgId: orgId, customerId: customerId, period: period, claimedAt: nowFn() });
+      return true;
+    });
+    if (!claimed) return { sent: false, reason: period.length === 7 ? 'This month\'s statement already went out.' : 'A statement already went to this customer today.' };
+    var cfg = config();
+    var online = onlineState(org);
+    var payUrl = online.ready ? CORE.statementPayUrl(cfg.appBaseUrl, cfg.linkSecret, orgId, customerId) : null;
+    var content = CORE.statementEmailContent({ org: org, customer: c, statement: stmt, payUrl: payUrl });
+    var res;
+    try { res = await sendEmail({ to: to, fromName: org.name || 'SkidSling', replyTo: orgReplyTo(org), subject: content.subject, html: content.html }); }
+    catch (e) { res = { success: false, error: e.message }; }
+    if (!res || !res.success) {
+      await claimRef.delete();
+      return { sent: false, capped: !!(res && res.capped), reason: (res && (res.error || (res.skipped && 'Email is not configured on the server (BREVO_API_KEY)'))) || 'Not sent' };
+    }
+    await claimRef.set({ sentAt: nowFn(), to: to, messageId: res.id || null, collectibleCents: stmt.collectibleCents,
+                         invoices: stmt.invoices.map(function (x) { return x.orderNumber; }) }, { merge: true });
+    await db.collection('customers').doc(customerId).set({ lastStatementAt: nowFn() }, { merge: true });
+    await logActivity(orgId, 'STATEMENT_SENT', { message: 'Statement (' + stmt.invoices.length + ' invoice' + (stmt.invoices.length === 1 ? '' : 's') +
+      ', ' + CORE.formatCents(stmt.collectibleCents) + ') emailed to ' + to.join(', '), customerId: customerId, to: to }, opts.by || 'SkidSling payments');
+    return { sent: true, to: to, invoices: stmt.invoices.length, collectibleCents: stmt.collectibleCents };
+  }
+
+  var statementSend = functions.https.onCall(async function (data, context) {
+    data = data || {};
+    await AUTHZ.assertOrgMember(context, data.orgId, 'manager');
+    if (typeof data.customerId !== 'string' || !ID_RE.test(data.customerId)) throw new HttpsError('invalid-argument', 'customerId required');
+    var c = await loadCustomer(data.orgId, data.customerId);
+    if (!c) throw new HttpsError('not-found', 'Customer not found');
+    return sendStatement(data.orgId, data.customerId, { by: callerEmail(context) });
+  });
+
+  /** Monthly statements, on the 1st, for every customer who owes something (and has not opted out). */
+  async function sendMonthlyStatements(orgId, org) {
+    var tz = orgTz(org);
+    var monthKey = CORE.dayToIso(CORE.localDay(nowFn(), tz)).slice(0, 7);
+    var report = await buildCollections(orgId, org);
+    var out = { sent: 0, skipped: 0, capped: false };
+    for (var i = 0; i < report.customers.length; i++) {
+      var g = report.customers[i];
+      if (!g.customerId || g.doNotRemind || g.remindByPhone || g.collectibleCents <= 0) { out.skipped++; continue; }
+      var r = await sendStatement(orgId, g.customerId, { period: monthKey, by: 'monthly statements' });
+      if (r.sent) out.sent++; else out.skipped++;
+      if (r.capped) { out.capped = true; break; }
+    }
+    return out;
+  }
+
+  async function buildCollections(orgId, org) {
+    var osnap = await db.collection('purchaseOrders').where('orgId', '==', orgId).get();
+    var csnap = await db.collection('customers').where('orgId', '==', orgId).get();
+    var customers = {};
+    csnap.docs.forEach(function (d) { customers[d.id] = d.data(); });
+    return CORE.collectionsReport(osnap.docs.map(function (d) { return { id: d.id, data: d.data() }; }), customers,
+      { now: nowFn(), tz: orgTz(org), settings: (org.payments && org.payments.autoSend) || {} });
+  }
+
+  var collectionsGetReport = functions.https.onCall(async function (data, context) {
+    data = data || {};
+    await AUTHZ.assertOrgMember(context, data.orgId, 'manager');
+    var org = await loadOrg(data.orgId);
+    var report = await buildCollections(data.orgId, org);
+    var psnap = await db.collection('payments').where('orgId', '==', data.orgId).orderBy('createdAt', 'desc').limit(25).get();
+    report.recentPayments = psnap.docs.map(function (d) {
+      var x = publicPayment(d.id, d.data());
+      x.orderNumbers = CORE.paymentAllocations(d.data()).map(function (a) { return a.orderNumber; }).filter(Boolean);
+      if (!x.orderNumbers.length && d.data().orderNumber) x.orderNumbers = [d.data().orderNumber];
+      x.customerName = d.data().customerName || '';
+      return x;
+    });
+    report.online = onlineState(org);
+    report.autoSend = (org.payments && org.payments.autoSend) || {};
+    return report;
+  });
 
   // ───────────────────────────────── daily: sent invoices past due -> overdue ────
 
@@ -1231,10 +1408,13 @@ module.exports = function createInvoicing(deps) {
     invoiceRunRemindersNow: invoiceRunRemindersNow,
     invoiceRemindersScheduled: invoiceRemindersScheduled,
     invoiceOnOrderUpdate: invoiceOnOrderUpdate,
+    statementSend: statementSend,
+    collectionsGetReport: collectionsGetReport,
     // For tests
-    _internal: { handleConnectEvent: handleConnectEvent, claimAccount: claimAccount,
+    _internal: { invoiceFromEmail: invoiceFromEmail, handleConnectEvent: handleConnectEvent, claimAccount: claimAccount,
                  recomputeOrder: recomputeOrder, ensureIssued: ensureIssued, runOverdueSweep: runOverdueSweep,
                  sendEmail: sendEmail, sendInvoiceEmail: sendInvoiceEmail, runRemindersForOrg: runRemindersForOrg,
-                 handleOrderChange: handleOrderChange }
+                 handleOrderChange: handleOrderChange, sendStatement: sendStatement,
+                 sendMonthlyStatements: sendMonthlyStatements }
   };
 };

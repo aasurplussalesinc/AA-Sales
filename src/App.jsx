@@ -6,6 +6,7 @@ import SubscriptionRequired from './pages/SubscriptionRequired';
 import OrgSettings from './pages/OrgSettings';
 import PaymentsSettings from './pages/PaymentsSettings';
 import PayInvoice from './pages/PayInvoice';
+import Collections from './pages/Collections';
 import Dashboard from './pages/Dashboard';
 import Items from './pages/Items';
 import Locations from './pages/Locations';
@@ -78,7 +79,7 @@ export function TierGate({ feature, requiredPlan, children }) {
 
 function NavBar() {
   const location = useLocation();
-  const { user, logout, organization, subscriptionStatus, organizations, switchOrganization, isOwnerOrg } = useAuth();
+  const { user, logout, organization, subscriptionStatus, organizations, switchOrganization, isOwnerOrg, userRole } = useAuth();
   const tier = useTier();
   
   const isActive = (path) => location.pathname === path;
@@ -172,6 +173,9 @@ function NavBar() {
         {tier.canUseOrders && <Link to="/purchase-orders" className={`nav-tab ${isActive('/purchase-orders') ? 'active' : ''}`}>🧾 Orders</Link>}
         {tier.canUseShipping && <Link to="/shipping" className={`nav-tab ${isActive('/shipping') ? 'active' : ''}`}>🚚 Shipping</Link>}
         <Link to="/customers" className={`nav-tab ${isActive('/customers') ? 'active' : ''}`}>👥 Customers</Link>
+        {organization?.payments?.enabled && (userRole === 'admin' || userRole === 'manager') && (
+          <Link to="/collections" className={`nav-tab ${isActive('/collections') ? 'active' : ''}`}>💰 Collections</Link>
+        )}
         {tier.canUseContracts && <Link to="/contracts" className={`nav-tab ${isActive('/contracts') ? 'active' : ''}`}>📄 Contracts</Link>}
         {tier.canUseReports && <Link to="/reports" className={`nav-tab ${isActive('/reports') ? 'active' : ''}`}>📈 Reports</Link>}
         <Link to="/movements" className={`nav-tab ${isActive('/movements') ? 'active' : ''}`}>🔄 Movements</Link>
@@ -358,6 +362,11 @@ function AppRoutes() {
           <AppLayout><OrgSettings /></AppLayout>
         </ProtectedRoute>
       } />
+      <Route path="/collections" element={
+        <ProtectedRoute>
+          <AppLayout><Collections /></AppLayout>
+        </ProtectedRoute>
+      } />
       <Route path="/settings/payments" element={
         <ProtectedRoute>
           <AppLayout><PaymentsSettings /></AppLayout>
@@ -382,6 +391,7 @@ function AppRoutes() {
       } />
       {/* Public "Pay online" page for an invoice - no sign-in; the signed
           token in the link is checked server-side. */}
+      <Route path="/pay/:orgId/statement/:customerId" element={<PayInvoice />} />
       <Route path="/pay/:orgId/:orderId" element={<PayInvoice />} />
       <Route path="/terms" element={<TermsOfService />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />

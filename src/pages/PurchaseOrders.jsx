@@ -140,7 +140,9 @@ export default function PurchaseOrders() {
       customerContact: customer.company ? customer.customerName : '', // Contact is customerName if company exists
       customerEmail: customer.email || '', customerPhone: customer.phone || '',
       customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', '),
-      customerAddressUnit: customer.addressUnit || '', customerAttention: customer.attention || ''
+      customerAddressUnit: customer.addressUnit || '', customerAttention: customer.attention || '',
+      // A customer's own payment terms (Customers > Billing & reminders) win.
+      ...(customer.terms ? { terms: customer.terms } : {})
     });
     setSearchCustomer('');
   };

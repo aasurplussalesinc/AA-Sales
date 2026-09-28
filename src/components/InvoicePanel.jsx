@@ -42,6 +42,24 @@ export default function InvoicePanel({ order, orgId, canEdit, onChanged, extraAc
     await load();
   });
 
+  const sendInvoice = () => {
+    const again = details?.invoice?.sentAt;
+    if (!window.confirm((again ? 'Email invoice ' : 'Email invoice ') + (details?.invoice?.number || '') + ' with the PDF and Pay online link to the customer' + (again ? ' again' : '') + '?')) return;
+    run('Sending invoice...', async () => {
+      const r = await Invoices.send({ orgId, orderId: order.id });
+      if (r.sent) setNote('Invoice emailed to ' + r.to.join(', ') + '.');
+      else setError('Not sent: ' + r.reason);
+      await load();
+      onChanged && onChanged();
+    });
+  };
+  const togglePause = () => run('Saving...', async () => {
+    const paused = !details?.invoice?.remindersPaused;
+    await Invoices.setReminderPause({ orgId, orderId: order.id, paused });
+    setNote(paused ? 'Automatic reminders paused for this invoice.' : 'Automatic reminders resumed.');
+    await load();
+  });
+
   const openRecord = () => {
     const due = details?.state?.collectibleCents || 0;
     setPay(p => ({ ...p, amount: due > 0 ? (due / 100).toFixed(2) : '' }));
@@ -123,7 +141,17 @@ export default function InvoicePanel({ order, orgId, canEdit, onChanged, extraAc
           {online.ready && st.collectibleCents > 0 && (
             <button className="btn" disabled={!!busy} onClick={copyLink} style={{ background: '#1565c0', color: 'white', fontSize: 12 }}>🔗 Copy pay link</button>
           )}
+          {online.enabled && st.balanceCents > 0 && (
+            <button className="btn" disabled={!!busy} onClick={sendInvoice} style={{ background: '#7b1fa2', color: 'white', fontSize: 12 }}>
+              📧 {inv.sentAt ? 'Resend invoice' : 'Send invoice'}
+            </button>
+          )}
           <button className="btn" disabled={!!busy} onClick={openRecord} style={{ background: '#2e7d32', color: 'white', fontSize: 12 }}>💵 Record payment</button>
+          {inv.sentAt && st.balanceCents > 0 && (
+            <button className="btn" disabled={!!busy} onClick={togglePause} style={{ fontSize: 12 }}>
+              {inv.remindersPaused ? '▶️ Resume reminders' : '⏸️ Pause reminders'}
+            </button>
+          )}
           {extraActions && extraActions({ details, reload: load, run })}
         </div>
       )}

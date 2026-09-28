@@ -169,6 +169,8 @@ function sanitizePaymentSettings(input, current) {
     if (maxCents !== null && maxCents < 0) throw new Error('Card limit must be 0 or more');
     out.cardSurcharge = { enabled: cs.enabled === true, percent: isFinite(pct) ? pct : 0, maxInvoiceForCardsCents: maxCents };
   }
+  // Automatic collections: every switch defaults OFF.
+  if (input.autoSend !== undefined) out.autoSend = sanitizeAutoSend(input.autoSend, current.autoSend);
   return out;
 }
 
@@ -724,6 +726,189 @@ function agingBucket(daysOverdue) {
 }
 var AGING_BUCKETS = ['current', '1-30', '31-60', '61-90', '90+'];
 
+// ─────────────────────────────────────────── automatic collections ────
+
+var DEFAULT_SCHEDULE = [-3, 0, 7, 14, 30];
+
+/** Reminder days relative to the due date: whole numbers, -30..180, unique, sorted, 1-8 of them. */
+function normalizeSchedule(v) {
+  var raw = Array.isArray(v) ? v : (v === undefined || v === null || v === '' ? DEFAULT_SCHEDULE : String(v).split(/[,;\s]+/));
+  var out = [];
+  raw.forEach(function (x) {
+    if (x === '' || x === null || x === undefined) return;
+    var n = Number(String(x).replace(/^\+/, ''));
+    if (!isFinite(n) || Math.floor(n) !== n) throw new Error('Reminder days must be whole numbers, e.g. -3, 0, 7, 14, 30');
+    if (n < -30 || n > 180) throw new Error('Reminder days must be between -30 and 180');
+    if (out.indexOf(n) === -1) out.push(n);
+  });
+  if (out.length === 0) throw new Error('Add at least one reminder day');
+  if (out.length > 8) throw new Error('At most 8 reminder days');
+  return out.sort(function (a, b) { return a - b; });
+}
+
+function sanitizeAutoSend(a, cur) {
+  a = a || {};
+  cur = cur || {};
+  var hour = a.sendHour === undefined || a.sendHour === '' ? (cur.sendHour === undefined ? 9 : cur.sendHour) : Number(a.sendHour);
+  if (!isFinite(hour) || Math.floor(hour) !== hour || hour < 6 || hour > 18) throw new Error('Send hour must be between 6 (6am) and 18 (6pm)');
+  var tz = a.timeZone || cur.timeZone || DEFAULT_TZ;
+  if (!validTimeZone(tz)) throw new Error('Unknown time zone: ' + tz);
+  return {
+    sendOnShip: a.sendOnShip === true,
+    reminders: a.reminders === true,
+    schedule: normalizeSchedule(a.schedule !== undefined ? a.schedule : cur.schedule),
+    sendHour: hour,
+    timeZone: tz
+  };
+}
+
+/**
+ * Which reminder (if any) goes out TODAY for one invoice. Pure: the caller
+ * passes the invoice as stored, its state, the customer, the org's settings,
+ * `now` and the org's time zone.
+ *
+ * Rules:
+ *  - nothing unless reminders are on, the invoice was sent, has a collectible
+ *    balance (not paid, not void, not covered by a clearing bank transfer),
+ *    is not paused, and the customer is not "do not remind" / "remind by phone";
+ *  - at most one email per invoice per day - the day the invoice itself went
+ *    out counts;
+ *  - a step is due on (due date + step days). Friendly pre-due / due-today
+ *    steps that fell on or before the day the invoice was sent are covered by
+ *    the invoice email itself;
+ *  - if several steps are due (reminders were off, the job missed a day, the
+ *    invoice went out late), only the LATEST is sent and the earlier ones are
+ *    marked skipped - never a burst of catch-up emails.
+ */
+function planReminder(a) {
+  var s = a.settings || {};
+  var inv = a.invoice || {};
+  var st = a.state || {};
+  var tz = a.tz || DEFAULT_TZ;
+  var schedule;
+  try { schedule = normalizeSchedule(s.schedule); } catch (e) { schedule = DEFAULT_SCHEDULE.slice(); }
+  var today = localDay(a.now, tz);
+  var done = inv.reminders || {};
+  var due = st.dueDay;
+  var out = { send: false, step: null, skip: [], reason: null, next: null, final: false };
+
+  var sentDay = localDay(inv.sentAt, tz);
+  var pending = schedule.filter(function (step) {
+    if (done[String(step)] !== undefined) return false;
+    if (due === null || due === undefined) return false;
+    if (step <= 0 && sentDay !== null && due + step <= sentDay) return false;
+    return true;
+  });
+  var dueNow = pending.filter(function (step) { return due + step <= today; });
+  var later = pending.filter(function (step) { return due + step > today; });
+  if (later.length) out.next = { step: later[0], date: dayToIso(due + later[0]) };
+
+  var block = null;
+  if (!s.reminders) block = 'Automatic reminders are off';
+  else if (st.status === 'void') block = 'Invoice is void';
+  else if (!(st.balanceCents > 0)) block = 'Paid';
+  else if (!(st.collectibleCents > 0)) block = 'Payment pending (bank transfer)';
+  else if (!inv.sentAt) block = 'Invoice not sent yet';
+  else if (inv.remindersPaused) block = 'Reminders paused';
+  else if (a.customer && a.customer.doNotRemind) block = 'Customer marked "Do not remind"';
+  else if (a.customer && a.customer.remindByPhone) block = 'Customer prefers a phone call';
+  else if (due === null || due === undefined) block = 'No due date';
+  if (block) {
+    out.reason = block;
+    // Keep "next" only where it still means something to a person (a phone
+    // call to make); otherwise there is no next reminder.
+    if (block !== 'Customer prefers a phone call') out.next = null;
+    else if (dueNow.length) out.next = { step: dueNow[dueNow.length - 1], date: dayToIso(today) };
+    return out;
+  }
+
+  if (!dueNow.length) { out.reason = 'Nothing due today'; return out; }
+  var lastEmailDay = [sentDay, localDay(inv.lastReminderAt, tz), localDay(inv.lastEmail && inv.lastEmail.at, tz)]
+    .filter(function (d) { return d !== null; }).reduce(function (m, d) { return Math.max(m, d); }, -Infinity);
+  if (lastEmailDay >= today) {
+    out.reason = 'Already emailed today';
+    out.next = { step: dueNow[dueNow.length - 1], date: dayToIso(today + 1) };
+    return out;
+  }
+  out.send = true;
+  out.step = dueNow[dueNow.length - 1];
+  out.skip = dueNow.slice(0, -1);
+  out.final = out.step === schedule[schedule.length - 1] && out.step > 0;
+  out.next = later.length ? { step: later[0], date: dayToIso(due + later[0]) } : null;
+  return out;
+}
+
+function prettyDate(iso) {
+  var d = isoToDay(iso);
+  if (d === null) return '';
+  var m = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  var dt = new Date(d * DAY_MS);
+  return m[dt.getUTCMonth()] + ' ' + dt.getUTCDate() + ', ' + dt.getUTCFullYear();
+}
+
+/**
+ * Subject and HTML for an invoice or reminder email. Every value is escaped:
+ * names, POs and notes are tenant/customer text.
+ *   kind: 'invoice' | 'reminder';  step: reminder day (reminders only)
+ */
+function invoiceEmailContent(a) {
+  var o = a.order || {};
+  var org = a.org || {};
+  var st = a.state || {};
+  var e = escapeHtml;
+  var num = o.poNumber || (o.invoice && o.invoice.number) || '';
+  var orgName = org.name || 'us';
+  var amount = formatCents(st.collectibleCents > 0 ? st.collectibleCents : st.balanceCents);
+  var dueText = st.dueDate ? prettyDate(st.dueDate) : '';
+  var who = o.customerAttention || o.customerContact || o.customerName || 'there';
+  var poText = o.customerPO ? ' (your PO ' + o.customerPO + ')' : '';
+  var subject, lead;
+  if (a.kind === 'invoice') {
+    subject = 'Invoice ' + num + ' from ' + orgName + ' - ' + amount + (dueText ? ' due ' + dueText : '');
+    lead = 'Thank you for your order. Your invoice ' + num + poText + ' for ' + amount + ' is attached' +
+      (st.daysOverdue > 0 ? ' and was due on ' + dueText + '.' : (dueText ? ' and is due on ' + dueText + '.' : '.'));
+  } else if (a.step < 0) {
+    subject = 'Reminder: invoice ' + num + ' is due ' + dueText + ' (' + amount + ')';
+    lead = 'A friendly reminder that invoice ' + num + poText + ' for ' + amount + ' is coming due on ' + dueText + '.';
+  } else if (a.step === 0) {
+    subject = 'Invoice ' + num + ' is due today (' + amount + ')';
+    lead = 'Invoice ' + num + poText + ' for ' + amount + ' is due today.';
+  } else if (a.final) {
+    subject = 'Final notice: invoice ' + num + ' is ' + st.daysOverdue + ' days past due';
+    lead = 'Invoice ' + num + poText + ' for ' + amount + ' is now ' + st.daysOverdue + ' days past due (it was due on ' + dueText +
+      '). Please arrange payment right away, or reply to this email if there is a problem with the invoice.';
+  } else {
+    subject = 'Overdue: invoice ' + num + ' (' + amount + ', ' + st.daysOverdue + ' days past due)';
+    lead = 'Our records show invoice ' + num + poText + ' for ' + amount + ' was due on ' + dueText +
+      ' and is now ' + st.daysOverdue + ' days past due. If you have already sent payment, thank you - please disregard this note.';
+  }
+  var payUrl = a.payUrl && /^https?:\/\/[^\s"'<>]+$/.test(a.payUrl) ? a.payUrl : '';
+  var row = function (k, v, strong) {
+    var st2 = 'padding:' + (strong ? '8px' : '4px') + ' 0;' + (strong ? 'font-weight:700;border-top:2px solid #222;' : '');
+    return '<tr><td style="' + st2 + (strong ? '' : 'color:#555') + '">' + e(k) + '</td><td style="' + st2 + 'text-align:right">' + e(v) + '</td></tr>';
+  };
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>' + e(subject) + '</title></head>' +
+    '<body style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Arial,sans-serif;background:#f5f5f5;margin:0;padding:0;color:#222">' +
+    '<div style="max-width:560px;margin:30px auto;background:#fff;border-radius:8px;padding:28px">' +
+    '<div style="font-size:18px;font-weight:700;margin-bottom:18px">' + e(org.name || '') + '</div>' +
+    '<p>Hello ' + e(who) + ',</p><p>' + e(lead) + '</p>' +
+    '<table style="width:100%;border-collapse:collapse;margin:18px 0;font-size:15px">' +
+    row('Invoice', num) +
+    (o.customerPO ? row('Your PO', o.customerPO) : '') +
+    row('Invoice total', formatCents(st.totalCents)) +
+    (st.paidCents > 0 ? row('Paid so far', formatCents(st.paidCents)) : '') +
+    row('Balance due', formatCents(st.balanceCents), true) +
+    (dueText ? row('Due date', dueText) : '') +
+    '</table>' +
+    (payUrl ? '<div style="text-align:center;margin:26px 0"><a href="' + e(payUrl) + '" style="display:inline-block;background:#0d7a52;color:#fff;text-decoration:none;padding:14px 30px;border-radius:6px;font-weight:700;font-size:16px">Pay ' + e(amount) + ' online</a>' +
+      '<div style="font-size:12px;color:#777;margin-top:8px">Bank transfer (ACH) or card, processed securely by Stripe.</div></div>' : '') +
+    '<p style="font-size:14px;color:#555">The invoice is attached as a PDF. Questions about it? Just reply to this email.</p>' +
+    '<p style="font-size:14px">Thank you,<br>' + e(org.name || '') + (org.phone ? '<br>' + e(org.phone) : '') + '</p>' +
+    '</div><div style="text-align:center;font-size:11px;color:#999;margin-bottom:30px">Sent by SkidSling on behalf of ' + e(org.name || '') + '</div>' +
+    '</body></html>';
+  return { subject: subject, html: html };
+}
+
 module.exports = {
   invoicingConfig: invoicingConfig,
   hmac: hmac,
@@ -776,5 +961,12 @@ module.exports = {
   mergePaymentFacts: mergePaymentFacts,
   paymentTransition: paymentTransition,
   agingBucket: agingBucket,
-  AGING_BUCKETS: AGING_BUCKETS
+  AGING_BUCKETS: AGING_BUCKETS,
+  // automatic collections
+  DEFAULT_SCHEDULE: DEFAULT_SCHEDULE,
+  normalizeSchedule: normalizeSchedule,
+  sanitizeAutoSend: sanitizeAutoSend,
+  planReminder: planReminder,
+  prettyDate: prettyDate,
+  invoiceEmailContent: invoiceEmailContent
 };

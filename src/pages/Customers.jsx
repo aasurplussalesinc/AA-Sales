@@ -45,7 +45,12 @@ export default function Customers() {
     country: '',
     notes: '',
     upsAccount: '',
-    fedexAccount: ''
+    fedexAccount: '',
+    // Invoicing (Settings > Payments): where invoices go and how to chase them.
+    billingEmails: '',
+    doNotRemind: false,
+    remindByPhone: false,
+    terms: ''
   });
 
   const phoneTypeOptions = ['Cell', 'Office', 'Store', 'Home', 'Fax'];
@@ -99,7 +104,11 @@ export default function Customers() {
       country: customer.country || '',
       notes: customer.notes || '',
       upsAccount: customer.upsAccount || '',
-      fedexAccount: customer.fedexAccount || ''
+      fedexAccount: customer.fedexAccount || '',
+      billingEmails: Array.isArray(customer.billingEmails) ? customer.billingEmails.join(', ') : (customer.billingEmails || ''),
+      doNotRemind: !!customer.doNotRemind,
+      remindByPhone: !!customer.remindByPhone,
+      terms: customer.terms || ''
     });
     
     // Get customer's orders
@@ -123,6 +132,8 @@ export default function Customers() {
     }
 
     let formToSave = { ...editForm };
+    // Stored as a list; the server validates each address before emailing.
+    formToSave.billingEmails = String(editForm.billingEmails || '').split(/[,;\s]+/).map(e => e.trim()).filter(Boolean);
     
     // Auto-lookup country if missing but zip code exists
     if (!formToSave.country && formToSave.zipCode) {
@@ -754,6 +765,40 @@ export default function Customers() {
                   onChange={e => setEditForm({ ...editForm, fedexAccount: e.target.value })}
                   style={{ width: '100%' }}
                 />
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 15, padding: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🧾 Billing &amp; reminders</div>
+              <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Billing email(s) - invoices and reminders go here</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder={editForm.email ? 'Leave blank to use ' + editForm.email : 'ap@customer.com, owner@customer.com'}
+                value={editForm.billingEmails}
+                onChange={e => setEditForm({ ...editForm, billingEmails: e.target.value })}
+                style={{ width: '100%', marginBottom: 8 }}
+              />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, alignItems: 'center' }}>
+                <label style={{ fontSize: 13 }}>
+                  Payment terms
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Net 30 (default)"
+                    value={editForm.terms}
+                    onChange={e => setEditForm({ ...editForm, terms: e.target.value })}
+                    style={{ width: '100%' }}
+                  />
+                </label>
+                <div style={{ fontSize: 13 }}>
+                  <label style={{ display: 'block' }}>
+                    <input type="checkbox" checked={editForm.doNotRemind} onChange={e => setEditForm({ ...editForm, doNotRemind: e.target.checked })} /> Do not remind
+                  </label>
+                  <label style={{ display: 'block' }}>
+                    <input type="checkbox" checked={editForm.remindByPhone} onChange={e => setEditForm({ ...editForm, remindByPhone: e.target.checked })} /> Remind by phone instead
+                  </label>
+                </div>
               </div>
             </div>
 

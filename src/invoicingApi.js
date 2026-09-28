@@ -22,6 +22,9 @@ export const Invoices = {
   getPayLink: call('invoiceGetPayLink'),
   recordManualPayment: call('invoiceRecordManualPayment'),
   reverseManualPayment: call('invoiceReverseManualPayment'),
+  send: call('invoiceSend'),
+  setReminderPause: call('invoiceSetReminderPause'),
+  runRemindersNow: call('invoiceRunRemindersNow'),
   // Public: the pay page (no sign-in; the signed token in the link is checked server-side)
   payLinkStatus: call('invoicePayLinkStatus'),
   payLinkCheckout: call('invoicePayLinkCheckout')

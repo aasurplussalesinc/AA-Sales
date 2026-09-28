@@ -891,6 +891,266 @@ module.exports = function createInvoicing(deps) {
   }
 
 
+  // ─────────────────────────────── Phase 4: sending invoices & reminders ────
+
+  var renderPdf = deps.renderPdf || function (html) { return require('./pdf').htmlToPdf(html); };
+
+  /** The invoice PDF - the same template the Purchase Orders print button uses. */
+  async function renderInvoicePdf(orgId, order, org) {
+    var ids = (order.items || []).map(function (l) { return l.itemId; })
+      .filter(function (v, i, arr) { return v && arr.indexOf(v) === i; });
+    var items = [];
+    for (var i = 0; i < ids.length; i++) {
+      var sn = await db.collection('items').doc(String(ids[i])).get();
+      if (sn.exists && sn.data().orgId === orgId) items.push(Object.assign({ id: sn.id }, sn.data()));
+    }
+    var DOC = await import('./orderDocument.mjs');
+    var html = DOC.renderOrderDocument(order, 'invoice', { items: items, organization: org, branding: DOC.brandingHtml });
+    var buf = await renderPdf(html);
+    return { name: 'Invoice-' + String(order.poNumber || 'invoice').replace(/[^A-Za-z0-9_-]/g, '') + '.pdf',
+             contentBase64: Buffer.from(buf).toString('base64') };
+  }
+
+  function lastEmailDay(inv, tz) {
+    return [inv.sentAt, inv.lastReminderAt, inv.lastEmail && inv.lastEmail.at, inv.emailClaimAt]
+      .map(function (t) { return CORE.localDay(t, tz); })
+      .filter(function (d) { return d !== null; })
+      .reduce(function (m, d) { return Math.max(m, d); }, -Infinity);
+  }
+
+  /**
+   * Email an invoice (kind 'invoice') or a reminder (kind 'reminder') with the
+   * PDF attached and the Pay online button. Hard rules enforced here, whoever
+   * calls it: invoicing must be on for the org; never a paid or void invoice;
+   * at most ONE email per invoice per day (a transaction claims the day before
+   * anything is sent, and releases it only if the send failed).
+   * Returns { sent, reason?, to?, messageId?, capped? }.
+   */
+  async function sendInvoiceEmail(orgId, orderId, opts) {
+    opts = opts || {};
+    var kind = opts.kind === 'reminder' ? 'reminder' : 'invoice';
+    var org = await loadOrg(orgId);
+    var p = org.payments || {};
+    if (!p.enabled) return { sent: false, reason: 'Invoicing is turned off for this company (Settings > Payments).' };
+    var o = await ensureIssued(orgId, orderId);
+    var tz = orgTz(org);
+    var today = CORE.localDay(nowFn(), tz);
+    var psnap = await paymentsQuery(orgId, orderId).get();
+    var st = CORE.invoiceState(o, CORE.orderLedger(orderId, psnap.docs.map(function (d) { return d.data(); })), today, tz);
+    if (st.status === 'void') return { sent: false, reason: 'This invoice is void.' };
+    if (st.balanceCents <= 0) return { sent: false, reason: 'This invoice is already paid.' };
+    if (kind === 'reminder' && st.collectibleCents <= 0) return { sent: false, reason: 'A bank transfer for the balance is still clearing.' };
+    var customer = await loadCustomer(orgId, o.customerId);
+    var to = billingRecipients(o, customer);
+    if (!to.length) return { sent: false, reason: 'No email address for this customer. Add a billing email on the customer (or an email on the order).' };
+
+    var ref = db.collection('purchaseOrders').doc(orderId);
+    var claim = await db.runTransaction(async function (tx) {
+      var snap = await tx.get(ref);
+      var inv = (snap.data() && snap.data().invoice) || {};
+      if (lastEmailDay(inv, tz) >= today) return null;
+      tx.set(ref, { invoice: { emailClaimAt: nowFn() } }, { merge: true });
+      return { prev: inv.emailClaimAt || null };
+    });
+    if (!claim) return { sent: false, reason: 'This invoice was already emailed today (limit: one email per invoice per day).' };
+
+    var res;
+    try {
+      var online = onlineState(org);
+      var content = CORE.invoiceEmailContent({ kind: kind, step: opts.step, final: !!opts.final, order: o, org: org, state: st,
+        payUrl: online.ready ? (o.invoice && o.invoice.payUrl) : null });
+      var pdf = await renderInvoicePdf(orgId, o, org);
+      res = await sendEmail({ to: to, fromName: org.name || 'SkidSling', replyTo: orgReplyTo(org),
+        subject: content.subject, html: content.html, attachments: [pdf] });
+    } catch (e) {
+      console.error('sendInvoiceEmail ' + orderId + ':', e);
+      res = { success: false, error: e.message };
+    }
+    if (!res || !res.success) {
+      await ref.set({ invoice: { emailClaimAt: claim.prev } }, { merge: true });
+      return { sent: false, capped: !!(res && res.capped),
+               reason: (res && (res.error || (res.skipped && 'Email is not configured on the server (BREVO_API_KEY)'))) || 'Not sent' };
+    }
+
+    var at = nowFn();
+    var entry = { at: at, kind: kind, step: kind === 'reminder' ? opts.step : null, to: to, messageId: res.id || null, by: opts.by || null };
+    await db.runTransaction(async function (tx) {
+      var snap = await tx.get(ref);
+      var inv = (snap.data() && snap.data().invoice) || {};
+      var patch = { lastEmail: entry, emailLog: (inv.emailLog || []).concat([entry]).slice(-20) };
+      if (kind === 'invoice' && !inv.sentAt) { patch.sentAt = at; patch.sentTo = to; }
+      if (kind === 'reminder') {
+        patch.lastReminderAt = at;
+        patch.reminderCount = (inv.reminderCount || 0) + 1;
+        var rem = {};
+        rem[String(opts.step)] = at;
+        (opts.skip || []).forEach(function (s) { rem[String(s)] = 'skipped'; });
+        patch.reminders = rem;
+      }
+      tx.set(ref, { invoice: patch }, { merge: true });
+    });
+    await recomputeOrder(orgId, orderId);
+    var what = kind === 'invoice' ? 'Invoice ' + (o.poNumber || '') + ' emailed to ' + to.join(', ')
+      : 'Reminder (' + (opts.step > 0 ? '+' : '') + opts.step + ' days) for ' + (o.poNumber || '') + ' emailed to ' + to.join(', ');
+    await logActivity(orgId, kind === 'invoice' ? 'INVOICE_SENT' : 'INVOICE_REMINDER_SENT',
+      { message: what, poId: orderId, poNumber: o.poNumber || '', to: to, step: entry.step, balanceCents: st.balanceCents },
+      opts.by || 'SkidSling payments');
+    return { sent: true, to: to, messageId: res.id || null };
+  }
+
+  var invoiceSend = functions.runWith({ timeoutSeconds: 120, memory: '1GB' }).https.onCall(async function (data, context) {
+    data = data || {};
+    await AUTHZ.assertOrgMember(context, data.orgId, 'manager');
+    await loadOrderInOrg(data.orgId, data.orderId);
+    return sendInvoiceEmail(data.orgId, data.orderId, { kind: 'invoice', by: callerEmail(context) });
+  });
+
+  var invoiceSetReminderPause = functions.https.onCall(async function (data, context) {
+    data = data || {};
+    await AUTHZ.assertOrgMember(context, data.orgId, 'manager');
+    var o = await loadOrderInOrg(data.orgId, data.orderId);
+    var paused = data.paused === true;
+    await db.collection('purchaseOrders').doc(o.id).set({ invoice: { remindersPaused: paused, remindersPausedAt: paused ? nowFn() : null } }, { merge: true });
+    await logActivity(data.orgId, paused ? 'INVOICE_REMINDERS_PAUSED' : 'INVOICE_REMINDERS_RESUMED',
+      { message: (paused ? 'Reminders paused for ' : 'Reminders resumed for ') + (o.poNumber || o.id), poId: o.id }, callerEmail(context));
+    return { ok: true, paused: paused };
+  });
+
+  /**
+   * One org's reminders for today. dryRun reports what WOULD go out.
+   * Every send goes through sendInvoiceEmail, so its one-a-day and
+   * never-when-paid rules hold however this is triggered.
+   */
+  async function runRemindersForOrg(orgId, org, opts) {
+    opts = opts || {};
+    var settings = (org.payments && org.payments.autoSend) || {};
+    var tz = orgTz(org);
+    var q = await db.collection('purchaseOrders').where('orgId', '==', orgId)
+      .where('invoice.status', 'in', ['sent', 'partially_paid', 'overdue']).get();
+    var custSnap = await db.collection('customers').where('orgId', '==', orgId).get();
+    var customers = {};
+    custSnap.docs.forEach(function (d) { customers[d.id] = d.data(); });
+    var out = { checked: 0, sent: 0, failed: 0, capped: false, plans: [] };
+    for (var i = 0; i < q.docs.length; i++) {
+      var id = q.docs[i].id;
+      out.checked++;
+      var r = await recomputeOrder(orgId, id);
+      if (!r) continue;
+      var o = r.order;
+      var plan = CORE.planReminder({ settings: settings, invoice: o.invoice, state: r.state,
+        customer: customers[o.customerId] || null, now: nowFn(), tz: tz });
+      var row = { orderId: id, orderNumber: o.poNumber || '', customer: o.customerName || '', balanceCents: r.state.balanceCents,
+                  daysOverdue: r.state.daysOverdue, send: plan.send, step: plan.step, reason: plan.reason, next: plan.next };
+      if (plan.send && !opts.dryRun && !out.capped) {
+        var res = await sendInvoiceEmail(orgId, id, { kind: 'reminder', step: plan.step, skip: plan.skip, final: plan.final,
+          by: opts.by || 'automatic reminders' });
+        row.result = res.sent ? 'sent' : res.reason;
+        if (res.sent) out.sent++; else out.failed++;
+        if (res.capped) out.capped = true;
+      }
+      out.plans.push(row);
+    }
+    return out;
+  }
+
+  var invoiceRunRemindersNow = functions.runWith({ timeoutSeconds: 540, memory: '1GB' }).https.onCall(async function (data, context) {
+    data = data || {};
+    await AUTHZ.assertOrgMember(context, data.orgId, 'admin');
+    var org = await loadOrg(data.orgId);
+    var p = org.payments || {};
+    if (!p.enabled) throw new HttpsError('failed-precondition', 'Invoicing is turned off for this company.');
+    if (!data.dryRun && !(p.autoSend && p.autoSend.reminders)) {
+      throw new HttpsError('failed-precondition', 'Automatic reminders are off. Turn them on in Settings > Payments, or use "Preview" to see what would be sent.');
+    }
+    return runRemindersForOrg(data.orgId, org, { dryRun: data.dryRun === true, by: callerEmail(context) });
+  });
+
+  // Hourly; each org is handled from its own send hour (default 9am in its
+  // time zone) until 6pm, so a day capped by the email limit catches up later.
+  var invoiceRemindersScheduled = functions.runWith({ timeoutSeconds: 540, memory: '1GB' }).pubsub
+    .schedule('every 1 hours').timeZone('America/New_York').onRun(async function () {
+      var snap = await db.collection('organizations').where('payments.enabled', '==', true).get();
+      var stats = { orgs: 0, sent: 0 };
+      for (var i = 0; i < snap.docs.length; i++) {
+        var org = snap.docs[i].data();
+        var a = (org.payments && org.payments.autoSend) || {};
+        if (!a.reminders) continue;
+        var hour = CORE.localHour(nowFn(), orgTz(org));
+        var start = a.sendHour === undefined ? 9 : a.sendHour;
+        if (hour < start || hour >= Math.max(start + 1, 18)) continue;
+        try {
+          var r = await runRemindersForOrg(snap.docs[i].id, org, {});
+          stats.orgs++; stats.sent += r.sent;
+          if (r.capped) break;
+        } catch (e) { console.error('reminders for ' + snap.docs[i].id + ':', e); }
+      }
+      console.log('invoiceRemindersScheduled:', JSON.stringify(stats));
+      return null;
+    });
+
+  /**
+   * Order changes that matter to its invoice:
+   *  - shipped (first time): issue the invoice; email it if the org turned on
+   *    "send automatically when an order ships";
+   *  - cancelled: void the invoice and revoke its pay link; restored: un-void;
+   *  - prices / quantities / terms / dates edited: re-derive the balance.
+   * Does nothing at all for an org that has not turned invoicing on (beyond
+   * keeping an already-issued invoice's numbers right).
+   */
+  async function handleOrderChange(orgId, orderId, before, after) {
+    var inv = after.invoice || {};
+    var ref = db.collection('purchaseOrders').doc(orderId);
+    if (after.status === 'cancelled' && before.status !== 'cancelled' && inv.issuedAt && !inv.voidedAt) {
+      await ref.set({ invoice: { voidedAt: nowFn(), linkNonce: crypto.randomBytes(9).toString('hex'), payUrl: null } }, { merge: true });
+      await recomputeOrder(orgId, orderId);
+      await logActivity(orgId, 'INVOICE_VOIDED', { message: 'Invoice ' + (after.poNumber || orderId) + ' voided (order cancelled); its pay link no longer works', poId: orderId });
+      return 'voided';
+    }
+    if (before.status === 'cancelled' && after.status !== 'cancelled' && inv.voidedAt) {
+      await ref.set({ invoice: { voidedAt: null } }, { merge: true });
+      await recomputeOrder(orgId, orderId);
+      return 'unvoided';
+    }
+    var shippedNow = after.status === 'shipped' && before.status !== 'shipped' &&
+      before.status !== 'paid' && before.status !== 'cancelled' && !inv.issuedAt;
+    if (shippedNow) {
+      var org = await loadOrg(orgId);
+      var p = org.payments || {};
+      if (!p.enabled) return 'invoicing-off';
+      if (CORE.invoiceTotalCents(after) <= 0) {
+        await logActivity(orgId, 'INVOICE_NOT_SENT', { message: (after.poNumber || orderId) +
+          ' shipped, but its invoice is $0.00 (no shipped quantities) - not issued. Set shipped quantities, then use Send invoice.', poId: orderId });
+        return 'zero-total';
+      }
+      await ensureIssued(orgId, orderId);
+      if (p.autoSend && p.autoSend.sendOnShip) {
+        var r = await sendInvoiceEmail(orgId, orderId, { kind: 'invoice', by: 'sent automatically when shipped' });
+        if (!r.sent) await logActivity(orgId, 'INVOICE_NOT_SENT', { message: 'Invoice ' + (after.poNumber || orderId) + ' was not emailed: ' + r.reason, poId: orderId });
+        return r.sent ? 'sent' : 'not-sent';
+      }
+      return 'issued';
+    }
+    if (inv.issuedAt || after.amountPaidCents !== undefined) {
+      var keys = ['items', 'tax', 'shipping', 'credit', 'discount', 'terms', 'invoiceDate', 'dueDate', 'status', 'paidVia'];
+      var changed = keys.some(function (k) { return JSON.stringify(before[k]) !== JSON.stringify(after[k]); });
+      if (changed) { await recomputeOrder(orgId, orderId); return 'recomputed'; }
+    }
+    return null;
+  }
+
+  var invoiceOnOrderUpdate = functions.runWith({ timeoutSeconds: 120, memory: '1GB' }).firestore
+    .document('purchaseOrders/{orderId}').onUpdate(async function (change, context) {
+      var before = change.before.data() || {};
+      var after = change.after.data() || {};
+      if (!after.orgId || before.orgId !== after.orgId) return null;
+      try {
+        return await handleOrderChange(after.orgId, context.params.orderId, before, after);
+      } catch (e) {
+        console.error('invoiceOnOrderUpdate ' + context.params.orderId + ':', e);
+        return null;
+      }
+    });
+
   // ───────────────────────────────── daily: sent invoices past due -> overdue ────
 
   async function runOverdueSweep(onlyOrgId) {
@@ -966,9 +1226,15 @@ module.exports = function createInvoicing(deps) {
     invoicePayLinkStatus: invoicePayLinkStatus,
     invoicePayLinkCheckout: invoicePayLinkCheckout,
     invoiceOverdueScheduled: invoiceOverdueScheduled,
+    invoiceSend: invoiceSend,
+    invoiceSetReminderPause: invoiceSetReminderPause,
+    invoiceRunRemindersNow: invoiceRunRemindersNow,
+    invoiceRemindersScheduled: invoiceRemindersScheduled,
+    invoiceOnOrderUpdate: invoiceOnOrderUpdate,
     // For tests
     _internal: { handleConnectEvent: handleConnectEvent, claimAccount: claimAccount,
                  recomputeOrder: recomputeOrder, ensureIssued: ensureIssued, runOverdueSweep: runOverdueSweep,
-                 sendEmail: sendEmail }
+                 sendEmail: sendEmail, sendInvoiceEmail: sendInvoiceEmail, runRemindersForOrg: runRemindersForOrg,
+                 handleOrderChange: handleOrderChange }
   };
 };

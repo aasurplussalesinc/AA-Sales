@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../OrgAuthContext';
-import { Payments, CONNECTION_LABELS, connectionState } from '../invoicingApi';
+import { Payments, Invoices, CONNECTION_LABELS, connectionState, formatCents } from '../invoicingApi';
 
 // Settings -> Payments. A company connects its OWN Stripe account here
 // (Stripe Connect). SkidSling stores only the account id and its status flags;
@@ -22,6 +22,7 @@ export default function PaymentsSettings() {
   const [error, setError] = useState('');
   const [form, setForm] = useState(null);
   const handledReturn = useRef(false);
+  const [reminderRun, setReminderRun] = useState(null);
 
   useEffect(() => {
     setForm({
@@ -34,6 +35,14 @@ export default function PaymentsSettings() {
         percent: p.cardSurcharge && p.cardSurcharge.percent != null ? String(p.cardSurcharge.percent) : '',
         maxInvoiceForCards: p.cardSurcharge && p.cardSurcharge.maxInvoiceForCardsCents != null
           ? String(p.cardSurcharge.maxInvoiceForCardsCents / 100) : ''
+      },
+      autoSend: {
+        sendOnShip: !!(p.autoSend && p.autoSend.sendOnShip),
+        reminders: !!(p.autoSend && p.autoSend.reminders),
+        schedule: (p.autoSend && Array.isArray(p.autoSend.schedule) ? p.autoSend.schedule : [-3, 0, 7, 14, 30])
+          .map(n => (n > 0 ? '+' + n : String(n))).join(', '),
+        sendHour: p.autoSend && p.autoSend.sendHour != null ? p.autoSend.sendHour : 9,
+        timeZone: (p.autoSend && p.autoSend.timeZone) || 'America/New_York'
       }
     });
   }, [organization?.id, organization?.payments]);
@@ -101,6 +110,14 @@ export default function PaymentsSettings() {
   });
 
   if (!organization) return <div className="page-content"><p>No organization selected</p></div>;
+  const runReminders = (dryRun) => {
+    if (!dryRun && !window.confirm('Send every reminder that is due today now? Each invoice gets at most one email a day.')) return;
+    run(dryRun ? 'Checking which reminders are due...' : 'Sending reminders...', async () => {
+      const r = await Invoices.runRemindersNow({ orgId: organization.id, dryRun });
+      setReminderRun({ ...r, dryRun });
+      if (!dryRun) setMessage(r.sent + ' reminder' + (r.sent === 1 ? '' : 's') + ' sent' + (r.capped ? ' (daily email limit reached - the rest go out tomorrow)' : '') + '.');
+    });
+  };
   const badge = CONNECTION_LABELS[state];
   const toggleMethod = (m) => setForm(f => ({ ...f, methods: f.methods.includes(m) ? f.methods.filter(x => x !== m) : [...f.methods, m] }));
 
@@ -197,7 +214,74 @@ export default function PaymentsSettings() {
               </label>
             </div>
           </div>
+
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, marginTop: 4, marginBottom: 12 }}>
+            <h3 style={{ margin: '0 0 6px' }}>Automatic collections</h3>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '0 0 10px' }}>
+              Off by default. Nothing is emailed to a customer unless these are on. Every invoice gets at most one email a day,
+              and reminders stop the moment it is paid, voided, or the customer is marked "Do not remind".
+            </p>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              <input type="checkbox" disabled={!isAdmin} checked={form.autoSend.sendOnShip}
+                onChange={e => setForm({ ...form, autoSend: { ...form.autoSend, sendOnShip: e.target.checked } })} />
+              <span>Email the invoice automatically when an order ships (otherwise use "Send invoice" on the order)</span>
+            </label>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+              <input type="checkbox" disabled={!isAdmin} checked={form.autoSend.reminders}
+                onChange={e => setForm({ ...form, autoSend: { ...form.autoSend, reminders: e.target.checked } })} />
+              <span>Send payment reminders for unpaid invoices</span>
+            </label>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <label style={{ fontSize: 13 }}>Reminder days (from the due date)<br />
+                <input className="form-input" disabled={!isAdmin} value={form.autoSend.schedule} style={{ width: 220 }}
+                  onChange={e => setForm({ ...form, autoSend: { ...form.autoSend, schedule: e.target.value } })} />
+              </label>
+              <label style={{ fontSize: 13 }}>Send at<br />
+                <select className="form-input" disabled={!isAdmin} value={form.autoSend.sendHour}
+                  onChange={e => setForm({ ...form, autoSend: { ...form.autoSend, sendHour: parseInt(e.target.value, 10) } })}>
+                  {[6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17].map(hr => (
+                    <option key={hr} value={hr}>{hr === 12 ? '12 noon' : hr < 12 ? hr + ' am' : (hr - 12) + ' pm'}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ fontSize: 13 }}>Time zone<br />
+                <select className="form-input" disabled={!isAdmin} value={form.autoSend.timeZone}
+                  onChange={e => setForm({ ...form, autoSend: { ...form.autoSend, timeZone: e.target.value } })}>
+                  {TIME_ZONES.concat(TIME_ZONES.includes(form.autoSend.timeZone) ? [] : [form.autoSend.timeZone]).map(z => (
+                    <option key={z} value={z}>{z.split('/').pop().replace('_', ' ')}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '6px 0 0' }}>
+              -3 = friendly "coming due" note, 0 = due today, +7 / +14 = overdue, the last one = final notice.
+            </p>
+          </div>
           {isAdmin && <button className="btn btn-primary" disabled={!!busy} onClick={save}>Save payment settings</button>}
+          {isAdmin && p.enabled && (
+            <span style={{ marginLeft: 10 }}>
+              <button className="btn" disabled={!!busy} onClick={() => runReminders(true)}>Preview today's reminders</button>
+              {p.autoSend && p.autoSend.reminders && (
+                <button className="btn" disabled={!!busy} onClick={() => runReminders(false)} style={{ marginLeft: 8 }}>Send due reminders now</button>
+              )}
+            </span>
+          )}
+          {reminderRun && (
+            <div style={{ marginTop: 12, fontSize: 12 }}>
+              <strong>{reminderRun.dryRun ? 'Preview' : 'Run'}:</strong> {reminderRun.checked} open sent invoice{reminderRun.checked === 1 ? '' : 's'} checked
+              {!reminderRun.dryRun && <span>, {reminderRun.sent} sent</span>}
+              <table style={{ width: '100%', marginTop: 6, borderCollapse: 'collapse' }}>
+                <thead><tr style={{ textAlign: 'left', color: 'var(--text-muted)' }}><th>Invoice</th><th>Customer</th><th>Balance</th><th>Today</th><th>Next</th></tr></thead>
+                <tbody>{reminderRun.plans.map(r => (
+                  <tr key={r.orderId} style={{ borderTop: '1px solid var(--border)' }}>
+                    <td>{r.orderNumber}</td><td>{r.customer}</td><td>{formatCents(r.balanceCents)}</td>
+                    <td>{r.result ? r.result : r.send ? 'reminder ' + (r.step > 0 ? '+' : '') + r.step + ' due' : r.reason}</td>
+                    <td>{r.next ? r.next.date : '-'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

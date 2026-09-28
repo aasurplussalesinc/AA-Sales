@@ -1,4 +1,4 @@
-import { h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
+import { h, raw, escapeHtml as esc, addressWithUnit } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/library';
 import { resolvePickLocation, shouldFlagStockDeducted } from '../pickDeduction';
@@ -1007,9 +1007,9 @@ export default function PickLists() {
   
   <div class="to-section">
     <div class="company">${(order.customerName || '').toUpperCase()}</div>
-    ${raw(order.customerContact ? h`<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : '')}
+    ${raw((order.customerAttention || order.customerContact) ? h`<div class="attention">ATT: ${(order.customerAttention || order.customerContact).toUpperCase()}</div>` : '')}
     <div class="address">
-      ${raw(esc((order.customerAddress || '').toUpperCase()).replace(/, /g, '<br>'))}
+      ${raw(esc(addressWithUnit(order.customerAddress || '', order.customerAddressUnit).toUpperCase()).replace(/, /g, '<br>'))}
     </div>
   </div>
   

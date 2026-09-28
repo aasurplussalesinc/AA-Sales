@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { OrgDB as DB } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { addressWithUnit } from '../../functions/orderDocument.mjs';
 
 const functions = getFunctions();
 
@@ -219,7 +220,9 @@ export default function Shipping() {
         customerContact: customer.company ? (customer.customerName || '') : '',
         customerEmail: customer.email || '',
         customerPhone: customer.phone || '',
-        customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', ')
+        customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', '),
+        customerAddressUnit: customer.addressUnit || '',
+        customerAttention: customer.attention || ''
       };
       // Respect "ship to a different address": only refresh the ship-to from the
       // customer when the order is NOT using an alternate address.
@@ -1404,7 +1407,8 @@ export default function Shipping() {
                       {order.customerEmail && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{order.customerEmail}</div>}
                     </td>
                     <td style={{ padding: '12px 10px', fontSize: 12, maxWidth: 200 }}>
-                      {order.shipToAddress || order.customerAddress || <span style={{ color: 'var(--text-muted)' }}>No address</span>}
+                      {(order.shipToAddress ? order.shipToAttention : order.customerAttention) && <div style={{ fontWeight: 600 }}>ATTN: {order.shipToAddress ? order.shipToAttention : order.customerAttention}</div>}
+                      {order.shipToAddress ? addressWithUnit(order.shipToAddress, order.shipToUnit) : order.customerAddress ? addressWithUnit(order.customerAddress, order.customerAddressUnit) : <span style={{ color: 'var(--text-muted)' }}>No address</span>}
                     </td>
                     <td style={{ padding: '12px 10px', textAlign: 'center' }}>
                       {order.packingMode === 'triwalls'
@@ -1915,7 +1919,7 @@ export default function Shipping() {
                     <h4 style={{ margin: 0 }}>💰 Shipping Rates for {order.poNumber}</h4>
                     <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {allRates.length} rate{allRates.length !== 1 ? 's' : ''} from {carriers.length} carrier{carriers.length !== 1 ? 's' : ''}
-                      {' • '}{order.customerName} → {order.shipToAddress || order.customerAddress || 'N/A'}
+                      {' • '}{order.customerName} → {order.shipToAddress ? addressWithUnit(order.shipToAddress, order.shipToUnit) : (addressWithUnit(order.customerAddress, order.customerAddressUnit) || 'N/A')}
                     </span>
                     {hasCustomerRates && order.thirdPartyBilling?.account && (
                       <div style={{ marginTop: 4, display: 'flex', gap: 8 }}>

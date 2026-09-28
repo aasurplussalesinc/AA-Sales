@@ -1,4 +1,4 @@
-import { renderOrderDocument, refHtml, refStyles, h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
+import { renderOrderDocument, refHtml, refStyles, h, raw, escapeHtml as esc, addressWithUnit } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
@@ -68,7 +68,8 @@ export default function PurchaseOrders() {
 
   const [newPO, setNewPO] = useState({
     customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
-    shipToAddress: '', shipToCompany: '', useShipTo: false,
+    customerAddressUnit: '', customerAttention: '',
+    shipToAddress: '', shipToCompany: '', shipToUnit: '', shipToAttention: '', useShipTo: false,
     dueDate: '', invoiceDate: '', customerPO: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, credit: 0, discount: 0, estTotal: 0, total: 0
   });
 
@@ -137,7 +138,8 @@ export default function PurchaseOrders() {
       customerName: customer.company || customer.customerName,
       customerContact: customer.company ? customer.customerName : '', // Contact is customerName if company exists
       customerEmail: customer.email || '', customerPhone: customer.phone || '',
-      customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', ')
+      customerAddress: [customer.address, customer.city, customer.state, customer.zipCode].filter(Boolean).join(', '),
+      customerAddressUnit: customer.addressUnit || '', customerAttention: customer.attention || ''
     });
     setSearchCustomer('');
   };
@@ -456,7 +458,9 @@ export default function PurchaseOrders() {
     setNewPO({ customerId: order.customerId || '', customerName: order.customerName || '', 
       customerContact: order.customerContact || '', customerEmail: order.customerEmail || '',
       customerPhone: order.customerPhone || '', customerAddress: order.customerAddress || '', 
+      customerAddressUnit: order.customerAddressUnit || '', customerAttention: order.customerAttention || '',
       shipToAddress: order.shipToAddress || '', shipToCompany: order.shipToCompany || '', useShipTo: !!order.shipToAddress,
+      shipToUnit: order.shipToUnit || '', shipToAttention: order.shipToAttention || '',
       dueDate: order.dueDate || '', invoiceDate: invoiceDateStr, poNumber: order.poNumber || '', customerPO: order.customerPO || '',
       notes: order.notes || '', terms: order.terms || 'Net 30', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping, credit, discount,
       estTotal: estSubtotal + tax + shipping - credit - discount, total: shipSubtotal + tax + shipping - credit - discount });
@@ -467,7 +471,8 @@ export default function PurchaseOrders() {
     setSearchItem('');   // don't carry a stale search into the next order
     setPickedForOrder({});
     setNewPO({ customerId: '', customerName: '', customerContact: '', customerEmail: '', customerPhone: '', customerAddress: '',
-      shipToAddress: '', shipToCompany: '', useShipTo: false,
+      customerAddressUnit: '', customerAttention: '',
+      shipToAddress: '', shipToCompany: '', shipToUnit: '', shipToAttention: '', useShipTo: false,
       dueDate: '', invoiceDate: '', customerPO: '', notes: '', terms: 'Net 30', items: [], estSubtotal: 0, subtotal: 0, tax: 0, shipping: 0, credit: 0, discount: 0, estTotal: 0, total: 0 });
   };
 
@@ -1109,7 +1114,7 @@ export default function PurchaseOrders() {
         <div style="text-align:right;font-size:10px;color:#666"><strong>${organization?.name || ''}</strong><br>${organization?.address || ''}<br>${organization?.phone || ''}</div>
       </div>
       <div class="info-row">
-        <div class="info-box"><h3>Ship To</h3><strong>${order.customerName}</strong><br>${order.customerAddress || ''}</div>
+        <div class="info-box"><h3>Ship To</h3><strong>${order.customerName}</strong><br>${raw(order.customerAttention ? h`ATTN: ${order.customerAttention}<br>` : '')}${addressWithUnit(order.customerAddress || '', order.customerAddressUnit)}</div>
         <div class="info-box"><h3>Order Details</h3>Date: ${formatDate(order.createdAt)}<br>Items: ${(order.items || []).reduce((sum, i) => sum + (parseInt(i.qtyShipped) || 0), 0)} | ${containerLabel}: ${containerCount}</div>
       </div>
       ${raw(containersHtml)}
@@ -1448,9 +1453,9 @@ ${organization?.email || ''}
   
   <div class="to-section">
     <div class="company">${(order.customerName || '').toUpperCase()}</div>
-    ${raw(order.customerContact ? h`<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : '')}
+    ${raw((order.customerAttention || order.customerContact) ? h`<div class="attention">ATT: ${(order.customerAttention || order.customerContact).toUpperCase()}</div>` : '')}
     <div class="address">
-      ${raw(esc((order.customerAddress || '').toUpperCase()).replace(/, /g, '<br>'))}
+      ${raw(esc(addressWithUnit(order.customerAddress || '', order.customerAddressUnit).toUpperCase()).replace(/, /g, '<br>'))}
     </div>
   </div>
   
@@ -1499,9 +1504,9 @@ ${organization?.email || ''}
   
   <div class="to-section">
     <div class="company">${(order.customerName || '').toUpperCase()}</div>
-    ${raw(order.customerContact ? h`<div class="attention">ATT: ${order.customerContact.toUpperCase()}</div>` : '')}
+    ${raw((order.customerAttention || order.customerContact) ? h`<div class="attention">ATT: ${(order.customerAttention || order.customerContact).toUpperCase()}</div>` : '')}
     <div class="address">
-      ${raw(esc((order.customerAddress || '').toUpperCase()).replace(/, /g, '<br>'))}
+      ${raw(esc(addressWithUnit(order.customerAddress || '', order.customerAddressUnit).toUpperCase()).replace(/, /g, '<br>'))}
     </div>
   </div>
   
@@ -1630,13 +1635,29 @@ ${raw(labelsHtml)}
                   style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
               </div>
 
+              {/* Customer address unit + attention (filled from the customer; printed on the label) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 20 }}>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Unit / Suite / Apt</label>
+                  <input type="text" placeholder="e.g. Suite 25" value={newPO.customerAddressUnit || ''}
+                    onChange={e => setNewPO({ ...newPO, customerAddressUnit: e.target.value })}
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ display: 'block', marginBottom: 5, fontWeight: 600 }}>Attention (ATTN) <span style={{ fontWeight: 400, color: 'var(--text-muted)', fontSize: 12 }}>(on the shipping label)</span></label>
+                  <input type="text" placeholder="Person or department (optional)" value={newPO.customerAttention || ''}
+                    onChange={e => setNewPO({ ...newPO, customerAttention: e.target.value })}
+                    style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+                </div>
+              </div>
+
               {/* Ship To Address */}
               <div style={{ marginBottom: 20 }}>
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
                   <input 
                     type="checkbox" 
                     checked={newPO.useShipTo || false}
-                    onChange={e => setNewPO({ ...newPO, useShipTo: e.target.checked, shipToAddress: e.target.checked ? newPO.shipToAddress : '', shipToCompany: e.target.checked ? newPO.shipToCompany : '' })}
+                    onChange={e => setNewPO({ ...newPO, useShipTo: e.target.checked, shipToAddress: e.target.checked ? newPO.shipToAddress : '', shipToCompany: e.target.checked ? newPO.shipToCompany : '', shipToUnit: e.target.checked ? newPO.shipToUnit : '', shipToAttention: e.target.checked ? newPO.shipToAttention : '' })}
                   />
                   <span style={{ fontWeight: 600 }}>Ship to different address</span>
                 </label>
@@ -1658,6 +1679,14 @@ ${raw(labelsHtml)}
                       onChange={e => setNewPO({ ...newPO, shipToAddress: e.target.value })}
                       style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', minHeight: 80, boxSizing: 'border-box' }}
                     />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 8 }}>
+                      <input type="text" placeholder="Ship-to unit / suite / apt (e.g. Suite 25)" value={newPO.shipToUnit || ''}
+                        onChange={e => setNewPO({ ...newPO, shipToUnit: e.target.value })}
+                        style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+                      <input type="text" placeholder="Ship-to attention (ATTN) person / dept" value={newPO.shipToAttention || ''}
+                        onChange={e => setNewPO({ ...newPO, shipToAttention: e.target.value })}
+                        style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+                    </div>
                   </div>
                 )}
               </div>
@@ -1981,10 +2010,11 @@ ${raw(labelsHtml)}
                 {selectedOrder.customerContact && <p style={{ margin: '3px 0' }}><strong>Contact:</strong> {selectedOrder.customerContact}</p>}
                 {selectedOrder.customerPhone && <p style={{ margin: '3px 0' }}>Phone: {selectedOrder.customerPhone}</p>}
                 {selectedOrder.customerEmail && <p style={{ margin: '3px 0' }}>Email: {selectedOrder.customerEmail}</p>}
-                {selectedOrder.customerAddress && <p style={{ margin: '3px 0' }}>Address: {selectedOrder.customerAddress}</p>}
+                {selectedOrder.customerAttention && <p style={{ margin: '3px 0' }}><strong>ATTN:</strong> {selectedOrder.customerAttention}</p>}
+                {selectedOrder.customerAddress && <p style={{ margin: '3px 0' }}>Address: {addressWithUnit(selectedOrder.customerAddress, selectedOrder.customerAddressUnit)}</p>}
                 {selectedOrder.shipToAddress && (
                   <p style={{ margin: '8px 0 3px 0', paddingTop: 8, borderTop: '1px dashed #ccc' }}>
-                    <strong>📦 Ship To:</strong> {selectedOrder.shipToCompany ? <><span style={{ color: '#1976d2', fontWeight: 600 }}>{selectedOrder.shipToCompany}</span>, </> : null}{selectedOrder.shipToAddress}
+                    <strong>📦 Ship To:</strong> {selectedOrder.shipToCompany ? <><span style={{ color: '#1976d2', fontWeight: 600 }}>{selectedOrder.shipToCompany}</span>, </> : null}{selectedOrder.shipToAttention ? <>ATTN: {selectedOrder.shipToAttention}, </> : null}{addressWithUnit(selectedOrder.shipToAddress, selectedOrder.shipToUnit)}
                   </p>
                 )}
                 <p style={{ margin: '3px 0' }}><strong>Terms:</strong> {selectedOrder.terms || 'Net 30'}</p>

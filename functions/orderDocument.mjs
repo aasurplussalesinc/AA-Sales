@@ -43,6 +43,29 @@ export function h(strings, ...values) {
   return out;
 }
 
+// An order's address is one string ("4913 Chastain Ave, Charlotte, NC, 28217",
+// or several lines for a typed drop-ship). The unit / suite is stored beside
+// it (customerAddressUnit, shipToUnit). This puts the unit straight after the
+// street for display. sep ', ' keeps a one-line address one line; sep '\n'
+// puts the unit and the city line on lines of their own. No unit -> the
+// address is returned untouched, so older orders print exactly as before.
+const UNIT_TAIL = /\s*,?\s+(?:#|(?:ste|suite|apt|apartment|unit|rm|room|fl|floor|bldg|building|spc|space|lot|trlr|dept)\.?\s*#?)\s*([A-Za-z0-9-]+)\s*$/i;
+export function addressWithUnit(address, unit, sep = ', ') {
+  const a = String(address == null ? '' : address);
+  const u = String(unit == null ? '' : unit).trim();
+  if (!u) return a;
+  const m = a.match(/^([^,\n]*)([,\n][\s\S]*)?$/);
+  const street = m ? m[1] : a;
+  let rest = m ? (m[2] || '') : '';
+  // An old address that already has this unit typed on the street line.
+  const tail = street.match(UNIT_TAIL);
+  const uv = (u.match(/([A-Za-z0-9-]+)\s*$/) || [])[1];
+  if (tail && uv && tail[1].toLowerCase() === uv.toLowerCase()) return a;
+  if (!street.trim()) return rest ? u + sep + rest.replace(/^[,\n]\s*/, '') : u;
+  if (sep === '\n' && rest.charAt(0) === ',') rest = '\n' + rest.slice(1).trim();
+  return rest ? street + sep + u + rest : street + sep + u;
+}
+
 export function brandingFrom(org) {
   const o = org || {};
   const addressLines = [];
@@ -152,7 +175,7 @@ const { items = [], organization = null, branding } = ctx || {};
     </style></head><body>
     <div class="header"><div>${branding(organization, { accent: accentColor }).logo}</div><div class="company-details">${branding(organization, { accent: accentColor }).details}</div></div>
     <div class="doc-title">${isEstimate ? 'ESTIMATE' : 'INVOICE'}</div><div class="doc-number">${refHtml(order)}</div>
-    <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${escapeHtml(order.customerName)}</p>${order.customerContact ? '<p>Attn: ' + escapeHtml(order.customerContact) + '</p>' : ''}${order.customerAddress ? '<p>' + escapeHtml(order.customerAddress) + '</p>' : ''}${order.customerPhone ? '<p>' + escapeHtml(order.customerPhone) + '</p>' : ''}${order.customerEmail ? '<p>' + escapeHtml(order.customerEmail) + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3>' + (order.shipToCompany ? '<p class="highlight">' + escapeHtml(order.shipToCompany) + '</p>' : '') + '<p>' + escapeHtml(order.shipToAddress).replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${displayDate}</p><p><strong>Terms:</strong> ${escapeHtml(order.terms || 'Net 30')}</p>${order.customerPO ? '<p><strong>Customer PO:</strong> ' + escapeHtml(order.customerPO) + '</p>' : ''}</div></div>
+    <div class="info-section"><div class="info-box"><h3>Bill To</h3><p class="highlight">${escapeHtml(order.customerName)}</p>${(order.customerAttention || order.customerContact) ? '<p>Attn: ' + escapeHtml(order.customerAttention || order.customerContact) + '</p>' : ''}${order.customerAddress ? '<p>' + escapeHtml(addressWithUnit(order.customerAddress, order.customerAddressUnit, '\n')).replace(/\n/g, '<br>') + '</p>' : ''}${order.customerPhone ? '<p>' + escapeHtml(order.customerPhone) + '</p>' : ''}${order.customerEmail ? '<p>' + escapeHtml(order.customerEmail) + '</p>' : ''}</div>${order.shipToAddress ? '<div class="info-box"><h3>Ship To</h3>' + (order.shipToCompany ? '<p class="highlight">' + escapeHtml(order.shipToCompany) + '</p>' : '') + (order.shipToAttention ? '<p>Attn: ' + escapeHtml(order.shipToAttention) + '</p>' : '') + '<p>' + escapeHtml(addressWithUnit(order.shipToAddress, order.shipToUnit, '\n')).replace(/\n/g, '<br>') + '</p></div>' : ''}<div class="info-box"><h3>Details</h3><p><strong>Date:</strong> ${displayDate}</p><p><strong>Terms:</strong> ${escapeHtml(order.terms || 'Net 30')}</p>${order.customerPO ? '<p><strong>Customer PO:</strong> ' + escapeHtml(order.customerPO) + '</p>' : ''}</div></div>
     <table><thead><tr><th style="width:60px">SKU</th><th>Description</th>${isEstimate ? '<th style="text-align:center;width:50px">Qty</th>' : '<th style="text-align:center;width:50px">Ord</th><th style="text-align:center;width:50px">Ship</th>'}<th style="text-align:right;width:70px">Unit Price</th><th style="text-align:right;width:70px">Amount</th></tr></thead><tbody>${lineItems.map(item => '<tr><td style="font-size:10px;color:#000;font-weight:700">' + escapeHtml(item.partNumber || '-') + '</td><td style="font-weight:500">' + escapeHtml(item.itemName) + (item.resolvedGrade ? '<div style="font-size:9px;color:' + accentColor + ';font-weight:600;margin-top:1px">Condition: ' + escapeHtml(item.resolvedGrade) + '</div>' : '') + (item.notes ? '<div style="font-size:9px;color:#666;font-style:italic">' + escapeHtml(item.notes) + '</div>' : '') + '</td>' + (isEstimate ? '<td style="text-align:center">' + (item.quantity || 0) + '</td>' : '<td style="text-align:center">' + (item.quantity || 0) + '</td><td style="text-align:center;font-weight:bold">' + (item.qtyShipped || 0) + '</td>') + '<td style="text-align:right">$' + (item.unitPrice || 0).toFixed(2) + '</td><td style="text-align:right;font-weight:500">$' + item.displayTotal.toFixed(2) + '</td></tr>').join('')}</tbody></table>
     <div class="totals-section"><div class="totals-box"><div class="totals-row"><span>Subtotal</span><span>$${subtotal.toFixed(2)}</span></div>${tax > 0 ? '<div class="totals-row"><span>Tax</span><span>$' + tax.toFixed(2) + '</span></div>' : ''}${shipping > 0 ? '<div class="totals-row"><span>Shipping</span><span>$' + shipping.toFixed(2) + '</span></div>' : (order.shippingBilledToCustomer ? '<div class="totals-row" style="color:#555;font-size:0.9em"><span>Shipping</span><span>Billed to your carrier account</span></div>' : '')}${credit > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Credit</span><span>-$' + credit.toFixed(2) + '</span></div>' : ''}${discount > 0 ? '<div class="totals-row" style="color:#2e7d32"><span>Discount</span><span>-$' + discount.toFixed(2) + '</span></div>' : ''}<div class="totals-row final"><span>Total</span><span>$${total.toFixed(2)}</span></div></div></div>
     <div style="margin-top:10px;font-size:9px;color:#666;font-style:italic;text-align:right">Payments by credit card are subject to a 3.5% processing fee</div>

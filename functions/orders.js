@@ -152,8 +152,12 @@ async function createDraftOrder(db, auth, body) {
     customerEmail: body.customerEmail || '',
     customerPhone: body.customerPhone || '',
     customerAddress: body.customerAddress || '',
+    customerAddressUnit: body.customerAddressUnit || '',
+    customerAttention: body.customerAttention || '',
     shipToAddress: body.shipToAddress || '',
     shipToCompany: body.shipToCompany || '',
+    shipToUnit: body.shipToUnit || '',
+    shipToAttention: body.shipToAttention || '',
     useShipTo: !!body.shipToAddress,
     customerPO: body.customerPO || '',
     dueDate: body.dueDate || '',
@@ -203,7 +207,8 @@ async function createDraftOrder(db, auth, body) {
  * settable here either: moving an order forward stays a human action in the app.
  */
 var EDITABLE = ['customerName', 'customerContact', 'customerEmail', 'customerPhone',
-  'customerAddress', 'shipToAddress', 'shipToCompany', 'customerPO', 'terms',
+  'customerAddress', 'customerAddressUnit', 'customerAttention',
+  'shipToAddress', 'shipToCompany', 'shipToUnit', 'shipToAttention', 'customerPO', 'terms',
   'notes', 'dueDate', 'invoiceDate'];
 var NUMERIC = ['tax', 'shipping', 'credit', 'discount'];
 

@@ -1,4 +1,4 @@
-import { h, raw, escapeHtml as esc } from '../../functions/orderDocument.mjs';
+import { h, raw, escapeHtml as esc, addressWithUnit } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { OrgDB as DB } from '../orgDb';
@@ -485,7 +485,8 @@ export default function Customers() {
           <div class="customer-info">
             <h3>Bill To:</h3>
             <p><strong>${order.customerName}</strong></p>
-            ${raw(order.customerAddress ? h`<p>${order.customerAddress}</p>` : '')}
+            ${raw(order.customerAttention ? h`<p>Attn: ${order.customerAttention}</p>` : '')}
+            ${raw(order.customerAddress ? h`<p>${addressWithUnit(order.customerAddress, order.customerAddressUnit)}</p>` : '')}
             ${raw(order.customerPhone ? h`<p>Phone: ${order.customerPhone}</p>` : '')}
             ${raw(order.customerEmail ? h`<p>Email: ${order.customerEmail}</p>` : '')}
           </div>
@@ -896,7 +897,8 @@ export default function Customers() {
                 <p style={{ margin: '3px 0' }}><strong>Customer:</strong> {selectedOrder.customerName}</p>
                 {selectedOrder.customerPhone && <p style={{ margin: '3px 0' }}>Phone: {selectedOrder.customerPhone}</p>}
                 {selectedOrder.customerEmail && <p style={{ margin: '3px 0' }}>Email: {selectedOrder.customerEmail}</p>}
-                {selectedOrder.customerAddress && <p style={{ margin: '3px 0' }}>Address: {selectedOrder.customerAddress}</p>}
+                {selectedOrder.customerAttention && <p style={{ margin: '3px 0' }}>ATTN: {selectedOrder.customerAttention}</p>}
+                {selectedOrder.customerAddress && <p style={{ margin: '3px 0' }}>Address: {addressWithUnit(selectedOrder.customerAddress, selectedOrder.customerAddressUnit)}</p>}
               </div>
 
               {/* Items */}
@@ -1051,6 +1053,29 @@ export default function Customers() {
                     onChange={e => setEditingOrder({ ...editingOrder, customerAddress: e.target.value })}
                     style={{ width: '100%' }}
                   />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 15 }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Unit / Suite / Apt</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      placeholder="e.g. Suite 25"
+                      value={editingOrder.customerAddressUnit || ''}
+                      onChange={e => setEditingOrder({ ...editingOrder, customerAddressUnit: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Attention (ATTN)</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      value={editingOrder.customerAttention || ''}
+                      onChange={e => setEditingOrder({ ...editingOrder, customerAttention: e.target.value })}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
                 </div>
               </div>
 

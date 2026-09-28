@@ -89,6 +89,7 @@ export default function ActivityLog() {
   };
 
   const getActionIcon = (action) => {
+    if (action.includes('PAYMENT') || action.includes('INVOICE')) return '💵';
     if (action.includes('ADD')) return '➕';
     if (action.includes('PICK')) return '📤';
     if (action.includes('MOVE')) return '🔄';
@@ -103,6 +104,8 @@ export default function ActivityLog() {
 
   const formatDetails = (details) => {
     if (!details || Object.keys(details).length === 0) return '-';
+    // Payments / invoicing entries carry a ready-made sentence.
+    if (typeof details.message === 'string' && details.message) return details.message;
     const parts = [];
     if (details.itemName) parts.push(`Item: ${details.itemName}`);
     if (details.quantity) parts.push(`Qty: ${details.quantity}`);

@@ -157,4 +157,4 @@ function build(opts) {
   return { db: db, inv: inv, stripe: stripe, clock: clock, emails: emails, pdfs: pdfs, env: env, deliver: deliver, ctx: ctx, HttpsError: HttpsError };
 }
 
-module.exports = { build: build, fakeStripe: fakeStripe, HttpsError: HttpsError };
+module.exports = { build: build, fakeStripe: fakeStripe, fakeFunctions: fakeFunctions, HttpsError: HttpsError };

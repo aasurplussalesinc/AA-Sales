@@ -627,6 +627,109 @@ module.exports = function createInvoicing(deps) {
     return { url: session.url };
   });
 
+  // ─────────────────────────────────────────────────────────── email ────
+
+  // Brevo (the same transactional email service index.js uses). Invoice email
+  // is sent from SkidSling's verified sender under the company's name, with
+  // replies going to the company's billing address. Injected in tests.
+  var sendEmailImpl = deps.sendEmail || async function brevoSend(msg) {
+    var apiKey = env.BREVO_API_KEY;
+    if (!apiKey) {
+      console.log('[invoice email skipped - no BREVO_API_KEY] ' + msg.subject);
+      return { skipped: true };
+    }
+    var fetch = require('node-fetch');
+    var body = {
+      sender: { name: String(msg.fromName || 'SkidSling').slice(0, 70), email: env.INVOICE_EMAIL_FROM || 'info@skidsling.com' },
+      to: msg.to.map(function (e) { return { email: e }; }),
+      subject: msg.subject,
+      htmlContent: msg.html
+    };
+    if (msg.replyTo) body.replyTo = { email: msg.replyTo };
+    if (msg.attachments && msg.attachments.length) {
+      body.attachment = msg.attachments.map(function (a) { return { name: a.name, content: a.contentBase64 }; });
+    }
+    try {
+      var res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': apiKey, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) { var t = await res.text(); console.error('Brevo error ' + res.status + ':', t); return { success: false, error: 'Email service error ' + res.status }; }
+      var j = await res.json();
+      return { success: true, id: j.messageId || null };
+    } catch (e) {
+      console.error('Brevo send failed:', e.message);
+      return { success: false, error: e.message };
+    }
+  };
+
+  // Brevo's free tier allows 300 emails a day for the WHOLE SkidSling account
+  // (trial emails included). Invoicing stops at INVOICE_EMAIL_DAILY_CAP
+  // (default 250) and leaves the rest for tomorrow; reminders catch up.
+  async function takeEmailQuota(n) {
+    var cap = parseInt(env.INVOICE_EMAIL_DAILY_CAP, 10);
+    if (!(cap > 0)) cap = 250;
+    var dayKey = new Date(nowFn()).toISOString().slice(0, 10);
+    var ref = db.collection('invoiceEmailQuota').doc(dayKey);
+    return db.runTransaction(async function (tx) {
+      var snap = await tx.get(ref);
+      var used = snap.exists ? (snap.data().count || 0) : 0;
+      if (used + n > cap) return false;
+      tx.set(ref, { count: used + n, cap: cap, updatedAt: nowFn() }, { merge: true });
+      return true;
+    });
+  }
+
+  async function sendEmail(msg) {
+    if (!msg.to || !msg.to.length) return { success: false, error: 'No email address' };
+    if (!(await takeEmailQuota(1))) return { success: false, capped: true, error: 'Daily email limit reached - it will go out tomorrow' };
+    return sendEmailImpl(msg);
+  }
+
+  function orgReplyTo(org) {
+    var p = (org && org.payments) || {};
+    var e = (p.billingEmail || (org && org.email) || '').trim().toLowerCase();
+    return CORE.isEmail(e) ? e : null;
+  }
+
+  var METHOD_WORDS = { card: 'card', ach: 'bank transfer (ACH)', check: 'check', cash: 'cash', zelle: 'Zelle', wire: 'wire', other: 'other' };
+
+  /**
+   * Tell the company about a payment event: an activity-log entry (in-app),
+   * plus an email to its billing address when it turned that on. Never the
+   * customer.
+   */
+  async function notifyPayment(orgId, payment, transitions, wasPending) {
+    if (!transitions || !transitions.length) return;
+    var org;
+    try { org = await loadOrg(orgId); } catch (e) { return; }
+    var label = (CORE.paymentAllocations(payment).map(function (a) { return a.orderNumber; }).filter(Boolean).join(', ')) ||
+      payment.orderNumber || 'An invoice';
+    var amt = CORE.formatCents(payment.amountCents);
+    var how = METHOD_WORDS[payment.method] || 'online payment';
+    var lines = [];
+    transitions.forEach(function (t) {
+      if (t === 'succeeded') lines.push({ action: 'PAYMENT_RECEIVED', text: label + ' paid ' + amt + ' by ' + how });
+      else if (t === 'pending') lines.push({ action: 'PAYMENT_PENDING', text: label + ': ' + amt + ' ' + how + ' started - it clears in a few business days' });
+      else if (t === 'failed' && wasPending) lines.push({ action: 'PAYMENT_FAILED', text: label + ': ' + amt + ' ' + how + ' FAILED' + (payment.failureMessage ? ' (' + payment.failureMessage + ')' : '') + ' - the balance is due again' });
+      else if (t === 'refunded' || t === 'partially_refunded') lines.push({ action: 'PAYMENT_REFUNDED', text: label + ': ' + CORE.formatCents(payment.refundedCents) + ' refunded of ' + amt });
+      else if (t === 'disputed') lines.push({ action: 'PAYMENT_DISPUTED', text: label + ': the customer disputed the ' + amt + ' payment with their bank. Respond in your Stripe dashboard.' });
+    });
+    var p = org.payments || {};
+    var to = orgReplyTo(org);
+    for (var i = 0; i < lines.length; i++) {
+      await logActivity(orgId, lines[i].action, { message: lines[i].text,
+        paymentId: payment.stripe && payment.stripe.paymentIntentId ? 'stripe_' + payment.stripe.paymentIntentId : null,
+        orderIds: payment.orderIds || [], amountCents: payment.amountCents });
+      if (p.notifyOnPayment && to) {
+        await sendEmail({ to: [to], fromName: 'SkidSling', subject: lines[i].text,
+          html: '<p>' + CORE.escapeHtml(lines[i].text) + '.</p><p style="color:#777;font-size:13px">SkidSling payments &middot; ' +
+            CORE.escapeHtml(org.name || '') + '. You get these because "Email the billing address when a payment arrives" is on in Settings &gt; Payments.</p>' });
+      }
+    }
+  }
+
   // ─────────────────────────────────────────────── Connect webhook ────
 
   /**
@@ -687,9 +790,139 @@ module.exports = function createInvoicing(deps) {
         return 'account:deauthorized';
       }
       default:
+        if (CORE.PAYMENT_EVENT_TYPES.indexOf(event.type) !== -1) return handlePaymentEvent(orgId, event);
         return 'ignored:unhandled-type';
     }
   }
+
+  /**
+   * checkout.session.*, payment_intent.*, charge.refunded, charge.dispute.*
+   * -> one row in `payments` (keyed by payment intent) -> every order it
+   * covers is re-derived. Idempotent and order-independent: the row is a
+   * merge of facts (see CORE.mergePaymentFacts) and the orders are recomputed
+   * from the whole ledger, never incremented.
+   */
+  async function handlePaymentEvent(orgId, event) {
+    var facts = CORE.paymentFactsFromEvent(event);
+    if (!facts) return 'ignored:not-an-invoice-payment';
+    if (!facts.paymentIntentId) return 'ignored:no-payment-intent';
+    var ref = db.collection('payments').doc('stripe_' + facts.paymentIntentId);
+
+    var meta = facts.meta;
+    if (!meta) {
+      // Charge / dispute events may not repeat our metadata. Use the row we
+      // already have, else ask Stripe for the payment intent.
+      var ex = await ref.get();
+      if (ex.exists) {
+        var e0 = ex.data();
+        meta = { orgId: e0.orgId, kind: e0.kind, orderId: e0.orderId, orderNumber: e0.orderNumber,
+                 customerId: e0.customerId, surchargeCents: e0.surchargeCents };
+      } else {
+        var s = connectStripe();
+        var pi = await s.stripe.paymentIntents.retrieve(facts.paymentIntentId, {}, { stripeAccount: event.account });
+        meta = CORE.paymentMetaFromStripe(pi && pi.metadata);
+        if (!meta) return 'ignored:not-an-invoice-payment';
+        if (pi.amount !== undefined && facts.set.grossCents === undefined) facts.set.grossCents = Number(pi.amount) || 0;
+      }
+    }
+    // The metadata names an org; the connected account names an org. They
+    // must agree, or the event is not processed at all.
+    if (meta.orgId !== orgId) {
+      console.warn('stripeConnectWebhook: ' + event.id + ' metadata org ' + meta.orgId + ' does not match account owner ' + orgId + ' - ignored');
+      return 'ignored:org-mismatch';
+    }
+    if (meta.kind === 'invoice') {
+      if (!meta.orderId || !ID_RE.test(meta.orderId)) return 'ignored:no-order';
+      var osnap = await db.collection('purchaseOrders').doc(meta.orderId).get();
+      if (!osnap.exists || osnap.data().orgId !== orgId) {
+        console.warn('stripeConnectWebhook: ' + event.id + ' names order ' + meta.orderId + ' which is not in org ' + orgId + ' - ignored');
+        return 'ignored:unknown-order';
+      }
+    }
+
+    var out = await db.runTransaction(async function (tx) {
+      var cur = await tx.get(ref);
+      var before = cur.exists ? cur.data() : null;
+      if (before && before.orgId && before.orgId !== orgId) return null;
+      var after = CORE.mergePaymentFacts(before, facts, meta);
+      after.orgId = orgId;
+      after.stripe.accountId = event.account;
+      if (after.kind === 'invoice') {
+        after.orderIds = [after.orderId];
+      } else if (!Array.isArray(after.orderIds) || !after.allocations || !after.allocations.length) {
+        await allocateStatementPayment(tx, orgId, after);
+      }
+      tx.set(ref, after);
+      return { before: before, after: after };
+    });
+    if (!out) return 'ignored:org-mismatch';
+
+
+    // Stripe's fee, the net and the exact method from the charge (best
+    // effort) - before the orders are recomputed, so a paid order records how.
+    if (out.after.succeededAt && out.after.feeCents === undefined && out.after.stripe.chargeId) {
+      try {
+        var s2 = connectStripe();
+        var ch = await s2.stripe.charges.retrieve(out.after.stripe.chargeId, { expand: ['balance_transaction'] }, { stripeAccount: event.account });
+        var bt = ch && ch.balance_transaction;
+        var feePatch = {};
+        if (bt && typeof bt === 'object') { feePatch.feeCents = Number(bt.fee) || 0; feePatch.netCents = Number(bt.net) || 0; }
+        if (ch && ch.payment_method_details && ch.payment_method_details.type) {
+          feePatch.method = ({ card: 'card', us_bank_account: 'ach' })[ch.payment_method_details.type] || 'other';
+          feePatch.methodExact = true;
+        }
+        if (Object.keys(feePatch).length) { await ref.set(feePatch, { merge: true }); Object.assign(out.after, feePatch); }
+      } catch (e) { console.warn('stripeConnectWebhook: fee lookup failed for ' + out.after.stripe.chargeId + ': ' + e.message); }
+    }
+
+
+    var ids = out.after.orderIds || [];
+    for (var i = 0; i < ids.length; i++) await recomputeOrder(orgId, ids[i], { flipStatus: true });
+
+    var wasPending = !!(out.before && CORE.paymentStatus(out.before) === 'pending' && out.before.pendingAt);
+    await notifyPayment(orgId, out.after, CORE.paymentTransition(out.before, out.after), wasPending);
+    return 'payment:' + out.after.status;
+  }
+
+  // Statement payments (phase 5) cover several invoices; until then a
+  // statement payment has nothing to allocate.
+  async function allocateStatementPayment(tx, orgId, payment) {
+    payment.orderIds = payment.orderIds || [];
+  }
+
+
+  // ───────────────────────────────── daily: sent invoices past due -> overdue ────
+
+  async function runOverdueSweep(onlyOrgId) {
+    var orgs = [];
+    if (onlyOrgId) {
+      var one = await db.collection('organizations').doc(onlyOrgId).get();
+      if (one.exists) orgs.push({ id: one.id, data: one.data() });
+    } else {
+      var snap = await db.collection('organizations').where('payments.enabled', '==', true).get();
+      snap.docs.forEach(function (d) { orgs.push({ id: d.id, data: d.data() }); });
+    }
+    var stats = { orgs: orgs.length, checked: 0, changed: 0, overdue: 0 };
+    for (var i = 0; i < orgs.length; i++) {
+      var q = await db.collection('purchaseOrders').where('orgId', '==', orgs[i].id)
+        .where('invoice.status', 'in', CORE.OPEN_INVOICE_STATUSES).get();
+      for (var j = 0; j < q.docs.length; j++) {
+        stats.checked++;
+        try {
+          var r = await recomputeOrder(orgs[i].id, q.docs[j].id);
+          if (r && r.changed) stats.changed++;
+          if (r && r.state && r.state.status === 'overdue') stats.overdue++;
+        } catch (e) { console.error('overdue sweep ' + q.docs[j].id + ':', e.message); }
+      }
+    }
+    return stats;
+  }
+
+  var invoiceOverdueScheduled = functions.pubsub.schedule('0 6 * * *').timeZone('America/New_York').onRun(async function () {
+    var stats = await runOverdueSweep();
+    console.log('invoiceOverdueScheduled:', JSON.stringify(stats));
+    return null;
+  });
 
   var stripeConnectWebhook = functions.https.onRequest(async function (req, res) {
     var cfg = config();
@@ -732,8 +965,10 @@ module.exports = function createInvoicing(deps) {
     invoiceReverseManualPayment: invoiceReverseManualPayment,
     invoicePayLinkStatus: invoicePayLinkStatus,
     invoicePayLinkCheckout: invoicePayLinkCheckout,
+    invoiceOverdueScheduled: invoiceOverdueScheduled,
     // For tests
     _internal: { handleConnectEvent: handleConnectEvent, claimAccount: claimAccount,
-                 recomputeOrder: recomputeOrder, ensureIssued: ensureIssued }
+                 recomputeOrder: recomputeOrder, ensureIssued: ensureIssued, runOverdueSweep: runOverdueSweep,
+                 sendEmail: sendEmail }
   };
 };

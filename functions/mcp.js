@@ -19,6 +19,7 @@
 var INV = require('./inventory');
 var ORD = require('./orders');
 var HIST = require('./itemHistory');
+var INVC = require('./invoicingCore');
 
 module.exports = function createMcpFunction(deps) {
   var functions = deps.functions;
@@ -57,7 +58,12 @@ module.exports = function createMcpFunction(deps) {
     'data problem. Report it. Do not fix it.',
     '',
     'Never adjust a quantity unless the user explicitly asked for that change in that',
-    'message. "Check the count on 2091" means look, not fix. Always pass a reason.'
+    'message. "Check the count on 2091" means look, not fix. Always pass a reason.',
+    '',
+    'INVOICES AND PAYMENTS: list_orders and list_open_invoices carry each invoice\'s',
+    'real payment status from the payments ledger (Stripe and recorded checks/cash).',
+    'balanceDue is what is still owed; daysOverdue counts from the due date. Report',
+    'these as read - never infer that an invoice was paid from anything else.'
   ].join('\n');
 
   // ---------------------------------------------------------------- tools ----
@@ -120,7 +126,10 @@ module.exports = function createMcpFunction(deps) {
       title: 'List Orders',
       description: 'List purchase orders, newest first. Filter by status: draft, confirmed, paid, packed, shipped, cancelled. ' +
         'Orders with a shipping label include `shipping`: carrier, service, trackingNumber, trackingUrl, and one tracking number per box for multi-box shipments ' +
-        '(the same data as the Shipping tab). An order shipped on the customer\'s own carrier account without a label made in SkidSling has no `shipping`.',
+        '(the same data as the Shipping tab). An order shipped on the customer\'s own carrier account without a label made in SkidSling has no `shipping`. ' +
+        'Shipped and paid orders include `invoice`: status (draft = not sent, sent, partially_paid, paid, overdue, void), invoiceTotal, amountPaid, balanceDue, ' +
+        'paymentPending (a bank transfer still clearing), dueDate, daysOverdue, sentAt, lastReminderAt, reminderCount - read from the payments ledger. ' +
+        'For "who owes us money" use list_open_invoices.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -132,6 +141,25 @@ module.exports = function createMcpFunction(deps) {
         additionalProperties: false
       },
       annotations: { title: 'List Orders', readOnlyHint: true }
+    },
+    {
+      name: 'list_open_invoices',
+      title: 'List Open Invoices',
+      description: 'Every invoice with money still owed (shipped, not paid, not cancelled), most overdue first, with the real payment status from the payments ledger: ' +
+        'invoiceTotal, amountPaid, balanceDue, paymentPending (bank transfer still clearing), dueDate, daysOverdue, agingBucket (current, 1-30, 31-60, 61-90, 90+), ' +
+        'sentAt, lastReminderAt, reminderCount, remindersPaused, and the customer\'s doNotRemind / remindByPhone flags. Read-only. ' +
+        'Amounts are dollars; the *Cents fields are the exact integers. Orders a person marked Paid by hand count as paid.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          customer: { type: 'string', description: 'Only invoices whose customer name contains this text (case-insensitive)' },
+          overdueOnly: { type: 'boolean', description: 'Only invoices past their due date' },
+          minDaysOverdue: { type: 'integer', minimum: 0, description: 'Only invoices at least this many days past due' },
+          limit: { type: 'integer', minimum: 1, maximum: 500, description: 'Max invoices to return (default 100)' }
+        },
+        additionalProperties: false
+      },
+      annotations: { title: 'List Open Invoices', readOnlyHint: true }
     },
     {
       name: 'find_data_problems',
@@ -360,6 +388,31 @@ module.exports = function createMcpFunction(deps) {
     return tokens.every(function (t) { return hay.indexOf(t) !== -1; });
   }
 
+  // ---- invoices (read-only; the same rules as functions/invoicingCore.js) ----
+  async function invoiceContext(orgId) {
+    var org = await db.collection('organizations').doc(orgId).get();
+    var p = (org.exists && org.data().payments) || {};
+    var tz = p.autoSend && INVC.validTimeZone(p.autoSend.timeZone) ? p.autoSend.timeZone : INVC.DEFAULT_TZ;
+    var today = INVC.localDay(Date.now(), tz);
+    return { tz: tz, today: today, todayIso: INVC.dayToIso(today) };
+  }
+  function invoiceRow(o, ctx) {
+    var st = INVC.invoiceState(o, null, ctx.today, ctx.tz);
+    if (!st.issued && !o.invoice) return null;
+    var inv = o.invoice || {};
+    return {
+      status: st.status,
+      invoiceTotal: INVC.centsToDollars(st.totalCents), amountPaid: INVC.centsToDollars(st.paidCents),
+      balanceDue: INVC.centsToDollars(st.balanceCents),
+      invoiceTotalCents: st.totalCents, amountPaidCents: st.paidCents, balanceDueCents: st.balanceCents,
+      paymentPending: st.paymentPending, pendingAmount: INVC.centsToDollars(st.pendingCents),
+      markedPaidByHand: st.manualPaid,
+      dueDate: st.dueDate || null, daysOverdue: st.daysOverdue,
+      sentAt: inv.sentAt || null, lastReminderAt: inv.lastReminderAt || null, reminderCount: inv.reminderCount || 0,
+      remindersPaused: !!inv.remindersPaused
+    };
+  }
+
   function paginate(list, args) {
     var offset = Math.max(parseInt(args.offset) || 0, 0);
     var limit = Math.min(Math.max(parseInt(args.limit) || 100, 1), 500);
@@ -518,6 +571,7 @@ module.exports = function createMcpFunction(deps) {
 
     if (name === 'list_orders') {
       var osnap = await db.collection('purchaseOrders').where('orgId', '==', auth.orgId).get();
+      var invCtx = await invoiceContext(auth.orgId);
       var orders = osnap.docs.map(function (d) {
         var o = d.data();
         var row = { id: d.id, orderNumber: o.poNumber || '', customerPO: o.customerPO || '',
@@ -536,6 +590,8 @@ module.exports = function createMcpFunction(deps) {
             boxes: (lbl.allLabels || []).map(function (b) { return b.trackingNumber; }).filter(Boolean)
           };
         }
+        var inv = invoiceRow(o, invCtx);
+        if (inv) row.invoice = inv;
         return row;
       });
       if (args.status) orders = orders.filter(function (o) { return o.status === args.status; });
@@ -547,6 +603,46 @@ module.exports = function createMcpFunction(deps) {
       orders.sort(function (a, b) { return (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0); });
       var lim3 = Math.min(Math.max(parseInt(args.limit) || 50, 1), 200);
       return { matched: orders.length, returned: Math.min(lim3, orders.length), documentsRead: osnap.size, orders: orders.slice(0, lim3) };
+    }
+
+    if (name === 'list_open_invoices') {
+      var isnap = await db.collection('purchaseOrders').where('orgId', '==', auth.orgId).get();
+      var ictx = await invoiceContext(auth.orgId);
+      var csnap2 = await db.collection('customers').where('orgId', '==', auth.orgId).get();
+      var custFlags = {};
+      csnap2.docs.forEach(function (d) {
+        var c = d.data();
+        custFlags[d.id] = { doNotRemind: !!c.doNotRemind, remindByPhone: !!c.remindByPhone };
+      });
+      var open = [];
+      isnap.docs.forEach(function (d) {
+        var o = d.data();
+        var inv = invoiceRow(o, ictx);
+        if (!inv || inv.balanceDueCents <= 0 || inv.status === 'void') return;
+        var flags = custFlags[o.customerId] || {};
+        open.push(Object.assign({
+          orderId: d.id, orderNumber: o.poNumber || '', customerPO: o.customerPO || '',
+          customer: o.customerName || '', customerId: o.customerId || '',
+          doNotRemind: !!flags.doNotRemind, remindByPhone: !!flags.remindByPhone,
+          agingBucket: INVC.agingBucket(inv.daysOverdue)
+        }, inv));
+      });
+      if (args.customer) {
+        var cq2 = String(args.customer).toLowerCase();
+        open = open.filter(function (r) { return r.customer.toLowerCase().indexOf(cq2) !== -1; });
+      }
+      if (args.overdueOnly) open = open.filter(function (r) { return r.daysOverdue > 0; });
+      if (args.minDaysOverdue) open = open.filter(function (r) { return r.daysOverdue >= parseInt(args.minDaysOverdue); });
+      open.sort(function (a, b) { return (b.daysOverdue - a.daysOverdue) || (b.balanceDueCents - a.balanceDueCents); });
+      var totalCents = open.reduce(function (t, r) { return t + r.balanceDueCents; }, 0);
+      var byBucket = {};
+      INVC.AGING_BUCKETS.forEach(function (k) { byBucket[k] = 0; });
+      open.forEach(function (r) { byBucket[r.agingBucket] += r.balanceDueCents; });
+      Object.keys(byBucket).forEach(function (k) { byBucket[k] = INVC.centsToDollars(byBucket[k]); });
+      var lim4 = Math.min(Math.max(parseInt(args.limit) || 100, 1), 500);
+      return { matched: open.length, returned: Math.min(lim4, open.length), today: ictx.todayIso,
+               totalOutstanding: INVC.centsToDollars(totalCents), outstandingByAge: byBucket,
+               documentsRead: isnap.size + csnap2.size + 1, invoices: open.slice(0, lim4) };
     }
 
     if (name === 'find_data_problems') {

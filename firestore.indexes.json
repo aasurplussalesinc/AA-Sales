@@ -48,6 +48,14 @@
         { "fieldPath": "orgId", "order": "ASCENDING" },
         { "fieldPath": "orderIds", "arrayConfig": "CONTAINS" }
       ]
+    },
+    {
+      "collectionGroup": "purchaseOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "orgId", "order": "ASCENDING" },
+        { "fieldPath": "invoice.status", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

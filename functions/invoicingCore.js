@@ -114,6 +114,11 @@ function connectionState(payments) {
 
 var ALLOWED_METHODS = ['card', 'us_bank_account'];
 
+function escapeHtml(v) {
+  return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 var EMAIL_RE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:"]+$/;
 function isEmail(v) { return typeof v === 'string' && v.length <= 254 && EMAIL_RE.test(v.trim()); }
 
@@ -287,11 +292,17 @@ function invoiceDueDay(order, tz) {
  * give the same status. A success outranks a failure - a declined card
  * followed by a good one on the same payment intent is a payment.
  */
+/** Money taken back after a payment: refunds plus a lost dispute. */
+function refundedOf(p) {
+  var amount = Number(p.amountCents) || 0;
+  return Math.min((Number(p.refundedCents) || 0) + (Number(p.disputeLostCents) || 0), amount);
+}
+
 function paymentStatus(p) {
   p = p || {};
   if (p.voidedAt) return 'voided';
   var amount = Number(p.amountCents) || 0;
-  var refunded = Math.min(Number(p.refundedCents) || 0, amount);
+  var refunded = refundedOf(p);
   if (p.succeededAt) {
     if (amount > 0 && refunded >= amount) return 'refunded';
     if (refunded > 0) return 'partially_refunded';
@@ -325,7 +336,7 @@ function paymentShare(p, orderId) {
   var amount = Number(p.amountCents) || 0;
   var allocated = allocs.reduce(function (s, a) { return s + (Number(a.cents) || 0); }, 0);
   var credit = Math.max(0, amount - allocated);
-  var refunded = Math.min(Number(p.refundedCents) || 0, amount);
+  var refunded = refundedOf(p);
   var refundLeft = Math.max(0, refunded - credit);        // credit is refunded first
   var effective = allocs.map(function (a) { return Number(a.cents) || 0; });
   for (var i = effective.length - 1; i >= 0 && refundLeft > 0; i--) {
@@ -520,6 +531,199 @@ function buildCheckoutParams(a) {
   return params;
 }
 
+// ────────────────────────────────────────── Stripe events -> ledger facts ────
+
+var PAYMENT_EVENT_TYPES = [
+  'checkout.session.completed',
+  'checkout.session.async_payment_succeeded',
+  'checkout.session.async_payment_failed',
+  'payment_intent.processing',
+  'payment_intent.succeeded',
+  'payment_intent.payment_failed',
+  'charge.refunded',
+  'charge.dispute.created',
+  'charge.dispute.closed'
+];
+
+function idOf(v) { return v && typeof v === 'object' ? v.id : (v || null); }
+function stripeMethod(type) {
+  if (type === 'us_bank_account' || type === 'ach_debit' || type === 'ach_credit_transfer') return 'ach';
+  if (type === 'card') return 'card';
+  return type ? 'other' : null;
+}
+function metaFrom(m) {
+  m = m || {};
+  if (m.skidsling !== 'invoice-payment' || !m.orgId) return null;
+  return { orgId: String(m.orgId), kind: m.kind === 'statement' ? 'statement' : 'invoice',
+           orderId: m.orderId || '', orderNumber: m.orderNumber || '', customerId: m.customerId || '',
+           surchargeCents: Math.max(0, parseInt(m.surchargeCents, 10) || 0) };
+}
+
+/**
+ * The facts one Stripe event states about one payment (keyed by payment
+ * intent). Pure: uses only the event, never the clock, so replaying events
+ * in any order gives identical facts. Returns null for anything that is not
+ * a SkidSling invoice payment (e.g. the company's own unrelated Stripe sales).
+ *
+ * `meta` is null when the event itself does not say which org/order it is
+ * for (charge and dispute events); the caller then looks the payment up.
+ */
+function paymentFactsFromEvent(event) {
+  if (!event || PAYMENT_EVENT_TYPES.indexOf(event.type) === -1) return null;
+  var o = (event.data && event.data.object) || {};
+  var at = (Number(event.created) || 0) * 1000;
+  var f = { paymentIntentId: null, meta: null, at: at, set: {} };
+
+  if (event.type.indexOf('checkout.session.') === 0) {
+    if (o.mode && o.mode !== 'payment') return null;
+    f.meta = metaFrom(o.metadata);
+    if (!f.meta) return null;
+    f.paymentIntentId = idOf(o.payment_intent);
+    f.set.checkoutSessionId = o.id || null;
+    if (o.amount_total !== undefined && o.amount_total !== null) f.set.grossCents = Number(o.amount_total) || 0;
+    if (event.type === 'checkout.session.completed') {
+      // Paid on completion means a card (bank debits always complete unpaid).
+      if (o.payment_status === 'paid' || o.payment_status === 'no_payment_required') { f.set.succeededAt = at; f.set.methodGuess = 'card'; }
+      else { f.set.pendingAt = at; f.set.methodGuess = 'ach'; }   // async (bank) payments complete unpaid
+    } else if (event.type === 'checkout.session.async_payment_succeeded') {
+      f.set.succeededAt = at;
+    } else {
+      f.set.failedAt = at;
+      f.set.failureMessage = 'Bank payment failed';
+    }
+    if (o.customer_details && o.customer_details.email) f.set.payerEmail = String(o.customer_details.email).toLowerCase();
+    return f;
+  }
+
+  if (event.type.indexOf('payment_intent.') === 0) {
+    f.meta = metaFrom(o.metadata);
+    if (!f.meta) return null;
+    f.paymentIntentId = o.id || null;
+    if (o.amount !== undefined) f.set.grossCents = Number(o.amount) || 0;
+    if (o.latest_charge) f.set.chargeId = idOf(o.latest_charge);
+    var types = o.payment_method_types || [];
+    if (event.type === 'payment_intent.processing') {
+      f.set.pendingAt = at;
+      if (types.length === 1) f.set.methodGuess = stripeMethod(types[0]);
+      else f.set.methodGuess = 'ach';                            // only bank debits sit in processing
+    } else if (event.type === 'payment_intent.succeeded') {
+      f.set.succeededAt = at;
+      if (o.amount_received) f.set.grossCents = Number(o.amount_received) || 0;
+      if (types.length === 1) f.set.methodGuess = stripeMethod(types[0]);
+    } else {
+      f.set.failedAt = at;
+      var err = o.last_payment_error || {};
+      f.set.failureMessage = String(err.message || err.code || 'Payment failed').slice(0, 200);
+      if (err.payment_method && err.payment_method.type) f.set.methodGuess = stripeMethod(err.payment_method.type);
+    }
+    return f;
+  }
+
+  if (event.type === 'charge.refunded') {
+    f.paymentIntentId = idOf(o.payment_intent);
+    f.meta = metaFrom(o.metadata);                  // present only if Stripe copied it
+    f.set.chargeId = o.id || null;
+    f.set.refundedGrossCents = Number(o.amount_refunded) || 0;
+    if (o.payment_method_details && o.payment_method_details.type) f.set.method = stripeMethod(o.payment_method_details.type);
+    return f;
+  }
+
+  // disputes
+  f.paymentIntentId = idOf(o.payment_intent);
+  f.meta = metaFrom(o.metadata);
+  f.set.chargeId = idOf(o.charge);
+  if (event.type === 'charge.dispute.created') {
+    f.set.disputed = true;
+    f.set.disputeAmountCents = Number(o.amount) || 0;
+  } else {
+    f.set.disputed = true;
+    f.set.disputeClosed = true;
+    f.set.disputeStatus = o.status || null;
+    if (o.status === 'lost') f.set.disputeLostCents = Number(o.amount) || 0;
+  }
+  return f;
+}
+
+/**
+ * Merge an event's facts into a payment row. Every rule is commutative and
+ * idempotent (earliest success, latest failure, largest refund, flags only
+ * ever turn on), which is what makes out-of-order and repeated webhook
+ * deliveries converge on the same row.
+ */
+function mergePaymentFacts(existing, facts, meta) {
+  var p = JSON.parse(JSON.stringify(existing || {}));
+  var s = facts.set || {};
+  var m = meta || facts.meta || {};
+  var minT = function (a, b) { return a && b ? Math.min(a, b) : (a || b || null); };
+  var maxT = function (a, b) { return a && b ? Math.max(a, b) : (a || b || null); };
+  var maxN = function (a, b) { return Math.max(Number(a) || 0, Number(b) || 0); };
+
+  p.source = 'stripe';
+  p.currency = 'usd';
+  if (!p.orgId && m.orgId) p.orgId = m.orgId;
+  if (!p.kind) p.kind = m.kind || 'invoice';
+  if (!p.orderId && m.orderId) p.orderId = m.orderId;
+  if (!p.orderNumber && m.orderNumber) p.orderNumber = m.orderNumber;
+  if (!p.customerId && m.customerId) p.customerId = m.customerId;
+  if (p.surchargeCents === undefined && m.surchargeCents !== undefined) p.surchargeCents = m.surchargeCents;
+  p.stripe = p.stripe || {};
+  if (facts.paymentIntentId) p.stripe.paymentIntentId = facts.paymentIntentId;
+  if (s.checkoutSessionId) p.stripe.checkoutSessionId = s.checkoutSessionId;
+  if (s.chargeId) p.stripe.chargeId = s.chargeId;
+
+  if (s.grossCents !== undefined) p.grossCents = maxN(p.grossCents, s.grossCents);
+  var surcharge = Number(p.surchargeCents) || 0;
+  if (p.grossCents !== undefined) p.amountCents = Math.max(0, p.grossCents - surcharge);
+
+  p.firstEventAt = minT(p.firstEventAt, facts.at);
+  p.createdAt = p.firstEventAt;
+  if (s.pendingAt) p.pendingAt = minT(p.pendingAt, s.pendingAt);
+  if (s.succeededAt) p.succeededAt = minT(p.succeededAt, s.succeededAt);
+  if (s.failedAt) {
+    // Latest failure's message wins; a tie is broken by the text itself so
+    // the result does not depend on delivery order.
+    if (!p.failedAt || s.failedAt > p.failedAt) p.failureMessage = s.failureMessage || null;
+    else if (s.failedAt === p.failedAt && String(s.failureMessage || '') > String(p.failureMessage || '')) p.failureMessage = s.failureMessage;
+    p.failedAt = maxT(p.failedAt, s.failedAt);
+  }
+  if (s.refundedGrossCents !== undefined) p.refundedGrossCents = maxN(p.refundedGrossCents, s.refundedGrossCents);
+  if (p.refundedGrossCents !== undefined) p.refundedCents = Math.min(Number(p.refundedGrossCents) || 0, Number(p.amountCents) || 0);
+  if (s.disputed) p.disputed = true;
+  if (s.disputeClosed) p.disputeClosed = true;
+  if (s.disputeStatus) p.disputeStatus = s.disputeStatus;
+  if (s.disputeAmountCents !== undefined) p.disputeAmountCents = maxN(p.disputeAmountCents, s.disputeAmountCents);
+  if (s.disputeLostCents !== undefined) p.disputeLostCents = maxN(p.disputeLostCents, s.disputeLostCents);
+  if (s.payerEmail && !p.payerEmail) p.payerEmail = s.payerEmail;
+  // Exact method (from the charge) beats a guess; among guesses, bank wins
+  // because only bank debits ever sit in "processing".
+  if (s.method) { p.method = s.method; p.methodExact = true; }
+  else if (s.methodGuess && !p.methodExact && (!p.method || s.methodGuess === 'ach')) p.method = s.methodGuess;
+  p.status = paymentStatus(p);
+  return p;
+}
+
+/** What changed, for notifications: the status moves between the two rows. */
+function paymentTransition(before, after) {
+  var a = before ? paymentStatus(before) : null;
+  var b = paymentStatus(after);
+  var out = [];
+  if (a !== b) out.push(b);
+  if (after.disputed && !(before && before.disputed)) out.push('disputed');
+  if ((Number(after.refundedCents) || 0) > (Number(before && before.refundedCents) || 0) && b === 'partially_refunded' && a === b) out.push('partially_refunded');
+  return out;
+}
+
+/** Aging bucket for collections: current / 1-30 / 31-60 / 61-90 / 90+. */
+function agingBucket(daysOverdue) {
+  var d = Number(daysOverdue) || 0;
+  if (d <= 0) return 'current';
+  if (d <= 30) return '1-30';
+  if (d <= 60) return '31-60';
+  if (d <= 90) return '61-90';
+  return '90+';
+}
+var AGING_BUCKETS = ['current', '1-30', '31-60', '61-90', '90+'];
+
 module.exports = {
   invoicingConfig: invoicingConfig,
   hmac: hmac,
@@ -530,6 +734,7 @@ module.exports = {
   connectionState: connectionState,
   ALLOWED_METHODS: ALLOWED_METHODS,
   isEmail: isEmail,
+  escapeHtml: escapeHtml,
   emailList: emailList,
   sanitizePaymentSettings: sanitizePaymentSettings,
   // money & dates
@@ -563,5 +768,13 @@ module.exports = {
   cardSurchargeCents: cardSurchargeCents,
   paymentOptions: paymentOptions,
   invoiceLineName: invoiceLineName,
-  buildCheckoutParams: buildCheckoutParams
+  buildCheckoutParams: buildCheckoutParams,
+  // webhook facts
+  PAYMENT_EVENT_TYPES: PAYMENT_EVENT_TYPES,
+  paymentFactsFromEvent: paymentFactsFromEvent,
+  paymentMetaFromStripe: metaFrom,
+  mergePaymentFacts: mergePaymentFacts,
+  paymentTransition: paymentTransition,
+  agingBucket: agingBucket,
+  AGING_BUCKETS: AGING_BUCKETS
 };

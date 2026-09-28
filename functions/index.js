@@ -3277,3 +3277,4 @@ exports.invoiceRecordManualPayment = INVOICING.invoiceRecordManualPayment;
 exports.invoiceReverseManualPayment = INVOICING.invoiceReverseManualPayment;
 exports.invoicePayLinkStatus = INVOICING.invoicePayLinkStatus;
 exports.invoicePayLinkCheckout = INVOICING.invoicePayLinkCheckout;
+exports.invoiceOverdueScheduled = INVOICING.invoiceOverdueScheduled;

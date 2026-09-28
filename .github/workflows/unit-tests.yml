@@ -1,11 +1,13 @@
 # Pure-logic tests that need no emulator and no Firebase project.
+# The invoicing tests load functions/ code, which needs functions/ packages
+# (stripe, node-fetch), so those are installed first.
 name: Unit tests
 
 on:
   push:
-    paths: ['src/**', 'tests/unit/**', '.github/workflows/unit-tests.yml']
+    paths: ['src/**', 'functions/**', 'tests/unit/**', '.github/workflows/unit-tests.yml']
   pull_request:
-    paths: ['src/**', 'tests/unit/**', '.github/workflows/unit-tests.yml']
+    paths: ['src/**', 'functions/**', 'tests/unit/**', '.github/workflows/unit-tests.yml']
   workflow_dispatch:
 
 jobs:
@@ -16,4 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: functions
       - run: node --test tests/unit/*.test.mjs

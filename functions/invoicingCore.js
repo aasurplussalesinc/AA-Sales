@@ -941,13 +941,44 @@ function emailShell(a) {
     '<tr><td style="padding:22px 32px 30px;font-size:15px;line-height:1.55">' + a.body + '</td></tr>' +
     (!fromSkid && contact ? '<tr><td style="padding:16px 32px;background:#f9fafb;border-top:1px solid #eef0f3;font-size:12px;color:#6b7280;text-align:center">' + contact + '</td></tr>' : '') +
     '</table>' +
-    '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr>' +
-    '<td style="vertical-align:middle;padding-right:7px"><a href="' + SKIDSLING_URL + '"><img src="' + SKIDSLING_URL + '/logo.png" alt="SkidSling" width="18" height="18" style="display:block;border:0"></a></td>' +
-    '<td style="vertical-align:middle;font-size:12px;color:#6b7280">' + (fromSkid ? 'SkidSling payments' : 'Invoicing by') +
-    ' <a href="' + SKIDSLING_URL + '" style="color:' + SKIDSLING_GREEN + ';font-weight:700;text-decoration:none">SkidSling</a></td></tr></table>' +
-    (fromSkid ? '' : '<div style="max-width:480px;font-size:11px;color:#9ca3af;margin-top:6px;line-height:1.5">Sent on behalf of ' + e(org.name || 'the sender') +
+    (fromSkid ? skidSlingSignature() : skidSlingPromo(a.campaign) +
+      '<div style="max-width:480px;font-size:11px;color:#9ca3af;margin-top:10px;line-height:1.5">Sent on behalf of ' + e(org.name || 'the sender') +
       '. Payments are processed by Stripe; nobody will ever ask for your card or bank details by email.</div>') +
     '</td></tr></table></body></html>';
+}
+
+var SKIDSLING_TAGLINE = 'Warehouse management that ships.';
+
+/** skidsling.com link tagged so sign-ups from invoices show up in analytics. */
+function skidSlingLink(campaign) {
+  return SKIDSLING_URL + '/?utm_source=skidsling_invoice&utm_medium=email&utm_campaign=' + encodeURIComponent(campaign || 'invoice');
+}
+
+/**
+ * Below every customer-facing email: the people paying invoices run
+ * warehouses too. Logo, tagline, one line of pitch, the free trial.
+ */
+function skidSlingPromo(campaign) {
+  var href = skidSlingLink(campaign);
+  return '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin-top:18px;background:#0f1f18;border-radius:12px">' +
+    '<tr><td style="padding:20px 24px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>' +
+    '<td style="width:52px;vertical-align:middle;padding-right:14px"><a href="' + href + '"><img src="' + SKIDSLING_URL + '/logo.png" alt="SkidSling" width="44" height="44" style="display:block;border:0"></a></td>' +
+    '<td style="vertical-align:middle">' +
+    '<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#6ee7b7">Invoicing powered by</div>' +
+    '<div style="font-size:19px;font-weight:800;color:#ffffff;line-height:1.2">SkidSling <span style="font-weight:500;color:#a7f3d0;font-size:14px">&middot; ' + SKIDSLING_TAGLINE + '</span></div>' +
+    '</td></tr></table>' +
+    '<div style="font-size:13px;color:#d1fae5;line-height:1.55;margin-top:12px">Inventory by shelf, pick &amp; pack, shipping labels, and invoices that get paid and chase themselves. Built for wholesalers and warehouses.</div>' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px"><tr><td style="border-radius:7px;background:#34d399">' +
+    '<a href="' + href + '" style="display:inline-block;padding:10px 20px;font-family:' + FONT + ';font-size:14px;font-weight:700;color:#0f1f18;text-decoration:none">Start a free 14-day trial &rarr;</a>' +
+    '</td></tr></table>' +
+    '</td></tr></table>';
+}
+
+/** Footer for SkidSling's own notes to a company (already a customer). */
+function skidSlingSignature() {
+  return '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:18px"><tr>' +
+    '<td style="vertical-align:middle;padding-right:8px"><a href="' + SKIDSLING_URL + '"><img src="' + SKIDSLING_URL + '/logo.png" alt="SkidSling" width="22" height="22" style="display:block;border:0"></a></td>' +
+    '<td style="vertical-align:middle;font-size:12px;color:#6b7280"><a href="' + SKIDSLING_URL + '" style="color:' + SKIDSLING_GREEN + ';font-weight:700;text-decoration:none">SkidSling</a> &middot; ' + SKIDSLING_TAGLINE + '</td></tr></table>';
 }
 
 /**
@@ -1007,7 +1038,7 @@ function invoiceEmailContent(a) {
     ]) +
     '<p style="margin:18px 0 0;font-size:14px;color:#4b5563">The invoice PDF is attached. Questions about it? Just reply to this email.</p>' +
     '<p style="margin:16px 0 0;font-size:14px">Thank you,<br><strong>' + e(org.name || '') + '</strong></p>';
-  var html = emailShell({ org: org, title: subject, label: label, body: body,
+  var html = emailShell({ org: org, title: subject, label: label, body: body, campaign: a.kind === 'invoice' ? 'invoice' : 'reminder',
     preheader: (payUrl ? 'Pay ' + amount + ' online' : amount + ' due') + (sub ? ' - ' + sub : '') + '. Invoice ' + num + ' from ' + orgName + '.' });
   return { subject: subject, html: html };
 }
@@ -1147,7 +1178,7 @@ function statementEmailContent(a) {
     rows + '<tr><td colspan="2" style="padding:10px 0;font-weight:700;border-top:1px solid #d1d5db">Total due</td><td style="padding:10px 0;text-align:right;font-weight:700;border-top:1px solid #d1d5db">' + e(total) + '</td></tr></table>' +
     '<p style="margin:18px 0 0;font-size:14px;color:#4b5563">Questions, or already paid? Just reply to this email.</p>' +
     '<p style="margin:16px 0 0;font-size:14px">Thank you,<br><strong>' + e(org.name || '') + '</strong></p>';
-  var html = emailShell({ org: org, title: subject, label: 'Statement', body: body,
+  var html = emailShell({ org: org, title: subject, label: 'Statement', body: body, campaign: 'statement',
     preheader: total + ' across ' + count + (overdue ? ', ' + overdue + ' past due' : '') + '.' });
   return { subject: subject, html: html };
 }

@@ -161,6 +161,18 @@ export default function PayInvoice() {
           </>
         )}
       </div>
+      <a href={SKIDSLING_PROMO_URL} target="_blank" rel="noopener noreferrer" style={promo}>
+        <img src="/logo.png" alt="SkidSling" width="40" height="40" style={{ flexShrink: 0 }} />
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: '#6ee7b7' }}>Invoicing powered by</span>
+          <span style={{ display: 'block', fontSize: 17, fontWeight: 800, color: '#fff' }}>SkidSling <span style={{ fontWeight: 500, fontSize: 13, color: '#a7f3d0' }}>· Warehouse management that ships.</span></span>
+          <span style={{ display: 'block', fontSize: 12, color: '#d1fae5', marginTop: 4 }}>Inventory, pick &amp; pack, shipping labels and invoices that chase themselves. Start a free 14-day trial →</span>
+        </span>
+      </a>
     </div>
   );
 }
+
+const SKIDSLING_PROMO_URL = 'https://skidsling.com/?utm_source=skidsling_invoice&utm_medium=pay_page&utm_campaign=pay_page';
+const promo = { display: 'flex', alignItems: 'center', gap: 14, maxWidth: 520, margin: '16px auto 0', padding: '16px 20px', boxSizing: 'border-box',
+  background: '#0f1f18', borderRadius: 12, textDecoration: 'none' };

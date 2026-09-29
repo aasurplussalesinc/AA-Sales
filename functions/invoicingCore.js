@@ -919,11 +919,12 @@ function emailShell(a) {
   var e = escapeHtml;
   var org = a.org || {};
   var fromSkid = a.sender === 'skidsling';
-  var color = fromSkid ? SKIDSLING_GREEN : brandColor(org);
-  var logo = fromSkid ? SKIDSLING_URL + '/logo-email.png' : safeUrl(org.logoUrl);
-  var name = fromSkid ? 'SkidSling' : (org.name || '');
+  // The company's logo/name always sits on top, even on SkidSling's own payment alerts; SkidSling signs the bottom.
+  var color = brandColor(org);
+  var logo = safeUrl(org.logoUrl);
+  var name = org.name || (fromSkid ? 'SkidSling' : '');
   var brand = logo
-    ? '<img src="' + e(logo) + '" alt="' + e(name) + '" height="' + (fromSkid ? 36 : 44) + '" style="display:block;height:' + (fromSkid ? 36 : 44) + 'px;max-width:200px;border:0">'
+    ? '<img src="' + e(logo) + '" alt="' + e(name) + '" height="' + 44 + '" style="display:block;height:' + 44 + 'px;max-width:200px;border:0">'
     : '<div style="font-size:20px;font-weight:800;color:#111827">' + e(name) + '</div>';
   var p = org.payments || {};
   var contact = [org.name, org.phone, (p.billingEmail || org.email)].filter(Boolean).map(e).join(' &nbsp;&middot;&nbsp; ');

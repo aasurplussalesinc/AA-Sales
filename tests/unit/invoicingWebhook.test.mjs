@@ -142,9 +142,10 @@ test('card: checkout + payment_intent.succeeded -> order Paid, fee recorded, com
   const lookups = h.stripe.calls.filter(c => c.fn === 'charges.retrieve');
   assert.deepEqual(lookups[0].opts, { stripeAccount: ACCT }, 'Stripe calls go to the connected account');
   assert.equal(acts(h, 'PAYMENT_RECEIVED').length, 1, 'one notification, not one per event');
-  assert.match(acts(h, 'PAYMENT_RECEIVED')[0].details.message, /AA6676 paid \$1,200\.00 by card/);
+  assert.match(acts(h, 'PAYMENT_RECEIVED')[0].details.message, /AA6676 paid \$1,200\.00 by card - from Buyer LLC/);
   assert.equal(h.emails.length, 1);
   assert.deepEqual(h.emails[0].to, ['ar@acme.test'], 'the company, never the customer');
+  assert.ok(h.emails[0].html.includes('From <strong style="color:#111827">Buyer LLC</strong>'), 'who paid is in the email');
 });
 
 test('replaying every event (Stripe retries) changes nothing', async () => {
@@ -196,7 +197,7 @@ test('ACH: pending shows as pending; a failure days later restores the balance',
   assert.equal(h.db.data('payments/stripe_pi_a').status, 'failed');
   const failed = acts(h, 'PAYMENT_FAILED');
   assert.equal(failed.length, 1);
-  assert.match(failed[0].details.message, /FAILED \(Insufficient funds\) - the balance is due again/);
+  assert.match(failed[0].details.message, /FAILED \(Insufficient funds\) - from Buyer LLC - the balance is due again/);
 });
 
 test('ACH half now, card for the rest: partially paid, then paid', async () => {

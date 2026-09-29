@@ -920,7 +920,7 @@ function emailShell(a) {
   var org = a.org || {};
   var fromSkid = a.sender === 'skidsling';
   var color = fromSkid ? SKIDSLING_GREEN : brandColor(org);
-  var logo = fromSkid ? SKIDSLING_URL + '/logo.png' : safeUrl(org.logoUrl);
+  var logo = fromSkid ? SKIDSLING_URL + '/logo-email.png' : safeUrl(org.logoUrl);
   var name = fromSkid ? 'SkidSling' : (org.name || '');
   var brand = logo
     ? '<img src="' + e(logo) + '" alt="' + e(name) + '" height="' + (fromSkid ? 36 : 44) + '" style="display:block;height:' + (fromSkid ? 36 : 44) + 'px;max-width:200px;border:0">'
@@ -1199,6 +1199,8 @@ function paymentNoticeContent(a) {
   var body =
     '<div style="display:inline-block;padding:4px 10px;border-radius:999px;background:' + looks[1] + '1a;color:' + looks[1] + ';font-size:12px;font-weight:700">' + e(looks[0]) + '</div>' +
     (a.amount ? amountPanel(a.label || 'Payment', a.amount, a.method ? 'by ' + a.method : '', a.kind === 'PAYMENT_FAILED' || a.kind === 'PAYMENT_DISPUTED') : '') +
+    (a.from || a.payerEmail ? '<p style="margin:14px 0 0;font-size:14px;color:#4b5563">From <strong style="color:#111827">' + e(a.from || a.payerEmail) + '</strong>' +
+      (a.from && a.payerEmail ? ' &middot; ' + e(a.payerEmail) : '') + '</p>' : '') +
     '<p style="margin:14px 0 0">' + e(a.text) + '.</p>' +
     (link ? emailButton(link, 'Open Collections', SKIDSLING_GREEN) : '') +
     '<p style="margin:18px 0 0;font-size:12px;color:#9ca3af">For ' + e(org.name || 'your company') +

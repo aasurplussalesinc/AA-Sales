@@ -162,7 +162,7 @@ export default function PayInvoice() {
         )}
       </div>
       <a href={SKIDSLING_PROMO_URL} target="_blank" rel="noopener noreferrer" style={promo}>
-        <img src="/logo.png" alt="SkidSling" width="40" height="40" style={{ flexShrink: 0 }} />
+        <img src="/logo-email.png" alt="SkidSling" width="40" height="40" style={{ flexShrink: 0 }} />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: '#6ee7b7' }}>Invoicing powered by</span>
           <span style={{ display: 'block', fontSize: 17, fontWeight: 800, color: '#fff' }}>SkidSling <span style={{ fontWeight: 500, fontSize: 13, color: '#a7f3d0' }}>· Warehouse management that ships.</span></span>

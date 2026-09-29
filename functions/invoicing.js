@@ -777,11 +777,24 @@ module.exports = function createInvoicing(deps) {
       payment.orderNumber || 'An invoice';
     var amt = CORE.formatCents(payment.amountCents);
     var how = METHOD_WORDS[payment.method] || 'online payment';
+    // Who paid: the customer record, else the name on the (first) order, else nothing.
+    var from = '';
+    try {
+      var cust = await loadCustomer(orgId, payment.customerId);
+      from = cust ? (cust.company || cust.customerName || cust.name || '') : '';
+      var firstOrder = (payment.orderIds || [])[0];
+      if (!from && firstOrder && ID_RE.test(firstOrder)) {
+        var osnap = await db.collection('purchaseOrders').doc(firstOrder).get();
+        if (osnap.exists && osnap.data().orgId === orgId) from = osnap.data().customerName || '';
+      }
+    } catch (e) { from = ''; }
+    from = String(from || '').trim();
+    var byWhom = from ? ' - from ' + from : '';
     var lines = [];
     transitions.forEach(function (t) {
-      if (t === 'succeeded') lines.push({ action: 'PAYMENT_RECEIVED', text: label + ' paid ' + amt + ' by ' + how });
-      else if (t === 'pending') lines.push({ action: 'PAYMENT_PENDING', text: label + ': ' + amt + ' ' + how + ' started - it clears in a few business days' });
-      else if (t === 'failed' && wasPending) lines.push({ action: 'PAYMENT_FAILED', text: label + ': ' + amt + ' ' + how + ' FAILED' + (payment.failureMessage ? ' (' + payment.failureMessage + ')' : '') + ' - the balance is due again' });
+      if (t === 'succeeded') lines.push({ action: 'PAYMENT_RECEIVED', text: label + ' paid ' + amt + ' by ' + how + byWhom });
+      else if (t === 'pending') lines.push({ action: 'PAYMENT_PENDING', text: label + ': ' + amt + ' ' + how + ' started' + byWhom + ' - it clears in a few business days' });
+      else if (t === 'failed' && wasPending) lines.push({ action: 'PAYMENT_FAILED', text: label + ': ' + amt + ' ' + how + ' FAILED' + (payment.failureMessage ? ' (' + payment.failureMessage + ')' : '') + byWhom + ' - the balance is due again' });
       else if (t === 'refunded' || t === 'partially_refunded') lines.push({ action: 'PAYMENT_REFUNDED', text: label + ': ' + CORE.formatCents(payment.refundedCents) + ' refunded of ' + amt });
       else if (t === 'disputed') lines.push({ action: 'PAYMENT_DISPUTED', text: label + ': the customer disputed the ' + amt + ' payment with their bank. Respond in your Stripe dashboard.' });
     });
@@ -795,7 +808,7 @@ module.exports = function createInvoicing(deps) {
         var isRefund = lines[i].action === 'PAYMENT_REFUNDED';
         var notice = CORE.paymentNoticeContent({ org: org, kind: lines[i].action, text: lines[i].text, appBaseUrl: config().appBaseUrl,
           amount: CORE.formatCents(isRefund ? payment.refundedCents : payment.amountCents), label: isRefund ? 'Refunded' : label,
-          method: isRefund ? '' : how });
+          method: isRefund ? '' : how, from: from, payerEmail: payment.payerEmail || '' });
         await sendEmail({ to: [to], internal: true, fromName: 'SkidSling', subject: notice.subject, html: notice.html });
       }
     }

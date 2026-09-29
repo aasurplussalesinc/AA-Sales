@@ -165,7 +165,7 @@ export default function PayInvoice() {
         <img src="/logo-email.png" alt="SkidSling" width="40" height="40" style={{ flexShrink: 0 }} />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: '#6ee7b7' }}>Invoicing powered by</span>
-          <span style={{ display: 'block', fontSize: 17, fontWeight: 800, color: '#fff' }}>SkidSling <span style={{ fontWeight: 500, fontSize: 13, color: '#a7f3d0' }}>· Warehouse management that ships.</span></span>
+          <span style={{ display: 'block', fontSize: 17, fontWeight: 800, color: '#fff' }}>SkidSling <span style={{ fontWeight: 500, fontSize: 13, color: '#a7f3d0' }}>· Enterprise power. Small-business speed.</span></span>
           <span style={{ display: 'block', fontSize: 12, color: '#d1fae5', marginTop: 4 }}>Inventory, pick &amp; pack, shipping labels and invoices that chase themselves. Start a free 14-day trial →</span>
         </span>
       </a>

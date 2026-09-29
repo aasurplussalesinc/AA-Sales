@@ -2,7 +2,7 @@
   "name": "skidsling",
   "private": true,
   "version": "1.0.0",
-  "description": "SkidSling \u2014 Warehouse Management That Ships",
+  "description": "SkidSling \u2014 Enterprise power. Small-business speed.",
   "type": "module",
   "scripts": {
     "dev": "vite",

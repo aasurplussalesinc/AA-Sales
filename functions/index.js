@@ -1981,7 +1981,7 @@ function buildWelcomeEmailHtml(orgName, userName) {
       <h1 style="color:#fff;font-size:28px;margin:0;letter-spacing:0.5px">
         <span style="color:#fff">Skid</span><span style="color:#34d399">Sling</span>
       </h1>
-      <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px">Warehouse Management That Ships</p>
+      <p style="color:rgba(255,255,255,0.85);margin:8px 0 0;font-size:14px">Enterprise power. Small-business speed.</p>
     </div>
     <div style="padding:36px 32px">
       <h2 style="color:#0d1b17;font-size:22px;margin:0 0 16px">Welcome${orgName ? `, ${orgName}` : ''}! 🎉</h2>

@@ -948,7 +948,7 @@ function emailShell(a) {
     '</td></tr></table></body></html>';
 }
 
-var SKIDSLING_TAGLINE = 'Warehouse management that ships.';
+var SKIDSLING_TAGLINE = 'Enterprise power. Small-business speed.';
 
 /** skidsling.com link tagged so sign-ups from invoices show up in analytics. */
 function skidSlingLink(campaign) {

@@ -176,17 +176,18 @@ export default function LandingPage() {
             letterSpacing: -1, marginBottom: 28,
             textTransform: 'uppercase',
           }}>
-            <span style={{ display: 'block', color: 'white' }}>Warehouse</span>
-            <span style={{ display: 'block', color: '#34d399' }}>Management</span>
-            <span style={{ display: 'block', color: 'white' }}>That Ships.</span>
+            <span style={{ display: 'block', color: 'white' }}>Enterprise</span>
+            <span style={{ display: 'block', color: '#34d399' }}>Power.</span>
+            <span style={{ display: 'block', color: 'white' }}>Small-Business</span>
+            <span style={{ display: 'block', color: '#34d399' }}>Speed.</span>
           </h1>
 
           <p style={{
             fontSize: 18, color: 'rgba(255,255,255,0.7)', maxWidth: 560,
             margin: '0 auto 44px', lineHeight: 1.75, fontWeight: 400
           }}>
-            Inventory tracking, pick lists, purchase orders, and live shipping rates —
-            one platform for businesses that move real freight.
+            Warehouse management for businesses that move real freight: inventory tracking,
+            pick lists, purchase orders, live shipping rates, and invoices that chase themselves.
           </p>
 
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>

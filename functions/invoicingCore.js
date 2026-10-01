@@ -968,7 +968,7 @@ function skidSlingPromo(campaign) {
     '<div style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#6ee7b7">Invoicing powered by</div>' +
     '<div style="font-size:19px;font-weight:800;color:#ffffff;line-height:1.2">SkidSling <span style="font-weight:500;color:#a7f3d0;font-size:14px">&middot; ' + SKIDSLING_TAGLINE + '</span></div>' +
     '</td></tr></table>' +
-    '<div style="font-size:13px;color:#d1fae5;line-height:1.55;margin-top:12px">Inventory by shelf, pick &amp; pack, shipping labels, and invoices that get paid and chase themselves. Built for wholesalers and warehouses.</div>' +
+    '<div style="font-size:13px;color:#d1fae5;line-height:1.55;margin-top:12px">Inventory by shelf, pick &amp; pack, shipping labels, and automated invoicing. Built for wholesalers and warehouses.</div>' +
     '<table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px"><tr><td style="border-radius:7px;background:#34d399">' +
     '<a href="' + href + '" style="display:inline-block;padding:10px 20px;font-family:' + FONT + ';font-size:14px;font-weight:700;color:#0f1f18;text-decoration:none">Start a free 14-day trial &rarr;</a>' +
     '</td></tr></table>' +

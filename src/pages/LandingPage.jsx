@@ -187,7 +187,7 @@ export default function LandingPage() {
             margin: '0 auto 44px', lineHeight: 1.75, fontWeight: 400
           }}>
             Warehouse management for businesses that move real freight: inventory tracking,
-            pick lists, purchase orders, live shipping rates, and invoices that chase themselves.
+            pick lists, purchase orders, live shipping rates, and automated invoicing.
           </p>
 
           <div style={{ display: 'flex', gap: 14, justifyContent: 'center', flexWrap: 'wrap' }}>

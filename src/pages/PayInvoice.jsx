@@ -114,6 +114,7 @@ export default function PayInvoice() {
               <div style={{ background: '#e8f5e9', padding: 12, borderRadius: 6, marginTop: 14, fontSize: 14 }}>
                 <strong>Thank you!</strong> Your payment was submitted. Card payments show here within a minute; a bank
                 transfer can take a few business days to clear.
+                <PrintNote />
               </div>
             )}
             {cancelled && !justPaid && <div style={{ fontSize: 13, color: '#666', marginTop: 12 }}>Payment was not completed. You can try again below.</div>}
@@ -121,6 +122,7 @@ export default function PayInvoice() {
             {view.balanceCents === 0 && (!isStatement || view.pendingCents === 0) && (
               <div style={{ background: '#e8f5e9', padding: 14, borderRadius: 6, marginTop: 16, fontSize: 16, fontWeight: 700, color: '#2e7d32' }}>
                 {view.status === 'void' ? 'This invoice has been cancelled.' : 'Paid, thank you!'}
+                {view.status !== 'void' && !justPaid && <PrintNote />}
               </div>
             )}
             {view.pendingCents > 0 && view.amountDueNowCents === 0 && view.balanceCents > 0 && (
@@ -161,7 +163,8 @@ export default function PayInvoice() {
           </>
         )}
       </div>
-      <a href={SKIDSLING_PROMO_URL} target="_blank" rel="noopener noreferrer" style={promo}>
+      <style>{'@media print { .no-print { display: none !important; } }'}</style>
+      <a className="no-print" href={SKIDSLING_PROMO_URL} target="_blank" rel="noopener noreferrer" style={promo}>
         <img src="/logo-email.png" alt="SkidSling" width="40" height="40" style={{ flexShrink: 0 }} />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 11, letterSpacing: '.1em', textTransform: 'uppercase', color: '#6ee7b7' }}>Invoicing powered by</span>
@@ -173,6 +176,19 @@ export default function PayInvoice() {
   );
 }
 
-const SKIDSLING_PROMO_URL = 'https://skidsling.com/?utm_source=skidsling_invoice&utm_medium=pay_page&utm_campaign=pay_page';
+/** Paid screens: ask the customer to keep a copy, with a one-click print (the button itself doesn't print). */
+function PrintNote() {
+  return (
+    <div style={{ marginTop: 10, fontSize: 14, fontWeight: 400, color: '#1b5e20' }}>
+      Please print this page for your records.{' '}
+      <button className="no-print" type="button" onClick={() => window.print()}
+        style={{ marginLeft: 6, padding: '6px 14px', border: '1px solid #2e7d32', borderRadius: 6, background: '#fff', color: '#2e7d32', fontWeight: 700, cursor: 'pointer' }}>
+        Print
+      </button>
+    </div>
+  );
+}
+
+const SKIDSLING_PROMO_URL ='https://skidsling.com/?utm_source=skidsling_invoice&utm_medium=pay_page&utm_campaign=pay_page';
 const promo = { display: 'flex', alignItems: 'center', gap: 14, maxWidth: 520, margin: '16px auto 0', padding: '16px 20px', boxSizing: 'border-box',
   background: '#0f1f18', borderRadius: 12, textDecoration: 'none' };

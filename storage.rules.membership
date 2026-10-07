@@ -1,0 +1,44 @@
+rules_version = '2';
+
+// SkidSling Cloud Storage rules (security audit 2026-10-07). Until now these lived only in the Firebase console,
+// and the documented catalog rule let ANY signed-in user write into ANY org's folder. Now:
+//   catalog/{orgId}/...   flyer logos / cover graphics: public read, write only by an active member of that org
+//   receipts/{orgId}/...  expense receipts (can hold payroll detail): manager / admin of that org only
+// Files already uploaded keep working: getDownloadURL links carry their own token and don't go through rules.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function memberRole(orgId) {
+      return firestore.get(/databases/(default)/documents/orgMembers/$(orgId + '_' + request.auth.uid)).data;
+    }
+    function hasRole(orgId, roles) {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/orgMembers/$(orgId + '_' + request.auth.uid))
+        && memberRole(orgId).get('status', 'active') == 'active'
+        && memberRole(orgId).get('role', 'staff') in roles;
+    }
+    function imageUnder(mb) {
+      return request.resource.size < mb * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpe?g|gif|webp)');
+    }
+    function receiptFile() {
+      return request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpe?g|webp|heic|heif)|application/pdf');
+    }
+
+    match /catalog/{orgId}/{allPaths=**} {
+      allow read: if true;
+      allow create, update: if hasRole(orgId, ['admin', 'manager', 'staff']) && imageUnder(10);
+      allow delete: if hasRole(orgId, ['admin', 'manager', 'staff']);
+    }
+
+    match /receipts/{orgId}/{allPaths=**} {
+      allow read, delete: if hasRole(orgId, ['admin', 'manager']);
+      allow create, update: if hasRole(orgId, ['admin', 'manager']) && receiptFile();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -16,7 +16,10 @@ put('orgMembers/acme_frank',  { orgId:'acme', userId:'frank', role:'staff' });
 put('orgMembers/victim_bob',  { orgId:'victim', userId:'bob', role:'admin',   status:'active' });
 put('orgMembers/aa-surplus-sales_owner', { orgId:'aa-surplus-sales', userId:'owner', role:'admin', status:'active' });
 put('orgMembers/aa-surplus-sales_ops',   { orgId:'aa-surplus-sales', userId:'ops',   role:'staff', status:'active' });
-put('inviteCodes/GOOD-CODE', { code:'GOOD-CODE', orgId:'acme', role:'staff', status:'active', uses:0, maxUses:5, updatedAt:1 });
+put('inviteCodes/GOOD-CODE', { code:'GOOD-CODE', orgId:'acme', role:'staff', status:'active', uses:0, maxUses:5, updatedAt:1, expiresAt: 9e12 });
+// audit 2026-10-07: expiry and use limits are now enforced
+put('inviteCodes/OLD-CODE', { code:'OLD-CODE', orgId:'acme', role:'staff', status:'active', uses:0, maxUses:5, updatedAt:1, expiresAt: 1000 });
+put('inviteCodes/USED-CODE', { code:'USED-CODE', orgId:'acme', role:'staff', status:'active', uses:1, maxUses:1, updatedAt:1, expiresAt: 9e12 });
 put('inviteCodes/DEAD-CODE', { code:'DEAD-CODE', orgId:'acme', role:'admin', status:'revoked', uses:1, maxUses:1, updatedAt:1 });
 put('invitations/inv1', { orgId:'acme', role:'staff', status:'pending', email:'newbie@x.com', token:'t1' });
 put('items/item1',   { orgId:'acme',   sku:'2091', quantity:5 });
@@ -86,6 +89,12 @@ T('non-creator cannot claim first admin', false,
 T('self-join with a live invite code', true,
   { path:P+'orgMembers/acme_newbie', op:'create', auth:newbie,
     request_resource:{ orgId:'acme', userId:'newbie', role:'staff', status:'active', inviteCode:'GOOD-CODE' } });
+T('self-join with an EXPIRED invite code', false,
+  { path:P+'orgMembers/acme_newbie', op:'create', auth:newbie, time: 5000,
+    request_resource:{ orgId:'acme', userId:'newbie', role:'staff', status:'active', inviteCode:'OLD-CODE' } });
+T('self-join with a used-up single-use code', false,
+  { path:P+'orgMembers/acme_newbie', op:'create', auth:newbie,
+    request_resource:{ orgId:'acme', userId:'newbie', role:'staff', status:'active', inviteCode:'USED-CODE' } });
 T('self-join with a revoked invite code', false,
   { path:P+'orgMembers/acme_newbie', op:'create', auth:newbie,
     request_resource:{ orgId:'acme', userId:'newbie', role:'admin', status:'active', inviteCode:'DEAD-CODE' } });
@@ -134,13 +143,13 @@ T('listing every invite code on the platform', false, { path:P+'inviteCodes/GOOD
 T('admin lists their own org codes', true, { path:P+'inviteCodes/GOOD-CODE', op:'list', auth:alice, resource:D('inviteCodes/GOOD-CODE') });
 T('redeeming a code bumps uses by one', true,
   { path:P+'inviteCodes/GOOD-CODE', op:'update', auth:newbie, resource:D('inviteCodes/GOOD-CODE'),
-    request_resource:{ code:'GOOD-CODE', orgId:'acme', role:'staff', status:'active', uses:1, maxUses:5, updatedAt:2 } });
+    request_resource:{ code:'GOOD-CODE', orgId:'acme', role:'staff', status:'active', uses:1, maxUses:5, updatedAt:2, expiresAt: 9e12 } });
 T('redemption cannot rewrite the granted role', false,
   { path:P+'inviteCodes/GOOD-CODE', op:'update', auth:newbie, resource:D('inviteCodes/GOOD-CODE'),
-    request_resource:{ code:'GOOD-CODE', orgId:'acme', role:'admin', status:'active', uses:1, maxUses:5, updatedAt:2 } });
+    request_resource:{ code:'GOOD-CODE', orgId:'acme', role:'admin', status:'active', uses:1, maxUses:5, updatedAt:2, expiresAt: 9e12 } });
 T('redemption cannot rewind the counter', false,
   { path:P+'inviteCodes/GOOD-CODE', op:'update', auth:newbie, resource:D('inviteCodes/GOOD-CODE'),
-    request_resource:{ code:'GOOD-CODE', orgId:'acme', role:'staff', status:'active', uses:0, maxUses:5, updatedAt:2 } });
+    request_resource:{ code:'GOOD-CODE', orgId:'acme', role:'staff', status:'active', uses:0, maxUses:5, updatedAt:2, expiresAt: 9e12 } });
 T('redemption cannot raise maxUses', false,
   { path:P+'inviteCodes/GOOD-CODE', op:'update', auth:newbie, resource:D('inviteCodes/GOOD-CODE'),
     request_resource:{ code:'GOOD-CODE', orgId:'acme', role:'staff', status:'active', uses:1, maxUses:500, updatedAt:2 } });

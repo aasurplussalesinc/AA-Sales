@@ -299,6 +299,8 @@ function evalNode(n, ctx) {
 }
 
 function callMethod(base, method, args, ctx, src) {
+  // request.time is modelled as epoch milliseconds; Firestore's timestamp.toMillis() returns the same number
+  if (typeof base === 'number' && method === 'toMillis') return base;
   if (base instanceof DiffVal && method === 'affectedKeys') return base.affectedKeys();
   if (base instanceof KeySet) {
     if (method === 'hasAny') return base.hasAny(args[0]);

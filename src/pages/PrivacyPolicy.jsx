@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 
 export default function PrivacyPolicy() {
-  const lastUpdated = 'April 14, 2026';
+  const lastUpdated = 'October 7, 2026';
 
   return (
     <div style={{
@@ -98,6 +98,21 @@ export default function PrivacyPolicy() {
             <SubHead>Stripe</SubHead>
             <P>We use Stripe to process payments. Your payment card information is handled directly by Stripe and is never stored on our servers. See Stripe's Privacy Policy at stripe.com/privacy.</P>
 
+            <SubHead>Shipping carriers and services</SubHead>
+            <P>If you connect ShipStation or EasyPost, or ship with UPS, USPS, FedEx or DHL through SkidSling, the shipment details needed to quote and buy a label (addresses, package details, customs information) are sent to that service.</P>
+
+            <SubHead>Brevo</SubHead>
+            <P>We use Brevo (Sendinblue) to send account and service emails, which means it receives your email address and the message content.</P>
+
+            <SubHead>Google Cloud AI (Speech-to-Text and Document AI)</SubHead>
+            <P>If you use voice entry or scan receipts, the audio or image is sent to Google Cloud to be transcribed or read, and the result is returned to your account. Google processes it on our behalf.</P>
+
+            <SubHead>Stripe (customer invoicing)</SubHead>
+            <P>If you send invoices or payment links to your own customers through SkidSling, their payment is processed by Stripe, which receives the invoice details and their payment information.</P>
+
+            <SubHead>Vercel and Google Fonts</SubHead>
+            <P>The SkidSling web app is hosted on Vercel and loads fonts from Google Fonts; both receive standard request data such as your IP address and browser.</P>
+
             <SubHead>Shippo</SubHead>
             <P>If you use the shipping features, shipment data (sender/recipient addresses, package details) is shared with Shippo to generate shipping labels and rates. See Shippo's Privacy Policy at goshippo.com/privacy.</P>
 
@@ -118,7 +133,10 @@ export default function PrivacyPolicy() {
           </Section>
 
           <Section title="6. Data Retention">
-            <P>We retain your account data for as long as your account is active. If you cancel your subscription, we will retain your data for 30 days to allow you to export it. After 30 days, your data will be permanently deleted from our systems.</P>
+            <P>We retain your account data for as long as your account is active. If you cancel your subscription or your trial ends, we keep your data for 30 days so you can export it; after that the account is scheduled for deletion, and you can ask us at any time to delete it sooner (see below). Backups roll off on a schedule.</P>
+
+            <SubHead>Your customers' data</SubHead>
+            <P>The customer, order and shipping records your business enters into SkidSling belong to your business. For that data you are the controller and we are your service provider (processor): we use it only to provide SkidSling to you, keep it confidential and isolated from other organizations, use the service providers listed above as sub-processors, help you answer your customers' requests, and delete or return it when you ask. If you need a signed data processing addendum, email support@skidsling.com.</P>
             <P>Billing records and transaction logs may be retained longer as required by tax and financial regulations.</P>
           </Section>
 

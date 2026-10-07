@@ -7,7 +7,7 @@ import { addressWithUnit } from '../../functions/orderDocument.mjs';
 const functions = getFunctions();
 
 export default function Shipping() {
-  const { organization, userRole } = useAuth();
+  const { organization, userRole, refreshOrganization } = useAuth();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState({});
@@ -103,10 +103,12 @@ export default function Shipping() {
     setCheckMinute(s.shippingCheckMinute ?? 0);
     setPreferredCarrier(s.preferredCarrier || 'ups');
     setAutoPurchase(s.autoPurchaseLabels || false);
-    setShippoApiKey(s.shippoApiKey || '');
+    // Audit 2026-10-07: keys are never sent to the browser any more. The org doc only carries a masked hint
+    // (settings.carrierKeyHints); an empty box means "keep the saved key", typing replaces it.
+    setShippoApiKey('');
     setShippingProvider(s.shippingProvider || 'shippo');
-    setShipstationApiKey(s.shipstationApiKey || '');
-    setEasypostApiKey(s.easypostApiKey || '');
+    setShipstationApiKey('');
+    setEasypostApiKey('');
     if (s.shippingFromAddress) {
       setFromAddress({
         name: s.shippingFromAddress.name || '',
@@ -127,9 +129,10 @@ export default function Shipping() {
     setSavingSettings(true);
     setError('');
     try {
-      const activeKey = shippingProvider === 'shipstation' ? shipstationApiKey
-        : shippingProvider === 'easypost' ? easypostApiKey
-        : shippoApiKey;
+      const savedHint = (f) => !!(organization?.settings?.carrierKeyHints?.[f] || organization?.settings?.[f]);
+      const activeKey = shippingProvider === 'shipstation' ? (shipstationApiKey || savedHint('shipstationApiKey'))
+        : shippingProvider === 'easypost' ? (easypostApiKey || savedHint('easypostApiKey'))
+        : (shippoApiKey || savedHint('shippoApiKey'));
       if (!activeKey) {
         const providerName = shippingProvider === 'shipstation' ? 'ShipStation'
         : shippingProvider === 'easypost' ? 'EasyPost'
@@ -145,11 +148,20 @@ export default function Shipping() {
         'settings.preferredCarrier': preferredCarrier,
         'settings.autoPurchaseLabels': autoPurchase,
         'settings.shippingFromAddress': fromAddress,
-        'settings.shippoApiKey': shippoApiKey,
         'settings.shippingProvider': shippingProvider,
-        'settings.shipstationApiKey': shipstationApiKey,
-        'settings.easypostApiKey': easypostApiKey,
       });
+
+      // Keys go to the server only (orgSecrets), and only the ones typed in just now.
+      const typedKeys = {};
+      if (shippoApiKey.trim()) typedKeys.shippoApiKey = shippoApiKey.trim();
+      if (shipstationApiKey.trim()) typedKeys.shipstationApiKey = shipstationApiKey.trim();
+      if (easypostApiKey.trim()) typedKeys.easypostApiKey = easypostApiKey.trim();
+      if (Object.keys(typedKeys).length) {
+        const saveKeys = httpsCallable(functions, 'saveCarrierKeys');
+        await saveKeys({ orgId: organization.id, ...typedKeys });
+        setShippoApiKey(''); setShipstationApiKey(''); setEasypostApiKey('');
+        if (refreshOrganization) await refreshOrganization();
+      }
 
       // Also update via Cloud Function for the scheduler
       try {
@@ -875,7 +887,7 @@ export default function Shipping() {
                   type={showEasypostKey ? 'text' : 'password'}
                   value={easypostApiKey}
                   onChange={e => setEasypostApiKey(e.target.value)}
-                  placeholder="EZTK... or EZ..."
+                  placeholder={organization?.settings?.carrierKeyHints?.easypostApiKey ? `Saved: ${organization.settings.carrierKeyHints.easypostApiKey} — type to replace` : "EZTK... or EZ..."}
                   style={{
                     flex: 1, padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)',
                     background: 'var(--bg-input)', color: 'var(--text-primary)',
@@ -892,9 +904,9 @@ export default function Shipping() {
                   {showEasypostKey ? '🙈 Hide' : '👁️ Show'}
                 </button>
               </div>
-              {easypostApiKey && (
-                <div style={{ marginTop: 8, fontSize: 12, color: easypostApiKey.startsWith('EZTK') ? '#f59e0b' : '#4CAF50' }}>
-                  {easypostApiKey.startsWith('EZTK') ? '⚠️ Using TEST key — not real labels' : '✅ Using Production key'}
+              {(easypostApiKey || organization?.settings?.carrierKeyHints?.easypostApiKey) && (
+                <div style={{ marginTop: 8, fontSize: 12, color: (easypostApiKey || organization?.settings?.carrierKeyHints?.easypostApiKey || '').startsWith('EZTK') ? '#f59e0b' : '#4CAF50' }}>
+                  {(easypostApiKey || organization?.settings?.carrierKeyHints?.easypostApiKey || '').startsWith('EZTK') ? '⚠️ Using TEST key — not real labels' : '✅ Using Production key'}
                 </div>
               )}
               <div style={{ marginTop: 10, padding: '10px 12px', background: 'var(--bg-surface-2)', borderRadius: 6, fontSize: 12, color: 'var(--text-muted)' }}>
@@ -919,7 +931,7 @@ export default function Shipping() {
                 type={showApiKey ? 'text' : 'password'}
                 value={shippoApiKey}
                 onChange={e => setShippoApiKey(e.target.value)}
-                placeholder="shippo_live_xxxxxxxxxxxxxxxx"
+                placeholder={organization?.settings?.carrierKeyHints?.shippoApiKey ? `Saved: ${organization.settings.carrierKeyHints.shippoApiKey} — type to replace` : "shippo_live_xxxxxxxxxxxxxxxx"}
                 style={{
                   flex: 1, padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)',
                   fontSize: 14, fontFamily: 'monospace'
@@ -987,7 +999,7 @@ export default function Shipping() {
                   type={showShipstationKey ? 'text' : 'password'}
                   value={shipstationApiKey}
                   onChange={e => setShipstationApiKey(e.target.value)}
-                  placeholder="Your ShipStation API Key"
+                  placeholder={organization?.settings?.carrierKeyHints?.shipstationApiKey ? `Saved: ${organization.settings.carrierKeyHints.shipstationApiKey} — type to replace` : "Your ShipStation API Key"}
                   style={{
                     flex: 1, padding: '10px 12px', borderRadius: 6, border: '1px solid var(--border)',
                     background: 'var(--bg-input)', color: 'var(--text-primary)',

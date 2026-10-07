@@ -345,6 +345,12 @@ export default function SubscriptionRequired() {
 
         {/* Footer */}
         <div style={{ textAlign: 'center', color: '#404040', fontSize: 12 }}>
+          <p style={{ marginBottom: 6, color: '#8a8a8a', fontSize: 12.5, lineHeight: 1.6 }}>
+            Subscriptions renew automatically each month (or year) at the price shown until you cancel.
+            Cancel anytime online in Settings → Manage Billing; it takes effect at the end of the paid period.
+            30-day money-back guarantee on your first payment. By subscribing you agree to the{' '}
+            <Link to="/terms" style={{ color: '#34d399' }}>Terms of Service</Link>.
+          </p>
           <p style={{ marginBottom: 6 }}>
             🔒 Secure payment powered by Stripe · No credit card stored by SkidSling
           </p>

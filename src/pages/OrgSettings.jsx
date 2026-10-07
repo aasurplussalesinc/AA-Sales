@@ -267,12 +267,13 @@ export default function OrgSettings() {
               <strong>⚠️ Trial Expired - Please subscribe to continue</strong>
             )}
           </div>
-          <button 
-            className="btn btn-primary"
-            onClick={() => alert('Stripe billing portal would open here')}
-          >
-            {subscriptionStatus.plan === 'trial' ? 'Upgrade Now' : 'Manage Billing'}
-          </button>
+          {/* Audit 2026-10-07: this was a placeholder alert, so paying customers had no way to cancel online
+              (ToS 14 promises it; NY GBL 527-a requires it). Stripe's portal handles card, invoices and cancel. */}
+          {subscriptionStatus.plan === 'trial' ? (
+            <Link to="/subscription-required" className="btn btn-primary">Upgrade Now</Link>
+          ) : (
+            <ManageBillingButton orgId={organization?.id} />
+          )}
         </div>
       )}
 

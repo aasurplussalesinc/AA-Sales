@@ -72,7 +72,10 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/inviteCodes/$(code))
         && inviteDoc(code).orgId == orgId
         && inviteDoc(code).status == 'active'
-        && inviteDoc(code).role == role;
+        && inviteDoc(code).role == role
+        // audit 2026-10-07: codes expire (7 days) and are single/limited use - both were stored, never checked
+        && inviteDoc(code).get('expiresAt', 0) > request.time.toMillis()
+        && inviteDoc(code).get('uses', 0) < inviteDoc(code).get('maxUses', 1);
     }
     // The legacy invitation flow. OrgAuthContext.login() still auto-accepts
     // pending invitations for the signed-in address on every login, so this
@@ -109,6 +112,11 @@ service cloud.firestore {
         'payments'
       ]);
     }
+    // Carrier API keys: Cloud Functions only (saveCarrierKeys / carrierKey in functions/index.js).
+    match /orgSecrets/{orgId} {
+      allow read, write: if false;
+    }
+
     match /organizations/{orgId} {
       allow read: if isAuthed() && (isMember(orgId) || isOwnerUser());
       allow update: if isAdmin(orgId) && billingFieldsUntouched();
@@ -178,7 +186,10 @@ service cloud.firestore {
         // while the code is live, and only by one.
         (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uses', 'status', 'updatedAt'])
           && resource.data.status == 'active'
+          && resource.data.get('expiresAt', 0) > request.time.toMillis()
           && request.resource.data.uses == resource.data.uses + 1
+          && request.resource.data.uses <= resource.data.get('maxUses', 1)
+          && request.resource.data.status in ['active', 'exhausted']
           && request.resource.data.orgId == resource.data.orgId
           && request.resource.data.role == resource.data.role)
       );

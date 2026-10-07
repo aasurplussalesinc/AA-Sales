@@ -3,9 +3,9 @@ import { useState, useEffect } from 'react';
 
 const TIERS = [
   {
-    name: 'Starter', monthly: 149, annual: 1490, color: '#b8860b', bg: 'rgba(184,134,11,0.12)',
+    name: 'Starter', monthly: 100, annual: 1000, color: '#b8860b', bg: 'rgba(184,134,11,0.12)',
     tagline: 'Get off spreadsheets',
-    limits: '2 users · 2,000 SKUs · 1 warehouse · 50 orders/mo',
+    limits: '2 users · 500 SKUs · 1 location · 50 orders/mo',
     features: [
       '📦 Real-time inventory tracking',
       '📍 Multi-location management',
@@ -18,9 +18,9 @@ const TIERS = [
     ],
   },
   {
-    name: 'Pro', monthly: 299, annual: 2990, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
+    name: 'Pro', monthly: 250, annual: 2500, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
     tagline: 'Run your orders',
-    limits: '5 users · 10,000 SKUs · 3 warehouses · 200 orders/mo',
+    limits: '5 users · 1,000 SKUs · unlimited locations · 200 orders/mo',
     features: [
       '✅ Everything in Starter',
       '🧾 Full purchase order lifecycle',
@@ -33,9 +33,9 @@ const TIERS = [
     popular: true,
   },
   {
-    name: 'Business', monthly: 449, annual: 4490, color: '#a78bfa', bg: 'rgba(167,139,250,0.12)',
+    name: 'Business', monthly: 350, annual: 3500, color: '#a78bfa', bg: 'rgba(167,139,250,0.12)',
     tagline: 'Ship professionally',
-    limits: '15 users · 50,000 SKUs · 10 warehouses · 1,000 orders/mo',
+    limits: '15 users · 2,000 SKUs · unlimited locations · 1,000 orders/mo',
     features: [
       '✅ Everything in Pro',
       '🚚 Live rates — UPS, USPS, FedEx, DHL',
@@ -48,7 +48,7 @@ const TIERS = [
     ],
   },
   {
-    name: 'Enterprise', monthly: 799, annual: 7990, color: '#34d399', bg: 'rgba(52,211,153,0.12)',
+    name: 'Enterprise', monthly: 500, annual: 5000, color: '#34d399', bg: 'rgba(52,211,153,0.12)',
     tagline: 'The full operation',
     limits: 'Unlimited users · Unlimited SKUs · Unlimited orders',
     features: [
@@ -225,10 +225,10 @@ export default function LandingPage() {
         borderBottom: '1px solid rgba(255,255,255,0.06)', flexWrap: 'wrap'
       }}>
         {[
-          { number: '$149/mo', label: 'Starting Price' },
+          { number: '$100/mo', label: 'Starting Price' },
           { number: '4', label: 'Carriers Supported' },
           { number: '14-Day', label: 'Free Trial' },
-          { number: '99.9%', label: 'Uptime' },
+          { number: 'Cancel', label: 'Anytime Online' },
         ].map((s, i) => (
           <div key={s.label} style={{
             textAlign: 'center', padding: '32px 60px',
@@ -343,7 +343,7 @@ export default function LandingPage() {
               </div>
               <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
                 <strong style={{ color: '#fff' }}>40% off for 24 months</strong>, locked in — plus
-                onboarding &amp; data migration <strong style={{ color: '#fff' }}>free</strong> (normally $1,500).
+                onboarding &amp; data migration <strong style={{ color: '#fff' }}>free</strong>.
                 In exchange we&rsquo;ll ask for a short case study once you&rsquo;re up and running.
               </div>
               <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>

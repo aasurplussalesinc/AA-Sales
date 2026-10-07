@@ -269,13 +269,12 @@ export const OrgDB = {
   generateInviteCode() {
     // Generate code like: AA-7X3K-M2PQ
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // No confusing chars (0,O,1,I)
+    // Audit 2026-10-07: crypto randomness, not Math.random (predictable). 32 chars = exactly 5 bits per pick.
+    const bytes = crypto.getRandomValues(new Uint8Array(8));
     let code = '';
-    for (let i = 0; i < 4; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    code += '-';
-    for (let i = 0; i < 4; i++) {
-      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    for (let i = 0; i < 8; i++) {
+      if (i === 4) code += '-';
+      code += chars.charAt(bytes[i] % chars.length);
     }
     return code;
   },

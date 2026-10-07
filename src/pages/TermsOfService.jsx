@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 
 export default function TermsOfService() {
-  const lastUpdated = 'April 14, 2026';
+  const lastUpdated = 'October 7, 2026';
 
   return (
     <div style={{
@@ -75,12 +75,13 @@ export default function TermsOfService() {
             <P>SkidSling offers the following subscription tiers, billed monthly or annually: Starter ($100/month or $1,000/year), Pro ($250/month or $2,500/year), Business ($350/month or $3,500/year), and Enterprise ($500/month or $5,000/year). Annual plans offer a discount equivalent to two months free. Pricing is subject to change with 30 days' notice.</P>
             <P>New accounts receive a 14-day free trial with no credit card required. After the trial period, continued use requires a paid subscription.</P>
             <P>Monthly subscriptions are billed monthly in advance; annual subscriptions are billed once per year in advance. Payment is processed through Stripe. You authorize us to charge your payment method on a recurring basis until you cancel.</P>
-            <P>All fees are non-refundable except as required by law or as explicitly stated in a refund request reviewed at our discretion. We may issue credits or refunds on a case-by-case basis.</P>
+            <P><strong>30-day money-back guarantee:</strong> if you cancel within 30 days of your first paid subscription charge, email support@skidsling.com and we will refund that first charge in full. Apart from that guarantee, fees are non-refundable except as required by law; we may issue credits or refunds case by case.</P>
+            <P><strong>Automatic renewal:</strong> your subscription renews automatically at the end of each billing period at the then-current price until you cancel. You can cancel online at any time in Settings → Manage Billing; cancellation takes effect at the end of the period you have paid for.</P>
             <P>Failure to pay may result in suspension or termination of your account after reasonable notice.</P>
           </Section>
 
           <Section title="5. Free Trial">
-            <P>The 14-day free trial gives you full access to all features of the plan you select. We will not charge you during the trial period. If you do not add a payment method before the trial ends, your account will be downgraded to read-only access until a subscription is activated.</P>
+            <P>The 14-day free trial gives you full access to all features of the plan you select. We will not charge you during the trial period. If you do not add a payment method before the trial ends, your account will be downgraded to read-only access until a subscription is activated. We keep your data for 30 days after the trial ends so you can subscribe or export it (Settings → Export); after that, the account may be scheduled for deletion.</P>
           </Section>
 
           <Section title="6. Acceptable Use">
@@ -129,7 +130,7 @@ export default function TermsOfService() {
           </Section>
 
           <Section title="14. Termination">
-            <P>You may cancel your account at any time through the account settings or by contacting support@skidsling.com. Cancellation takes effect at the end of the current billing period.</P>
+            <P>You may cancel your subscription at any time in Settings → Manage Billing, or by contacting support@skidsling.com. Cancellation takes effect at the end of the current billing period.</P>
             <P>We may suspend or terminate your account immediately if you violate these Terms, fail to pay, or engage in conduct we determine is harmful to the Service or other users. We will provide reasonable notice where possible.</P>
           </Section>
 

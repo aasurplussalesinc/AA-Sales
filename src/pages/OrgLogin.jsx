@@ -327,7 +327,8 @@ export default function Login() {
             </div>
             
             <p style={styles.terms}>
-              By signing up, you agree to our Terms of Service and Privacy Policy.
+              By signing up, you agree to our <Link to="/terms" target="_blank" style={{ color: 'inherit' }}>Terms of Service</Link> and{' '}
+              <Link to="/privacy" target="_blank" style={{ color: 'inherit' }}>Privacy Policy</Link>.
               No credit card required for trial.
             </p>
           </>

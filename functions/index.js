@@ -170,6 +170,49 @@ function getOrgShippoKey(orgData) {
   return (orgData.settings && orgData.settings.shippoApiKey) || '';
 }
 
+// ── Carrier API keys (audit 2026-10-07) ──
+// Keys used to live in organizations/{orgId}.settings, which every member of the org can read, and the
+// Shipping page showed them in plain text. They now live in orgSecrets/{orgId} (no client access at all, see
+// firestore.rules) and the org doc keeps only a masked hint. Reads fall back to the old field so nothing breaks
+// before scripts/migrate-carrier-keys.js has moved an org's keys.
+const CARRIER_KEY_FIELDS = ['shippoApiKey', 'shipstationApiKey', 'easypostApiKey'];
+async function carrierKey(orgDoc, field) {
+  try {
+    const sec = await db.collection('orgSecrets').doc(orgDoc.id).get();
+    const v = sec.exists ? sec.data()[field] : '';
+    if (v) return v;
+  } catch (e) {
+    console.warn('carrierKey: orgSecrets read failed', e.message);
+  }
+  const d = orgDoc.data() || {};
+  return (d.settings && d.settings[field]) || '';
+}
+function keyHint(v) {
+  return v ? `${String(v).slice(0, 4)}…${String(v).slice(-4)}` : '';
+}
+
+exports.saveCarrierKeys = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  const { orgId } = data || {};
+  await assertOrgMember(context, orgId, 'admin');
+  const secrets = {};
+  const hints = {};
+  const clear = {};
+  for (const f of CARRIER_KEY_FIELDS) {
+    if (typeof data[f] !== 'string') continue;
+    const v = data[f].trim();
+    if (v.length > 400) throw new functions.https.HttpsError('invalid-argument', `${f} is too long`);
+    secrets[f] = v;                                  // '' removes the key
+    hints[`settings.carrierKeyHints.${f}`] = keyHint(v);
+    clear[`settings.${f}`] = admin.firestore.FieldValue.delete();
+  }
+  if (!Object.keys(secrets).length) return { saved: 0 };
+  await db.collection('orgSecrets').doc(orgId).set(
+    { ...secrets, updatedAt: admin.firestore.FieldValue.serverTimestamp(), updatedBy: context.auth.uid }, { merge: true });
+  await db.collection('organizations').doc(orgId).update({ ...hints, ...clear });
+  return { saved: Object.keys(secrets).length };
+});
+
 // The ship-to parsing (formatAddressForShippo) and the unit / attention rules live in shipToAddress.js
 // so every label path shares them and they can be unit-tested.
 var SHIPTO_ADDR = require('./shipToAddress');
@@ -601,7 +644,7 @@ exports.checkPackedOrdersScheduled = functions.pubsub.schedule('every 1 hours').
       var checkHour = (org.settings && org.settings.shippingCheckHour !== undefined) ? org.settings.shippingCheckHour : 15;
       if (estHour !== checkHour) continue;
       if (!(org.settings && org.settings.shippingEnabled)) continue;
-      var apiKey = getOrgShippoKey(org);
+      var apiKey = await carrierKey(orgDoc, 'shippoApiKey');
       if (!apiKey) continue;
       await processOrgPackedOrders(orgId, org, apiKey);
     }
@@ -627,7 +670,7 @@ exports.generateShippingLabel = functions.https.onCall(async function(data, cont
     var order = Object.assign({ id: orderDoc.id }, orderDoc.data());
     if (order.orgId !== orgId) throw new functions.https.HttpsError('permission-denied', 'Wrong org');
     var orgDoc = await db.collection('organizations').doc(orgId).get();
-    var orgData = orgDoc.data(); var apiKey = getOrgShippoKey(orgData);
+    var orgData = orgDoc.data(); var apiKey = await carrierKey(orgDoc, 'shippoApiKey');
     if (!apiKey) throw new functions.https.HttpsError('failed-precondition', 'Shippo API key not configured.');
     var orgSettings = { shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null, preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups', autoPurchaseLabels: !!rateId, preferredService: '' , autoPurchaseMaxPerBox: orgData.autoPurchaseMaxPerBox};
 
@@ -699,7 +742,7 @@ exports.batchGenerateLabels = functions.runWith({ timeoutSeconds: 300, memory: '
   try {
     var orgDoc = await db.collection('organizations').doc(orgId).get();
     if (!orgDoc.exists) throw new functions.https.HttpsError('not-found', 'Org not found');
-    var orgData = orgDoc.data(); var apiKey = getOrgShippoKey(orgData);
+    var orgData = orgDoc.data(); var apiKey = await carrierKey(orgDoc, 'shippoApiKey');
     if (!apiKey) throw new functions.https.HttpsError('failed-precondition', 'Shippo API key not configured.');
     var orgSettings = { shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null, preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups', autoPurchaseLabels: !!autoPurchase, preferredService: '' , autoPurchaseMaxPerBox: orgData.autoPurchaseMaxPerBox};
 
@@ -781,7 +824,7 @@ exports.triggerShippingCheck = functions.https.onCall(async function(data, conte
   try {
     var orgDoc = await db.collection('organizations').doc(orgId).get();
     if (!orgDoc.exists) throw new functions.https.HttpsError('not-found', 'Org not found');
-    var orgData = orgDoc.data(); var apiKey = getOrgShippoKey(orgData);
+    var orgData = orgDoc.data(); var apiKey = await carrierKey(orgDoc, 'shippoApiKey');
     if (!apiKey) throw new functions.https.HttpsError('failed-precondition', 'No API key');
     await processOrgPackedOrders(orgId, orgData, apiKey);
     return { success: true };
@@ -808,7 +851,7 @@ exports.validateShippingAddress = functions.https.onCall(async function(data, co
   await assertOrgMember(context, data.orgId, 'staff');
   try {
     var orgDoc = await db.collection('organizations').doc(data.orgId).get();
-    var apiKey = getOrgShippoKey(orgDoc.data());
+    var apiKey = await carrierKey(orgDoc, 'shippoApiKey');
     if (!apiKey) throw new functions.https.HttpsError('failed-precondition', 'No API key');
     var result = await validateAddress(apiKey, data.address);
     return { isValid: (result.validation_results && result.validation_results.is_valid) || false, messages: (result.validation_results && result.validation_results.messages) || [], suggestedAddress: result };
@@ -825,7 +868,7 @@ exports.getShippingRates = functions.https.onCall(async function(data, context) 
   try {
     var order = await assertOrderInOrg(data.orderId, data.orgId);
     var orgDoc = await db.collection('organizations').doc(data.orgId).get();
-    var orgData = orgDoc.data(); var apiKey = getOrgShippoKey(orgData);
+    var orgData = orgDoc.data(); var apiKey = await carrierKey(orgDoc, 'shippoApiKey');
     if (!apiKey) throw new Error('Shippo API key not configured.');
     var orgSettings = { shippingFromAddress: (orgData.settings && orgData.settings.shippingFromAddress) || null, preferredCarrier: (orgData.settings && orgData.settings.preferredCarrier) || 'ups', autoPurchaseLabels: false, preferredService: '' , autoPurchaseMaxPerBox: orgData.autoPurchaseMaxPerBox};
     var result = await processPackedOrder(apiKey, order, orgSettings);
@@ -974,7 +1017,7 @@ exports.updateCarrierInvoice = functions.https.onCall(async function(data, conte
   await assertOrgMember(context, data.orgId, 'admin');
   try {
     var orgDoc = await db.collection('organizations').doc(data.orgId).get();
-    var apiKey = getOrgShippoKey(orgDoc.data());
+    var apiKey = await carrierKey(orgDoc, 'shippoApiKey');
     if (!apiKey) throw new Error('Shippo API key not configured.');
     
     var carrierAccountId = data.carrierAccountId;
@@ -1084,6 +1127,21 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
   // Without this, a user of tenant A could bind a Stripe customer of their own
   // to tenant B's org doc and then steer B's plan through the webhook.
   await assertOrgMember(context, orgId, 'admin');
+
+  // Audit 2026-10-07: the "annual" prices in Stripe were created with a MONTHLY interval, so an annual plan
+  // would have charged the full yearly amount every month. Never start a checkout whose Stripe price doesn't
+  // bill on the cycle the customer chose.
+  const stripePrice = await stripe.prices.retrieve(priceId);
+  const wantInterval = billingCycle === 'annual' ? 'year' : 'month';
+  if (!stripePrice.recurring || stripePrice.recurring.interval !== wantInterval
+      || (stripePrice.recurring.interval_count || 1) !== 1 || !stripePrice.active) {
+    console.error(`[checkout] refusing ${plan}/${billingCycle}: price ${priceId} bills every `
+      + `${stripePrice.recurring?.interval_count} ${stripePrice.recurring?.interval}, active=${stripePrice.active}`);
+    throw new functions.https.HttpsError('failed-precondition',
+      billingCycle === 'annual'
+        ? 'Annual billing is temporarily unavailable. Please choose monthly, or contact support.'
+        : 'This plan is temporarily unavailable. Please contact support.');
+  }
 
   try {
     // Check if org already has a Stripe customer ID
@@ -1246,7 +1304,7 @@ exports.getShipStationRates = functions.https.onCall(async (data, context) => {
     const toAddress = SHIPTO_ADDR.resolveToAddress(data.toAddress, order);
     // Get org's ShipStation API key
     const orgDoc = await db.collection('organizations').doc(orgId).get();
-    const apiKey = orgDoc.data()?.settings?.shipstationApiKey;
+    const apiKey = await carrierKey(orgDoc, 'shipstationApiKey');
     if (!apiKey) throw new Error('ShipStation API key not configured');
 
     const fromAddr = orgDoc.data()?.settings?.shippingFromAddress;
@@ -1331,7 +1389,7 @@ exports.generateShipStationLabel = functions.https.onCall(async (data, context) 
     // Same recipient (unit in street2, attention as name) as the Shippo path.
     const toAddress = SHIPTO_ADDR.resolveToAddress(data.toAddress, order);
     const orgDoc = await db.collection('organizations').doc(orgId).get();
-    const apiKey = orgDoc.data()?.settings?.shipstationApiKey;
+    const apiKey = await carrierKey(orgDoc, 'shipstationApiKey');
     if (!apiKey) throw new Error('ShipStation API key not configured');
 
     const fromAddr = orgDoc.data()?.settings?.shippingFromAddress;
@@ -1459,7 +1517,7 @@ exports.getEasyPostRates = functions.https.onCall(async (data, context) => {
     // Same recipient (unit in street2, attention as name) as the Shippo path.
     const toAddress = SHIPTO_ADDR.resolveToAddress(data.toAddress, order);
     const orgDoc = await db.collection('organizations').doc(orgId).get();
-    const apiKey = orgDoc.data()?.settings?.easypostApiKey;
+    const apiKey = await carrierKey(orgDoc, 'easypostApiKey');
     if (!apiKey) throw new Error('EasyPost API key not configured. Go to Shipping Settings and enter your EasyPost API key.');
 
     const fromAddr = orgDoc.data()?.settings?.shippingFromAddress;
@@ -1571,7 +1629,7 @@ exports.generateEasyPostLabel = functions.https.onCall(async (data, context) => 
 
   try {
     const orgDoc = await db.collection('organizations').doc(orgId).get();
-    const apiKey = orgDoc.data()?.settings?.easypostApiKey;
+    const apiKey = await carrierKey(orgDoc, 'easypostApiKey');
     if (!apiKey) throw new Error('EasyPost API key not configured');
 
     // Buy the label
@@ -1641,7 +1699,7 @@ exports.validateEasyPostAddress = functions.https.onCall(async (data, context) =
 
   try {
     const orgDoc = await db.collection('organizations').doc(orgId).get();
-    const apiKey = orgDoc.data()?.settings?.easypostApiKey;
+    const apiKey = await carrierKey(orgDoc, 'easypostApiKey');
     if (!apiKey) throw new Error('EasyPost API key not configured');
 
     const result = await easypostRequest(apiKey, '/addresses', 'POST', {
@@ -3285,3 +3343,19 @@ exports.invoiceRemindersScheduled = INVOICING.invoiceRemindersScheduled;
 exports.invoiceOnOrderUpdate = INVOICING.invoiceOnOrderUpdate;
 exports.statementSend = INVOICING.statementSend;
 exports.collectionsGetReport = INVOICING.collectionsGetReport;
+
+// Audit 2026-10-07: signup writes the org from the browser, and the rules can't compare its ISO-string
+// trialEndsAt with the clock, so a client could create an org with a trial ending in 2099. The server now sets
+// every new trial org's end date to exactly 14 days after creation, whatever the browser sent.
+exports.pinTrialEnd = functions.firestore
+  .document('organizations/{orgId}')
+  .onCreate(async (snap) => {
+    const d = snap.data() || {};
+    if (d.plan !== 'trial') return null;
+    const created = snap.createTime ? snap.createTime.toDate() : new Date();
+    const end = new Date(created.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    if (d.trialEndsAt === end) return null;
+    if (d.trialEndsAt && Math.abs(new Date(d.trialEndsAt).getTime() - new Date(end).getTime()) < 5 * 60 * 1000) return null;
+    console.log(`[pinTrialEnd] ${snap.id}: trialEndsAt ${d.trialEndsAt} -> ${end}`);
+    return snap.ref.update({ trialEndsAt: end });
+  });

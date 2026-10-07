@@ -10,7 +10,7 @@
  * - Configurable check time via Firestore settings
  */
 
-const functions = require('firebase-functions');
+const functions = require('firebase-functions/v1');   // v6+ default export is the v2 API; this code is v1
 const admin = require('firebase-admin');
 const fetch = require('node-fetch');
 const { PDFDocument } = require('pdf-lib');

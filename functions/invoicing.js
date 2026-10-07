@@ -346,7 +346,10 @@ module.exports = function createInvoicing(deps) {
       var st = CORE.invoiceState(o, led, today, tz);
 
       if (opts.flipStatus) {
-        if (st.status === 'paid' && !st.manualPaid && led.paidCents > 0 && o.status === 'shipped') {
+        // a charge-only order (shipping bill, service) is billed from draft: nothing ever ships
+        var billable = o.status === 'shipped' ||
+          (CORE.isChargeOnlyOrder(o) && (!o.status || o.status === 'draft' || o.status === 'confirmed'));
+        if (st.status === 'paid' && !st.manualPaid && led.paidCents > 0 && billable) {
           patch.status = 'paid'; patch.paidAt = nowFn(); patch.paidVia = 'ledger';
           patch.paymentMethod = METHOD_TO_ORDER_KEY[led.lastMethod] || 'other';
         } else if (o.status === 'paid' && o.paidVia === 'ledger' && st.balanceCents > 0) {

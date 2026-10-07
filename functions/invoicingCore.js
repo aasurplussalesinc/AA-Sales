@@ -220,6 +220,14 @@ function invoiceTotalCents(order) {
   return toCents(total);
 }
 
+/** No line comes from inventory (e.g. a shipping bill or service charge): nothing to pick or ship. */
+function isChargeOnlyOrder(order) {
+  var items = (order && order.items) || [];
+  return items.length > 0 && !items.some(function (it) {
+    return it && (it.source === 'inventory' || it.source === 'inventory_contract');
+  });
+}
+
 // ────────────────────────────────────────────────────────────── dates ────
 // Invoices are dated in whole days. A "day number" is days since 1970-01-01
 // for a calendar date, so due-date arithmetic never trips over time zones or
@@ -1227,6 +1235,7 @@ module.exports = {
   centsToDollars: centsToDollars,
   formatCents: formatCents,
   invoiceTotalCents: invoiceTotalCents,
+  isChargeOnlyOrder: isChargeOnlyOrder,
   DEFAULT_TZ: DEFAULT_TZ,
   isoToDay: isoToDay,
   dayToIso: dayToIso,

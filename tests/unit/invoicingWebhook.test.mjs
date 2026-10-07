@@ -314,3 +314,22 @@ test('paid online BEFORE shipping: the order flips to Paid when it ships; Mark U
   await h.inv._internal.handleOrderChange('acme', 'o1', paid, h.db.data('purchaseOrders/o1'));
   assert.equal(order(h).status, 'shipped');
 });
+
+test('charge-only bill (e.g. shipping) paid online from draft -> order Paid; an inventory draft stays draft', async () => {
+  const base = seed()['purchaseOrders/o1'];
+  const h = build({ seed: seed({ 'purchaseOrders/o1': { ...base, status: 'draft',
+    items: [{ itemName: 'SHIPPING', source: 'manual', quantity: 1, qtyShipped: 12, unitPrice: 100 }] } }) });
+  withCharge(h, 'pi_s1', TOTAL);
+  await h.deliver(ev('checkout.session.completed', session('pi_s1', TOTAL, 'paid')));
+  await h.deliver(ev('payment_intent.succeeded', intent('pi_s1', TOTAL), 2));
+  assert.equal(order(h).invoice.status, 'paid');
+  assert.equal(order(h).status, 'paid', 'nothing ships on a charge-only bill, so payment completes it');
+
+  const h2 = build({ seed: seed({ 'purchaseOrders/o1': { ...base, status: 'draft',
+    items: [{ itemId: 'i1', source: 'inventory', quantity: 12, qtyShipped: 12, unitPrice: 100 }] } }) });
+  withCharge(h2, 'pi_s2', TOTAL);
+  await h2.deliver(ev('checkout.session.completed', session('pi_s2', TOTAL, 'paid')));
+  await h2.deliver(ev('payment_intent.succeeded', intent('pi_s2', TOTAL), 2));
+  assert.equal(order(h2).invoice.status, 'paid');
+  assert.equal(order(h2).status, 'draft', 'goods still have to ship; only shipping moves it to paid');
+});

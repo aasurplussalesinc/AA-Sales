@@ -2077,8 +2077,12 @@ ${raw(labelsHtml)}
               {selectedOrder.notes && <div style={{ background: 'var(--bg-badge-orange)', padding: 15, borderRadius: 8, marginBottom: 20 }}><strong>Notes:</strong> {selectedOrder.notes}</div>}
 
               {/* Invoice & payments ledger (Stripe + manual). Only when the company
-                  turned invoicing on, or the order already has ledger data. */}
+                  turned invoicing on, or the order already has ledger data. A charge-only
+                  order (shipping bill, service, fee) has nothing to pick or ship, so it can be
+                  invoiced straight from draft. */}
               {((organization?.payments?.enabled && selectedOrder.status && selectedOrder.status !== 'draft')
+                || (organization?.payments?.enabled && selectedOrder.status !== 'cancelled'
+                    && (selectedOrder.items || []).length > 0 && orderNothingToPick(selectedOrder))
                 || selectedOrder.invoice || selectedOrder.amountPaidCents != null) && (
                 <InvoicePanel key={selectedOrder.id} order={selectedOrder} orgId={organization?.id} canEdit={canEdit} onChanged={loadData} />
               )}

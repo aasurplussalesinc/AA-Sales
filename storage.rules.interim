@@ -1,0 +1,38 @@
+rules_version = '2';
+
+// SkidSling Cloud Storage rules (security audit 2026-10-07) - INTERIM VERSION.
+// The full version (storage.rules.membership) checks org membership in Firestore, which needs the Storage
+// service agent to hold "Firebase Rules Firestore Service Agent". Until that grant is approved, these rules keep
+// uploads working: signed-in users only, images (and PDF receipts) only, size-limited, and nothing outside the
+// two folders the app uses. Swap in storage.rules.membership once the grant is in place.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function imageUnder(mb) {
+      return request.resource.size < mb * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpe?g|gif|webp)');
+    }
+    function receiptFile() {
+      return request.resource.size < 15 * 1024 * 1024
+        && request.resource.contentType.matches('image/(png|jpe?g|webp|heic|heif)|application/pdf');
+    }
+
+    match /catalog/{orgId}/{allPaths=**} {
+      allow read: if true;
+      allow create: if request.auth != null && imageUnder(10);     // new names only: no overwriting others' files
+      allow update, delete: if false;
+    }
+
+    match /receipts/{orgId}/{allPaths=**} {
+      // no listing: without the membership check nobody may browse a folder; a receipt is only reachable by its
+      // exact (timestamped + random) name, which only the uploading org has, via its saved download URL
+      allow get: if request.auth != null;
+      allow list, delete: if false;
+      allow create: if request.auth != null && receiptFile();
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

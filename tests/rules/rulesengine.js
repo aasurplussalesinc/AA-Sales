@@ -138,6 +138,7 @@ function isMap(v) { return v !== null && typeof v === 'object' && !Array.isArray
 function evalNode(n, ctx) {
   const k = nm(n);
   switch (k) {
+    case 'IndexLookupContext':          // the [ ... ] wrapper around a list index
     case 'PrimaryExpressionContext':
     case 'ParenSimpleExpressionContext':
     case 'LiteralExpressionContext':
@@ -236,6 +237,18 @@ function evalNode(n, ctx) {
       if (!el) return [];
       return named(el).map((x) => evalNode(x, ctx));
     }
+    case 'ListLookupSimpleExpressionContext': {   // list[index] or map[key]
+      const c = named(n);
+      if (c.length !== 2) throw new Error('list lookup shape: ' + txt(n));
+      const base = evalNode(c[0], ctx);
+      const key = evalNode(c[1], ctx);
+      if (Array.isArray(base)) {
+        if (!Number.isInteger(key) || key < 0 || key >= base.length) throw new RuleError('index out of range: ' + txt(n));
+        return base[key];
+      }
+      if (isMap(base) && Object.prototype.hasOwnProperty.call(base, key)) return base[key];
+      throw new RuleError('bad lookup: ' + txt(n));
+    }
     case 'VariableSimpleExpressionContext': {
       const name = txt(n);
       if (!Object.prototype.hasOwnProperty.call(ctx.vars, name)) throw new RuleError('undefined variable ' + name);
@@ -301,6 +314,9 @@ function evalNode(n, ctx) {
 function callMethod(base, method, args, ctx, src) {
   // request.time is modelled as epoch milliseconds; Firestore's timestamp.toMillis() returns the same number
   if (typeof base === 'number' && method === 'toMillis') return base;
+  // request.time.year() / month(): UTC parts of the epoch-ms number
+  if (typeof base === 'number' && method === 'year') return new Date(base).getUTCFullYear();
+  if (typeof base === 'number' && method === 'month') return new Date(base).getUTCMonth() + 1;
   if (base instanceof DiffVal && method === 'affectedKeys') return base.affectedKeys();
   if (base instanceof KeySet) {
     if (method === 'hasAny') return base.hasAny(args[0]);

@@ -17,7 +17,7 @@ const TIER_RANK = { trial: 3, starter: 1, pro: 2, business: 3, enterprise: 4, ow
 // count is a poor proxy for value: a dealer with 40,000 cheap SKUs isn't
 // getting more out of the product than one with 500 expensive ones. Metering
 // now leans on users, orders and warehouses, which do track usage.
-const LIMITS = {
+export const LIMITS = {   // mirrored in functions/planLimits.js and firestore.rules planCap()
   trial:      { users: 15,  orders: 1000, items: 10000, warehouses: 2,    locations: 500   },
   starter:    { users: 2,   orders: 50,   items: 2000,  warehouses: 1,    locations: 250   },
   pro:        { users: 5,   orders: 200,  items: 10000, warehouses: 3,    locations: 2000  },

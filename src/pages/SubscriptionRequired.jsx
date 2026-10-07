@@ -7,20 +7,20 @@ const TIERS = [
   {
     name: 'Starter', monthly: 100, annual: 1000, color: '#546e7a', accent: '#546e7a',
     tagline: 'Get off spreadsheets',
-    limits: '2 users · 500 SKUs · 1 location · 50 orders/mo',
+    limits: '2 users · 2,000 SKUs · 1 warehouse · 50 orders/mo',
     features: ['Real-time inventory', 'QR scanning', 'Customer CRM', 'CSV import/export', 'Receiving & stock-in', 'Audit trail'],
   },
   {
     name: 'Pro', monthly: 250, annual: 2500, color: '#1976d2', accent: '#1976d2',
     tagline: 'Run your orders',
-    limits: '5 users · 1,000 SKUs · unlimited locations · 200 orders/mo',
+    limits: '5 users · 10,000 SKUs · 3 warehouses · 200 orders/mo',
     features: ['Everything in Starter', 'Purchase orders', 'Pick lists', 'Box packing & invoices', 'Reports & analytics'],
     popular: true,
   },
   {
     name: 'Business', monthly: 350, annual: 3500, color: '#7b1fa2', accent: '#7b1fa2',
     tagline: 'Ship professionally',
-    limits: '15 users · 2,000 SKUs · unlimited locations · 1,000 orders/mo',
+    limits: '15 users · 50,000 SKUs · 10 warehouses · 1,000 orders/mo',
     features: ['Everything in Pro', 'Live shipping rates', 'Integrate Shippo, ShipStation & EasyPost accounts', 'Batch label printing', 'International & customs', 'Triwall packing', 'Vendor contracts'],
   },
   {

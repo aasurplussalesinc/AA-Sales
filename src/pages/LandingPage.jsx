@@ -5,7 +5,7 @@ const TIERS = [
   {
     name: 'Starter', monthly: 100, annual: 1000, color: '#b8860b', bg: 'rgba(184,134,11,0.12)',
     tagline: 'Get off spreadsheets',
-    limits: '2 users · 500 SKUs · 1 location · 50 orders/mo',
+    limits: '2 users · 2,000 SKUs · 1 warehouse · 50 orders/mo',
     features: [
       '📦 Real-time inventory tracking',
       '📍 Multi-location management',
@@ -20,7 +20,7 @@ const TIERS = [
   {
     name: 'Pro', monthly: 250, annual: 2500, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
     tagline: 'Run your orders',
-    limits: '5 users · 1,000 SKUs · unlimited locations · 200 orders/mo',
+    limits: '5 users · 10,000 SKUs · 3 warehouses · 200 orders/mo',
     features: [
       '✅ Everything in Starter',
       '🧾 Full purchase order lifecycle',
@@ -35,7 +35,7 @@ const TIERS = [
   {
     name: 'Business', monthly: 350, annual: 3500, color: '#a78bfa', bg: 'rgba(167,139,250,0.12)',
     tagline: 'Ship professionally',
-    limits: '15 users · 2,000 SKUs · unlimited locations · 1,000 orders/mo',
+    limits: '15 users · 50,000 SKUs · 10 warehouses · 1,000 orders/mo',
     features: [
       '✅ Everything in Pro',
       '🚚 Live rates — UPS, USPS, FedEx, DHL',

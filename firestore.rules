@@ -113,6 +113,37 @@ service cloud.firestore {
       ]);
     }
     // Carrier API keys: Cloud Functions only (saveCarrierKeys / carrierKey in functions/index.js).
+    // ── Plan caps (audit 2026-10-07) ──
+    // Same numbers as src/useTier.js LIMITS / functions/planLimits.js. organizations/{orgId}.usage is kept exact
+    // by Cloud Functions (usage* triggers); a create is refused once the plan's cap is reached. null = unlimited.
+    // Plan index: 0 starter, 1 pro, 2 business, 3 trial (and anything unknown). enterprise / owner: unlimited.
+    function planIdx(plan) {
+      return plan == 'starter' ? 0 : (plan == 'pro' ? 1 : (plan == 'business' ? 2 : 3));
+    }
+    function planCap(plan, kind) {
+      return kind == 'users' ? [2, 5, 15, 15][planIdx(plan)]
+        : (kind == 'orders' ? [50, 200, 1000, 1000][planIdx(plan)]
+        : (kind == 'items' ? [2000, 10000, 50000, 10000][planIdx(plan)]
+        : [250, 2000, 20000, 500][planIdx(plan)]));
+    }
+    function orgOf(orgId) {
+      return get(/databases/$(database)/documents/organizations/$(orgId)).data;
+    }
+    function usageOf(org, kind) {
+      return ('usage' in org) ? org.usage.get(kind, 0) : 0;
+    }
+    function thisMonth() {
+      return request.time.year() * 100 + request.time.month();
+    }
+    function usedOf(org, kind) {
+      return kind != 'orders' ? usageOf(org, kind)
+        : (usageOf(org, 'ordersMonth') == thisMonth() ? usageOf(org, 'orders') : 0);
+    }
+    function hasRoom(orgId, kind) {
+      return orgOf(orgId).get('plan', 'trial') in ['enterprise', 'owner']
+        || usedOf(orgOf(orgId), kind) < planCap(orgOf(orgId).get('plan', 'trial'), kind);
+    }
+
     match /orgSecrets/{orgId} {
       allow read, write: if false;
     }
@@ -146,6 +177,7 @@ service cloud.firestore {
       allow create: if isAuthed()
         && memberId == request.resource.data.orgId + '_' + request.resource.data.userId
         && request.resource.data.status == 'active'
+        && hasRoom(request.resource.data.orgId, 'users')
         && request.resource.data.role in ['admin', 'manager', 'staff']
         && (
           isAdmin(request.resource.data.orgId)
@@ -214,7 +246,7 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     match /items/{itemId} {
       allow read: if isStaff(resource.data.orgId);
-      allow create: if isManager(request.resource.data.orgId);
+      allow create: if isManager(request.resource.data.orgId) && hasRoom(request.resource.data.orgId, 'items');
       allow update: if isManager(resource.data.orgId) && staysInOrg();
       allow delete: if isAdmin(resource.data.orgId);
     }
@@ -224,7 +256,7 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     match /locations/{locId} {
       allow read: if isStaff(resource.data.orgId);
-      allow create: if isManager(request.resource.data.orgId);
+      allow create: if isManager(request.resource.data.orgId) && hasRoom(request.resource.data.orgId, 'locations');
       allow update: if isManager(resource.data.orgId) && staysInOrg();
       allow delete: if isAdmin(resource.data.orgId);
     }
@@ -245,6 +277,7 @@ service cloud.firestore {
     match /purchaseOrders/{poId} {
       allow read: if isStaff(resource.data.orgId);
       allow create: if isStaff(request.resource.data.orgId)
+        && hasRoom(request.resource.data.orgId, 'orders')
         && !request.resource.data.keys().hasAny(paymentFields());
       allow update: if isStaff(resource.data.orgId) && staysInOrg()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(paymentFields());

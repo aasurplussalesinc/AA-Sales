@@ -6,9 +6,7 @@
  *     cd functions && node scripts/migrate-carrier-keys.js --apply
  * Uses the default credentials of `firebase login` / GOOGLE_APPLICATION_CREDENTIALS. Prints no key values.
  */
-const admin = require('firebase-admin');
-admin.initializeApp();
-const db = admin.firestore();
+const { db, FieldValue } = require('./_cred');
 const FIELDS = ['shippoApiKey', 'shipstationApiKey', 'easypostApiKey'];
 const apply = process.argv.includes('--apply');
 const hint = (v) => (v ? `${String(v).slice(0, 4)}…${String(v).slice(-4)}` : '');
@@ -25,9 +23,9 @@ const hint = (v) => (v ? `${String(v).slice(0, 4)}…${String(v).slice(-4)}` : '
     if (!apply) continue;
     const secrets = {}; const upd = {};
     for (const f of found) { secrets[f] = st[f]; upd[`settings.carrierKeyHints.${f}`] = hint(st[f]); }
-    for (const f of [...found, ...blank]) upd[`settings.${f}`] = admin.firestore.FieldValue.delete();
+    for (const f of [...found, ...blank]) upd[`settings.${f}`] = FieldValue.delete();
     if (found.length) {
-      await db.collection('orgSecrets').doc(o.id).set({ ...secrets, migratedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+      await db.collection('orgSecrets').doc(o.id).set({ ...secrets, migratedAt: FieldValue.serverTimestamp() }, { merge: true });
     }
     await o.ref.update(upd);
     moved++;

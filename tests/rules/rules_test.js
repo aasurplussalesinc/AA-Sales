@@ -12,6 +12,14 @@ put('orgMembers/acme_alice',  { orgId:'acme', userId:'alice', role:'admin',   st
 put('orgMembers/acme_dave',   { orgId:'acme', userId:'dave',  role:'manager', status:'active' });
 put('orgMembers/acme_carol',  { orgId:'acme', userId:'carol', role:'staff',   status:'active' });
 put('orgMembers/acme_erin',   { orgId:'acme', userId:'erin',  role:'staff',   status:'removed' });
+// plan caps (audit 2026-10-07): 'full' is a Starter org at every cap; time 0 in the engine = January 1970 = 197001
+put('organizations/full', { id:'full', createdBy:'fay', plan:'starter', status:'active',
+  usage:{ items:2000, users:2, locations:250, orders:50, ordersMonth:197001 } });
+put('organizations/lastmonth', { id:'lastmonth', createdBy:'gus', plan:'starter', status:'active',
+  usage:{ items:10, users:1, locations:1, orders:50, ordersMonth:196912 } });
+put('orgMembers/full_fay', { orgId:'full', userId:'fay', role:'admin', status:'active' });
+put('orgMembers/lastmonth_gus', { orgId:'lastmonth', userId:'gus', role:'admin', status:'active' });
+put('orgMembers/aa-surplus-sales_owner', { orgId:'aa-surplus-sales', userId:'owner', role:'admin', status:'active' });
 put('orgMembers/acme_frank',  { orgId:'acme', userId:'frank', role:'staff' });
 put('orgMembers/victim_bob',  { orgId:'victim', userId:'bob', role:'admin',   status:'active' });
 put('orgMembers/aa-surplus-sales_owner', { orgId:'aa-surplus-sales', userId:'owner', role:'admin', status:'active' });
@@ -56,6 +64,16 @@ T('manager cannot move item to another org', false, { path:P+'items/item1', op:'
 T('manager cannot delete item',    false, { path:P+'items/item1', op:'delete', auth:dave, resource:D('items/item1') });
 T('admin deletes item',            true,  { path:P+'items/item1', op:'delete', auth:alice, resource:D('items/item1') });
 T('staff creates PO in own org',   true,  { path:P+'purchaseOrders/po9', op:'create', auth:carol, request_resource:{ orgId:'acme', number:'AA1' } });
+// ---- plan caps --------------------------------------------------------------
+{ const fay = U('fay'), gus = U('gus'), own = U('owner');
+T('starter org at 2,000 items cannot add another', false, { path:P+'items/new1', op:'create', auth:fay, request_resource:{ orgId:'full', sku:'X' } });
+T('starter org at 250 locations cannot add another', false, { path:P+'locations/new1', op:'create', auth:fay, request_resource:{ orgId:'full', warehouse:'W' } });
+T('starter org at 50 orders this month cannot add another', false, { path:P+'purchaseOrders/new1', op:'create', auth:fay, request_resource:{ orgId:'full', number:'AA9' } });
+T('starter org at 2 users cannot add a third', false, { path:P+'orgMembers/full_zed', op:'create', auth:fay, request_resource:{ orgId:'full', userId:'zed', role:'staff', status:'active' } });
+T("last month's 50 orders don't count this month", true, { path:P+'purchaseOrders/new2', op:'create', auth:gus, request_resource:{ orgId:'lastmonth', number:'AA9' } });
+T('starter org under its item cap adds an item', true, { path:P+'items/new2', op:'create', auth:gus, request_resource:{ orgId:'lastmonth', sku:'Y' } });
+T('owner plan is unlimited', true, { path:P+'items/new3', op:'create', auth:own, request_resource:{ orgId:'aa-surplus-sales', sku:'Z' } }); }
+
 T('staff creates PO in other org', false, { path:P+'purchaseOrders/po9', op:'create', auth:carol, request_resource:{ orgId:'victim', number:'AA1' } });
 
 // ---- off-boarded and legacy members ------------------------------------

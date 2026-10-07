@@ -8,6 +8,8 @@ import {
 import { collection, addDoc, getDocs, getDoc, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc, setDoc, runTransaction } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth, storage } from './firebase';
+import { LIMITS as PLAN_LIMITS } from './useTier';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // Your company's org ID - gets free access forever
 export const OWNER_ORG_ID = 'aa-surplus-sales';
@@ -811,8 +813,32 @@ export const OrgDB = {
 
   // opts.logCreate === false: the caller logs the opening stock itself (the CSV
   // import logs one CREATE per new item with its final quantity and shelves).
+  // ── Plan caps (audit 2026-10-07): firestore.rules refuses creates past the plan; this says so nicely first ──
+  async assertPlanRoom(kind, adding = 1, { replacing = false } = {}) {
+    const org = await this.getOrganizationById(currentOrgId);
+    const plan = org?.plan || 'trial';
+    const cap = (PLAN_LIMITS[plan] || PLAN_LIMITS.trial)[kind];
+    if (cap === null || cap === undefined) return;
+    const u = org?.usage || {};
+    const now = new Date();
+    const thisMonth = now.getUTCFullYear() * 100 + now.getUTCMonth() + 1;
+    const used = replacing ? 0 : kind === 'orders' ? (u.ordersMonth === thisMonth ? (u.orders || 0) : 0) : (u[kind] || 0);
+    if (used + adding > cap) {
+      const label = { items: 'items', orders: 'orders a month', users: 'users', locations: 'locations' }[kind] || kind;
+      throw new Error(`Your ${plan} plan includes ${cap.toLocaleString()} ${label}` +
+        (replacing ? ` and this import has ${adding.toLocaleString()}.` : ` (you have ${used.toLocaleString()}).`) +
+        ' Upgrade in Settings to add more.');
+    }
+  },
+
+  async refreshPlanUsage() {
+    try { await httpsCallable(getFunctions(), 'recountMyUsage')({ orgId: currentOrgId }); }
+    catch (e) { console.warn('usage refresh failed', e); }
+  },
+
   async createItem(itemData, opts = {}) {
     if (!currentOrgId) throw new Error('No organization selected');
+    await this.assertPlanRoom('items');
     
     const user = auth.currentUser;
     const ref = await addDoc(collection(db, 'items'), {
@@ -915,6 +941,9 @@ export const OrgDB = {
 
   async importItems(items) {
     if (!currentOrgId) throw new Error('No organization selected');
+    // An import REPLACES the catalog: check the whole file against the plan before anything is deleted, so a
+    // too-big file can never leave a business with half a catalog.
+    await this.assertPlanRoom('items', items.length, { replacing: true });
     
     // Get existing locations for syncing
     const locations = await this.getLocations();
@@ -936,6 +965,9 @@ export const OrgDB = {
       await deleteDoc(doc(db, 'items', item.id));
     }
     
+    // the old items are gone: bring the plan counter down before adding the new ones
+    await this.refreshPlanUsage();
+
     // Add new items with orgId and sync locations
     let added = 0;
     for (const item of items) {
@@ -1876,6 +1908,7 @@ export const OrgDB = {
 
   async createPurchaseOrder(poData) {
     if (!currentOrgId) throw new Error('No organization selected');
+    await this.assertPlanRoom('orders');
     
     const user = auth.currentUser;
     

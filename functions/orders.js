@@ -111,6 +111,8 @@ async function createDraftOrder(db, auth, body) {
   if (!body.customerName || !String(body.customerName).trim()) throw bad('customerName is required');
   if (!Array.isArray(body.lines) || body.lines.length === 0) throw bad('lines must be a non-empty array');
   if (body.lines.length > 200) throw bad('Too many lines (max 200)');
+  // Plan cap on orders per month (audit 2026-10-07). The API and MCP write with the Admin SDK, past the rules.
+  await require('./planLimits').assertUnderLimit(db, auth.orgId, 'orders', bad);
 
   // Duplicate guard: the same email must not quietly become two orders.
   if (body.sourceRef) {

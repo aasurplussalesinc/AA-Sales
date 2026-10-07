@@ -3359,3 +3359,42 @@ exports.pinTrialEnd = functions.firestore
     console.log(`[pinTrialEnd] ${snap.id}: trialEndsAt ${d.trialEndsAt} -> ${end}`);
     return snap.ref.update({ trialEndsAt: end });
   });
+
+// ── Plan usage counters (audit 2026-10-07) ──
+// Plan caps used to be checked only in the browser. These keep organizations/{orgId}.usage exact, and
+// firestore.rules refuses new items / locations / members / orders once the plan's cap is reached.
+const PLAN = require('./planLimits');
+const recountFor = (field) => async (change) => {
+  const doc = change.after && change.after.exists ? change.after : change.before;
+  const orgId = doc && doc.data() && doc.data()[field];
+  if (orgId) await PLAN.recountUsage(db, orgId).catch((e) => console.warn('recountUsage', orgId, e.message));
+  return null;
+};
+exports.usageItems = functions.firestore.document('items/{id}').onWrite(async (change) => {
+  // quantity edits don't change the count: only creates and deletes
+  if (change.before.exists && change.after.exists) return null;
+  return recountFor('orgId')(change);
+});
+exports.usageLocations = functions.firestore.document('locations/{id}').onWrite(async (change) => {
+  if (change.before.exists && change.after.exists) return null;
+  return recountFor('orgId')(change);
+});
+exports.usageMembers = functions.firestore.document('orgMembers/{id}').onWrite(recountFor('orgId'));
+exports.usageOrders = functions.firestore.document('purchaseOrders/{id}').onCreate(async (snap) => {
+  const orgId = snap.data().orgId;
+  if (orgId) await PLAN.recountUsage(db, orgId).catch((e) => console.warn('recountUsage', orgId, e.message));
+  return null;
+});
+// New month: the order counter starts again for every org.
+exports.usageMonthlyReset = functions.pubsub.schedule('5 0 1 * *').timeZone('UTC').onRun(async () => {
+  const orgs = await db.collection('organizations').get();
+  for (const o of orgs.docs) await PLAN.recountUsage(db, o.id).catch(() => {});
+  return null;
+});
+
+exports.recountMyUsage = functions.https.onCall(async (data, context) => {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Must be logged in');
+  const orgId = data && data.orgId;
+  await assertOrgMember(context, orgId);
+  return PLAN.recountUsage(db, orgId);
+});

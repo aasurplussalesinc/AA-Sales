@@ -4,7 +4,9 @@ import {
   createUserWithEmailAndPassword,
   signOut, 
   onAuthStateChanged,
-  sendPasswordResetEmail
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithPopup
 } from 'firebase/auth';
 import { auth } from './firebase';
 import { OrgDB, OWNER_ORG_ID } from './orgDb';
@@ -22,6 +24,7 @@ export function AuthProvider({ children }) {
   const [userRole, setUserRole] = useState(null);
   const [organizations, setOrganizations] = useState([]);
   const [subscriptionStatus, setSubscriptionStatus] = useState(null);
+  const [orgsLoading, setOrgsLoading] = useState(false); // true while a signed-in user's orgs load
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -29,6 +32,7 @@ export function AuthProvider({ children }) {
       setUser(firebaseUser);
       
       if (firebaseUser && firebaseUser.uid) {
+        setOrgsLoading(true);
         // Load user's organizations
         try {
           const orgs = await OrgDB.getUserOrganizations(firebaseUser.uid);
@@ -74,6 +78,7 @@ export function AuthProvider({ children }) {
         } catch (error) {
           console.error('Error loading organizations:', error);
         }
+        setOrgsLoading(false);
       } else {
         // Clear everything on logout
         setOrganization(null);
@@ -177,6 +182,37 @@ export function AuthProvider({ children }) {
     return result;
   };
 
+  // Continue with Google (2026-10-07). Existing users land in their organizations as usual; a brand-new
+  // Google user has none yet, and the login page then asks for a company name or an invite code.
+  const loginWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+    const result = await signInWithPopup(auth, provider);
+    await loadUserOrganizations(result.user.uid);
+    // Google addresses are verified, so pending email invitations can be redeemed (same as login)
+    const invitations = result.user.emailVerified && result.user.email
+      ? await OrgDB.getInvitationsByEmail(result.user.email)
+      : [];
+    if (invitations.length > 0) {
+      for (const inv of invitations) {
+        try {
+          await OrgDB.acceptInvitation(inv.id, result.user.uid);
+        } catch (e) {
+          console.error('Error accepting invitation:', e);
+        }
+      }
+      await loadUserOrganizations(result.user.uid);
+    }
+    return result;
+  };
+
+  // Join an organization with an invite code as the already-signed-in user (Google sign-up)
+  const joinWithInviteCodeForCurrentUser = async (inviteCode) => {
+    if (!user) throw new Error('Must be logged in');
+    await OrgDB.useInviteCode(inviteCode, user.uid, user.email);
+    await loadUserOrganizations(user.uid);
+  };
+
   // Create organization for existing user (no new Firebase account needed)
   const createOrganizationForCurrentUser = async (companyName) => {
     if (!user) throw new Error('Must be logged in');
@@ -255,10 +291,13 @@ export function AuthProvider({ children }) {
     user,
     organization,
     organizations,
+    orgsLoading,
     userRole,
     subscriptionStatus,
     loading,
     login,
+    loginWithGoogle,
+    joinWithInviteCodeForCurrentUser,
     signup,
     signupWithInviteCode,
     logout,

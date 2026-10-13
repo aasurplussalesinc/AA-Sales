@@ -106,6 +106,40 @@ async function buildLines(db, auth, rawLines) {
   return { lines: lines, warnings: warnings };
 }
 
+// The same customer snapshot the app takes when an order is created in Purchase Orders.
+function snapshotFromCustomer(c) {
+  return {
+    customerName: c.company || c.customerName || '',
+    customerContact: c.company ? (c.customerName || '') : '',
+    customerEmail: c.email || '',
+    customerPhone: c.phone || '',
+    customerAddress: [c.address, c.city, c.state, c.zipCode].filter(Boolean).join(', '),
+    customerAddressUnit: c.addressUnit || '',
+    customerAttention: c.attention || ''
+  };
+}
+
+function stripEmpty(o) {
+  var out = {};
+  Object.keys(o || {}).forEach(function (k) { if (o[k] !== '' && o[k] !== null && o[k] !== undefined) out[k] = o[k]; });
+  return out;
+}
+
+async function findCustomer(db, orgId, customerId, name) {
+  if (customerId) {
+    var s = await db.collection('customers').doc(String(customerId)).get();
+    if (s.exists && s.data().orgId === orgId) return Object.assign({ id: s.id }, s.data());
+  }
+  var n = String(name || '').trim().toLowerCase();
+  if (!n) return null;
+  var snap = await db.collection('customers').where('orgId', '==', orgId).get();
+  var hits = snap.docs.filter(function (d) {
+    var c = d.data();
+    return [c.company, c.customerName].some(function (v) { return String(v || '').trim().toLowerCase() === n; });
+  });
+  return hits.length === 1 ? Object.assign({ id: hits[0].id }, hits[0].data()) : null;   // ambiguous -> don't guess
+}
+
 async function createDraftOrder(db, auth, body) {
   if (auth.scope !== 'write') throw bad('This API key is read-only.', 403);
   if (!body.customerName || !String(body.customerName).trim()) throw bad('customerName is required');
@@ -143,6 +177,12 @@ async function createDraftOrder(db, auth, body) {
     if (m && parseInt(m[1]) > maxNum) maxNum = parseInt(m[1]);
   });
   var poNumber = 'AA' + (maxNum + 1);
+
+  // Fill the customer snapshot from the Customers tab (2026-10-13): API/MCP drafts often send only a name, which
+  // left invoices and triwall labels without an address or phone. Match by customerId, else by exact company /
+  // customer name in this org. Anything the caller did send wins.
+  var cust = await findCustomer(db, auth.orgId, body.customerId, body.customerName);
+  if (cust) body = Object.assign({}, snapshotFromCustomer(cust), stripEmpty(body), { customerId: body.customerId || cust.id });
 
   var orderDoc = {
     poNumber: poNumber,

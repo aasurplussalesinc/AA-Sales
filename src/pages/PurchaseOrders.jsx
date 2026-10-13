@@ -900,7 +900,29 @@ export default function PurchaseOrders() {
 
 
 
+
+  // Printing fallback (2026-10-13): orders drafted through the API/MCP may only carry a customer name. Fill any blank
+  // contact/address field from the Customers tab (by customerId, else an exact company/name match) so invoices,
+  // packing lists and triwall labels always show the customer's details. Fields already on the order win.
+  const withCustomer = (order) => {
+    if (!order) return order;
+    const n = String(order.customerName || '').trim().toLowerCase();
+    const c = customers.find(x => order.customerId && x.id === order.customerId)
+      || (n ? (() => { const hits = customers.filter(x => [x.company, x.customerName].some(v => String(v || '').trim().toLowerCase() === n)); return hits.length === 1 ? hits[0] : null; })() : null);
+    if (!c) return order;
+    const snap = {
+      customerContact: c.company ? (c.customerName || '') : '',
+      customerEmail: c.email || '', customerPhone: c.phone || '',
+      customerAddress: [c.address, c.city, c.state, c.zipCode].filter(Boolean).join(', '),
+      customerAddressUnit: c.addressUnit || '', customerAttention: c.attention || ''
+    };
+    const out = { ...order };
+    Object.keys(snap).forEach(k => { if (!out[k] && snap[k]) out[k] = snap[k]; });
+    return out;
+  };
+
   const printPickList = (order) => {
+    order = withCustomer(order);
     // Find the linked pick list for this order
     const pickList = pickLists.find(pl => pl.purchaseOrderId === order.id);
     if (!pickList) {
@@ -1012,6 +1034,7 @@ export default function PurchaseOrders() {
   };
 
   const printClientPackingList = (order) => {
+    order = withCustomer(order);
     // Check if using triwalls or boxes
     const isTriwallMode = order.packingMode === 'triwalls' && order.triwalls && order.triwalls.length > 0;
     
@@ -1119,6 +1142,7 @@ export default function PurchaseOrders() {
   };
 
   const printInternalPackingList = (order) => {
+    order = withCustomer(order);
     // Check if using triwalls or boxes
     const isTriwallMode = order.packingMode === 'triwalls' && order.triwalls && order.triwalls.length > 0;
     
@@ -1338,6 +1362,7 @@ export default function PurchaseOrders() {
   // The document itself lives in functions/orderDocument.mjs so the emailed
   // copy and this printed copy can never drift apart. This just opens it.
   const printPO = (order, printType = 'invoice') => {
+    order = withCustomer(order);
     const printContent = renderOrderDocument(order, printType, {
       items,
       organization,
@@ -1348,6 +1373,7 @@ export default function PurchaseOrders() {
   };
 
   const emailInvoice = (order) => {
+    order = withCustomer(order);
     const total = (order.total || order.subtotal || 0).toFixed(2);
     const greeting = order.customerContact || order.customerName;
     const subject = encodeURIComponent(`Invoice ${order.poNumber} from ${organization?.name || ''}`);
@@ -1377,6 +1403,7 @@ ${organization?.email || ''}
   };
 
   const printShippingLabel = (order, triwallIndex = 0) => {
+    order = withCustomer(order);
     const triwalls = order.triwalls || [];
     const triwall = triwalls[triwallIndex] || {};
     const totalTriwalls = triwalls.length || 1;
@@ -1474,6 +1501,7 @@ ${organization?.email || ''}
   };
 
   const printAllShippingLabels = (order) => {
+    order = withCustomer(order);
     const triwalls = order.triwalls || [];
     const totalTriwalls = triwalls.length || 1;
     

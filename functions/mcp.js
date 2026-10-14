@@ -339,6 +339,30 @@ module.exports = function createMcpFunction(deps) {
         additionalProperties: false
       },
       annotations: { title: 'Adjust Item Quantity', readOnlyHint: false, destructiveHint: true }
+    },
+    {
+      name: 'create_item',
+      title: 'Create Item',
+      description: 'Add a new item to the catalogue, optionally with opening stock on a shelf. The SKU is assigned the way the app does it (next number in the org series) unless one is given. Stock with no shelf named goes to STAGING. Refuses when an item with the same name and grade already exists - search first, and use adjust_item_quantity to add stock to an existing item. Only use this when the user explicitly asked for new items in this message. Requires a write-scoped key.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: 'Item name, e.g. "POLY FROG TOP COYOTE LG"' },
+          grade: { type: 'string', description: 'NEW, #1, #2 ... - a different grade is a different item' },
+          category: { type: 'string', description: 'Category, e.g. "CLOTHING - BASE LAYER"' },
+          sku: { type: 'string', description: 'Optional. Leave out to get the next SKU in the series.' },
+          price: { type: 'number', minimum: 0, description: 'Sell price' },
+          cost: { type: 'number', minimum: 0 },
+          weight: { type: 'number', minimum: 0, description: 'Pounds' },
+          quantity: { type: 'integer', minimum: 0, description: 'Opening stock (default 0)' },
+          location: { type: 'string', description: 'Shelf for the opening stock; defaults to STAGING' },
+          lowStockThreshold: { type: 'integer', minimum: 0 },
+          reason: { type: 'string', description: 'Why - lands in the audit log, e.g. "new NEW-grade lot received"' }
+        },
+        required: ['name', 'reason'],
+        additionalProperties: false
+      },
+      annotations: { title: 'Create Item', readOnlyHint: false, destructiveHint: false }
     }
   ];
 
@@ -1007,6 +1031,71 @@ module.exports = function createMcpFunction(deps) {
         locations: plan.derived.locations,
         reason: String(args.reason),
         note: 'Shelf quantities are the source of truth; the item total and primary location were recalculated from them.'
+      };
+    }
+
+    if (name === 'create_item') {
+      if (auth.scope !== 'write') throw new Error('This API key is read-only. Ask Alan for a write-scoped key to create items.');
+      if (!args.reason || !String(args.reason).trim()) throw new Error('A reason is required - it lands in the audit log.');
+      var newName = String(args.name || '').trim().replace(/\s+/g, ' ');
+      if (!newName) throw new Error('"name" is required.');
+      var newGrade = String(args.grade || '').trim();
+      var openQty = args.quantity == null ? 0 : parseInt(args.quantity);
+      if (!isFinite(openQty) || openQty < 0) throw new Error('"quantity" must be 0 or more.');
+
+      // The Admin SDK writes past the rules, so the plan cap is checked here (as the app's createItem does).
+      await require('./planLimits').assertUnderLimit(db, auth.orgId, 'items', function (m) { return new Error(m); });
+
+      var all = await db.collection('items').where('orgId', '==', auth.orgId).get();
+      var twin = all.docs.filter(function (d) { return INV.sameProduct(d.data(), { name: newName, grade: newGrade }); })[0];
+      if (twin) {
+        throw new Error('"' + newName + '" (' + (newGrade || 'no grade') + ') already exists as SKU ' +
+          (twin.data().partNumber || '?') + ' (id ' + twin.id + '). Use adjust_item_quantity to add stock to it.');
+      }
+      var newSku = args.sku ? String(args.sku).trim() : '';
+      if (newSku) {
+        if (all.docs.some(function (d) { return String(d.data().partNumber || '').trim() === newSku; })) {
+          throw new Error('SKU ' + newSku + ' is already in use.');
+        }
+      } else {
+        var orgDoc = await db.collection('organizations').doc(auth.orgId).get();
+        newSku = INV.nextSku(all.docs.map(function (d) { return d.data().partNumber; }), (orgDoc.data() || {}).skuSeriesStart);
+      }
+
+      var shelf = openQty > 0 ? (INV.canonicalLocationCode(args.location || '') || INV.STAGING_CODE) : '';
+      var layout = INV.derive(openQty > 0 ? [{ code: shelf, qty: openQty }] : []);
+      var crNow = Date.now();
+      var crUser = 'MCP: ' + (auth.label || auth.keyId);
+      var data = {
+        partNumber: newSku, name: newName, grade: newGrade,
+        category: String(args.category || '').trim(),
+        price: Number(args.price) || 0, cost: Number(args.cost) || 0, weight: Number(args.weight) || 0,
+        lowStockThreshold: parseInt(args.lowStockThreshold) || 0,
+        locations: layout.locations, locationCodes: layout.locationCodes, stock: layout.stock, location: layout.location,
+        orgId: auth.orgId, createdBy: crUser, createdAt: crNow, updatedAt: crNow
+      };
+      var nref = await db.collection('items').add(data);
+      invalidateCache(auth.orgId);
+
+      await db.collection('activityLog').add({
+        orgId: auth.orgId, action: 'ITEM_CREATED',
+        details: { itemId: nref.id, itemName: newName, partNumber: newSku, source: 'mcp', apiKey: auth.label, reason: String(args.reason) },
+        userEmail: crUser, timestamp: crNow, createdAt: new Date(crNow).toISOString()
+      });
+      // Opening stock is logged like the app's CREATE, so the item's history adds up to its quantity.
+      if (openQty > 0) {
+        await db.collection('movements').add({
+          orgId: auth.orgId, itemId: nref.id, itemName: newName, sku: newSku, grade: newGrade,
+          type: 'CREATE', quantity: openQty, beforeQty: 0, afterQty: openQty, toLocation: shelf,
+          note: 'Item created', reason: String(args.reason), source: 'mcp',
+          userId: null, userEmail: crUser, timestamp: crNow
+        });
+      }
+
+      return {
+        id: nref.id, sku: newSku, name: newName, grade: newGrade, category: data.category,
+        price: data.price, quantity: layout.stock, primaryLocation: layout.location, locations: layout.locations,
+        reason: String(args.reason)
       };
     }
 

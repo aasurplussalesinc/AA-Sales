@@ -159,7 +159,24 @@ async function writeItemLocations(db, itemId, entries) {
   return derived;
 }
 
+// The next SKU the app would hand out (src/pages/Items.jsx generateNextSku):
+// highest numeric SKU at or above the org's series start, plus one.
+function nextSku(existingSkus, seriesStart) {
+  var start = parseInt(seriesStart) || 1000;
+  var nums = (existingSkus || []).map(function (s) { return parseInt(s); })
+    .filter(function (n) { return !isNaN(n) && n >= start; });
+  return String(nums.length ? Math.max.apply(null, nums) + 1 : start);
+}
+
+// Same product = same name (case and spacing ignored) and same grade.
+function sameProduct(a, b) {
+  var norm = function (s) { return String(s || '').trim().replace(/\s+/g, ' ').toUpperCase(); };
+  return norm(a.name) === norm(b.name) && norm(a.grade) === norm(b.grade);
+}
+
 module.exports = {
+  nextSku: nextSku,
+  sameProduct: sameProduct,
   STAGING_CODE: STAGING_CODE,
   canonicalLocationCode: canonicalLocationCode,
   itemLocations: itemLocations,

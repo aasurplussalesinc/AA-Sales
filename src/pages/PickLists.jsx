@@ -1,8 +1,8 @@
 import { h, raw, escapeHtml as esc, addressWithUnit } from '../../functions/orderDocument.mjs';
 import { useState, useEffect, useRef } from 'react';
 import { BrowserMultiFormatReader } from '@zxing/library';
-import { resolvePickLocation, shouldFlagStockDeducted } from '../pickDeduction';
-import { OrgDB as DB } from '../orgDb';
+import { resolvePickLocation, shouldFlagStockDeducted, withStagingOption, needsLocationChoice, resolveStagingAwarePick, STAGING } from '../pickDeduction';
+import { OrgDB as DB, OWNER_ORG_ID } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
 
 // Two-step confirm: window.confirm() can be suppressed by the browser, which
@@ -22,6 +22,9 @@ function useTwoStep(ms = 4000) {
 
 export default function PickLists() {
   const { organization } = useAuth();
+  // AA Surplus Sales only: every line can also be picked from STAGING, and a line
+  // with nothing on any shelf picks from staging by itself.
+  const stagingPicks = organization?.id === OWNER_ORG_ID;
   const { armed, confirmStep } = useTwoStep();
   const [pickLists, setPickLists] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set()); // for bulk print
@@ -239,8 +242,13 @@ export default function PickLists() {
     // SINGLE SOURCE OF TRUTH: read the item's own location breakdown.
     const item = (items || []).find(i => i.id === itemId);
     if (!item) return [];
-    return DB.itemLocations(item).map(e => ({ code: e.code, qty: e.qty }));
+    const opts = DB.itemLocations(item).map(e => ({ code: e.code, qty: e.qty }));
+    // AA Surplus: staging is always a choice, even at 0 (2026-10-14)
+    return stagingPicks ? withStagingOption(opts) : opts;
   };
+
+  const mustChoose = (opts) => stagingPicks ? needsLocationChoice(opts) : opts.length > 1;
+  const pickSourceFor = (item, opts) => stagingPicks ? resolveStagingAwarePick(item, opts) : resolvePickLocation(item, opts);
 
   // Persist the picker's chosen source location for a line.
   const updatePickLocation = async (list, lineKey, code) => {
@@ -282,7 +290,7 @@ export default function PickLists() {
     for (const item of list.items) {
       if ((parseInt(item.pickedQty) || 0) > 0) {
         const opts = getItemLocationOptions(item.itemId);
-        if (opts.length > 1 && !item.pickLocation) missingLoc.push(item.itemName || item.partNumber || item.itemId);
+        if (mustChoose(opts) && !item.pickLocation) missingLoc.push(item.itemName || item.partNumber || item.itemId);
       }
     }
     if (missingLoc.length > 0) {
@@ -315,7 +323,7 @@ export default function PickLists() {
 
       // Resolve the location actually picked from: the picker's choice, else the
       // single known location, else the item's primary location field.
-      const pickedFrom = resolvePickLocation(item, getItemLocationOptions(item.itemId));
+      const pickedFrom = pickSourceFor(item, getItemLocationOptions(item.itemId));
 
       try {
         // One funnel. removeStockAtLocation takes the units off the shelf,
@@ -323,10 +331,13 @@ export default function PickLists() {
         // movement. The three separate calls this replaces wrote `stock`
         // directly and adjusted the shelf independently, so the total and the
         // shelf sum could end up disagreeing.
-        const moved = await DB.removeStockAtLocation(item.itemId, pickedFrom, picked, {
-          orderId: list.purchaseOrderId || '',
-          orderNumber: list.poNumber || list.orderNumber || ''
-        });
+        const meta = { orderId: list.purchaseOrderId || '', orderNumber: list.poNumber || list.orderNumber || '' };
+        // Staging picks come off staging only (never a shelf), and still count
+        // when the item showed 0 - the units were on the order and physically picked.
+        const moved = stagingPicks && pickedFrom === STAGING
+          ? await DB.pickFromStaging(item.itemId, picked, meta)
+          : await DB.removeStockAtLocation(item.itemId, pickedFrom, picked, meta);
+        if (moved && stagingPicks) item.pickLocation = item.pickLocation || pickedFrom;
         if (!moved) { errors.push(`No shelf stock to pull for ${item.itemName}`); continue; }
         linesDeducted++;
       } catch (e) {
@@ -336,7 +347,11 @@ export default function PickLists() {
     }
 
     try {
-      await DB.updatePickList(list.id, { status: 'completed', completedBy, completedAt: Date.now() });
+      await DB.updatePickList(list.id, {
+        status: 'completed', completedBy, completedAt: Date.now(),
+        // AA: keep where each line came from (incl. auto-staging) on the list
+        ...(stagingPicks ? { items: list.items.map(i => ({ ...i })) } : {})
+      });
       // Only claim the stock was taken if every picked line actually moved.
       //
       // This flag stops marking the order shipped from deducting the same units
@@ -1834,8 +1849,11 @@ export default function PickLists() {
                   const lineKey = getLineKey(item);
                   const locOptions = getItemLocationOptions(item.itemId);
                   const multiLoc = locOptions.length > 1;
+                  const required = mustChoose(locOptions);
                   const pickedNow = localPickedQty[lineKey] ?? item.pickedQty ?? 0;
-                  const needsLoc = multiLoc && pickedNow > 0 && !item.pickLocation;
+                  const needsLoc = required && pickedNow > 0 && !item.pickLocation;
+                  // AA: what the line will pick from if nobody chooses (its one shelf, or STAGING at 0 stock)
+                  const autoFrom = stagingPicks && !required ? resolveStagingAwarePick({ ...item, pickLocation: '' }, locOptions) : '';
                   return (
                   <tr key={lineKey} style={{ borderBottom: '1px solid var(--border)' }}>
                     <td style={{ padding: 10 }}>
@@ -1852,7 +1870,7 @@ export default function PickLists() {
                       {multiLoc && selectedList.status !== 'completed' && (
                         <div style={{ marginTop: 4 }}>
                           <select
-                            value={item.pickLocation || ''}
+                            value={item.pickLocation || autoFrom || ''}
                             onChange={e => updatePickLocation(selectedList, lineKey, e.target.value)}
                             style={{
                               fontSize: 11, padding: '3px 6px', borderRadius: 4,
@@ -1860,15 +1878,17 @@ export default function PickLists() {
                               background: 'var(--bg-input)', color: 'var(--text-primary)'
                             }}
                           >
-                            <option value="">📍 Pick from… (required)</option>
+                            {!autoFrom && <option value="">📍 Pick from… (required)</option>}
                             {locOptions.map(o => (
-                              <option key={o.code} value={o.code}>{o.code} — {o.qty} on hand</option>
+                              <option key={o.code} value={o.code}>
+                                {o.code === STAGING && stagingPicks ? `📋 Staging — ${o.qty} on record` : `${o.code} — ${o.qty} on hand`}
+                              </option>
                             ))}
                           </select>
                           {needsLoc && <div style={{ fontSize: 10, color: '#d32f2f', marginTop: 2 }}>Choose a location</div>}
                         </div>
                       )}
-                      {multiLoc && selectedList.status === 'completed' && item.pickLocation && (
+                      {(multiLoc || stagingPicks) && selectedList.status === 'completed' && item.pickLocation && (
                         <div style={{ fontSize: 11, color: 'var(--accent)' }}>📍 Picked from {item.pickLocation}</div>
                       )}
                       {item.unitPrice > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>@ ${parseFloat(item.unitPrice).toFixed(2)}</div>}

@@ -27,3 +27,34 @@ export function resolvePickLocation(item, options) {
 export function shouldFlagStockDeducted(linesAttempted, linesDeducted) {
   return linesAttempted > 0 && linesDeducted === linesAttempted;
 }
+
+// ---- staging as a pick source (AA Surplus Sales, Alan 2026-10-14) ----------
+//
+// For AA every pick line can also come from STAGING: units received but not yet
+// put on a shelf. Staging is offered as an extra choice, never as a reason to
+// demand one, and an item with nothing on any shelf picks from staging on its own.
+
+export const STAGING = 'STAGING';
+
+// The dropdown options with STAGING added (at whatever it holds, else 0).
+export function withStagingOption(options) {
+  const opts = Array.isArray(options) ? options.slice() : [];
+  if (!opts.some(o => String(o.code || '').toUpperCase() === STAGING)) opts.push({ code: STAGING, qty: 0 });
+  return opts;
+}
+
+// Whether the picker has to choose: more than one place actually holds stock.
+// A staging entry at 0 doesn't count, so adding it never blocks a single-shelf pick.
+export function needsLocationChoice(options) {
+  return (Array.isArray(options) ? options : []).filter(o => (Number(o.qty) || 0) > 0).length > 1;
+}
+
+// Where an AA line is picked from: the picker's choice, else the one shelf that
+// holds it, else STAGING when no shelf holds any (0 in stock but on the order).
+export function resolveStagingAwarePick(item, options) {
+  if (item && item.pickLocation) return item.pickLocation;
+  const stocked = (Array.isArray(options) ? options : []).filter(o => (Number(o.qty) || 0) > 0);
+  if (stocked.length === 1) return stocked[0].code;
+  if (stocked.length === 0) return STAGING;
+  return (item && item.location) || '';
+}

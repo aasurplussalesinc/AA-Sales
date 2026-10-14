@@ -2,7 +2,7 @@ import { brandingFrom as sharedBrandingFrom, brandingHtml as sharedBrandingHtml 
 import { shouldClearShippingRates } from './parcelRates';
 import { stockChangeMovement } from './movementHistory';
 import {
-  toQty, cleanEntries, sumEntries, seedUnshelved, addAtShelf, removeFromShelf,
+  toQty, cleanEntries, sumEntries, seedUnshelved, addAtShelf, removeFromShelf, takeFromStaging,
   applyCount, planQuickAdjust, planOrderRestore as planOrderRestoreFromLedger, restoreShelf
 } from './stockLedger';
 import { collection, addDoc, getDocs, getDoc, query, where, updateDoc, doc, writeBatch, orderBy, limit, deleteDoc, setDoc, runTransaction } from 'firebase/firestore';
@@ -1383,6 +1383,36 @@ export const OrgDB = {
       ...(meta.note ? { note: meta.note } : {})
     });
     return { ...res, removed: plan.removed };
+  },
+
+  // Pick from STAGING only (AA Surplus, 2026-10-14). Unlike removeStockAtLocation
+  // this never falls back to another shelf: the picker said staging, so the
+  // shelves stay as counted. Units staging didn't have on record (received but
+  // never entered, so the item showed 0) are still logged as picked against the
+  // order, with a note, and stock stays at 0 instead of going negative.
+  async pickFromStaging(itemId, qty, meta = {}) {
+    const amount = toQty(qty);
+    if (amount <= 0) return null;
+    const snap = await getDoc(doc(db, 'items', itemId));
+    if (!snap.exists()) return null;
+    const item = { id: itemId, ...snap.data() };
+    const plan = takeFromStaging(this.itemLocations(item), amount, this.STAGING_CODE);
+    let after = plan.before;
+    if (plan.removed > 0) after = (await this.setItemLocations(itemId, plan.entries)).stock;
+    const note = plan.unrecorded > 0
+      ? `Picked from staging; ${plan.unrecorded} unit(s) were not on record (item showed ${plan.before} in stock)`
+      : '';
+    await this.logMovement({
+      itemId, itemName: item.name, sku: item.partNumber || '', grade: item.grade || '',
+      quantity: amount, type: meta.type || 'PICK',
+      fromLocation: this.STAGING_CODE,
+      beforeQty: plan.before, afterQty: after,
+      ...(plan.unrecorded > 0 ? { unrecordedQty: plan.unrecorded } : {}),
+      ...(meta.orderId ? { orderId: meta.orderId } : {}),
+      ...(meta.orderNumber ? { orderNumber: meta.orderNumber } : {}),
+      ...((meta.note || note) ? { note: [meta.note, note].filter(Boolean).join(' · ') } : {})
+    });
+    return { stock: after, removed: plan.removed, unrecorded: plan.unrecorded };
   },
 
   // Move qty between shelves — total stock unchanged.

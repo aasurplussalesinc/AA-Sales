@@ -272,3 +272,17 @@ export function restoreShelf(pickShelf, entries, stagingCode = 'STAGING') {
   if (first) return first;
   return primaryShelf(cleanEntries(entries)) || stagingCode;
 }
+
+// Take qty off STAGING only - never another shelf. Whatever staging can't cover
+// is `unrecorded`: units physically picked from staging that the count never
+// had (received but not entered). Stock never goes below zero.
+export function takeFromStaging(entries, qty, stagingCode = 'STAGING') {
+  const amount = toQty(qty);
+  const cur = copy(entries);
+  const before = sumEntries(cur);
+  const st = cur.find(e => e.code === stagingCode);
+  const removed = st ? Math.min(st.qty, Math.max(0, amount)) : 0;
+  if (st) st.qty -= removed;
+  const next = cur.filter(e => e.qty > 0);
+  return { entries: next, before, after: sumEntries(next), removed, unrecorded: Math.max(0, amount - removed) };
+}

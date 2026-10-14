@@ -213,7 +213,39 @@ function resolveToAddress(toAddress, order) {
   return built;
 }
 
+// Blind drop-ship (Alan 2026-10-14): the label's sender NAME becomes the
+// customer we ship on behalf of (e.g. "Billings Army Navy"). The ship-from
+// street stays the org's own, because that is where the carrier picks up and
+// what the rate is based on; returns go to the customer (labelReturnAddress).
+// Off unless the order says so.
+function labelSender(fromAddress, order) {
+  var from = Object.assign({}, fromAddress || {});
+  var o = order || {};
+  if (!o.blindShip) return from;
+  var as = String(o.shipAsName || o.customerName || '').trim();
+  if (!as) return from;
+  from.name = as;
+  from.company = as;
+  return from;
+}
+
+// Blind drop-ship return address: the customer's own (billing) address under
+// their name, so a refused or undeliverable package goes back to them, not us.
+// null when the order isn't blind or has no billing address on file.
+function labelReturnAddress(order) {
+  var o = order || {};
+  if (!o.blindShip || !clean(o.customerAddress)) return null;
+  var as = String(o.shipAsName || o.customerName || '').trim();
+  var a = formatAddressForShippo(as, o.customerAddress, '', o.customerPhone, as);
+  var u = placeUnit(a.street1, o.customerAddressUnit);
+  a.street1 = u.street1;
+  if (u.street2) a.street2 = u.street2;
+  return a;
+}
+
 module.exports = {
+  labelSender: labelSender,
+  labelReturnAddress: labelReturnAddress,
   formatAddressForShippo: formatAddressForShippo,
   orderShipTo: orderShipTo,
   placeUnit: placeUnit,

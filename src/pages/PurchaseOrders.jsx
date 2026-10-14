@@ -464,6 +464,7 @@ export default function PurchaseOrders() {
       customerAddressUnit: order.customerAddressUnit || '', customerAttention: order.customerAttention || '',
       shipToAddress: order.shipToAddress || '', shipToCompany: order.shipToCompany || '', useShipTo: !!order.shipToAddress,
       shipToUnit: order.shipToUnit || '', shipToAttention: order.shipToAttention || '',
+      blindShip: !!order.blindShip, shipAsName: order.shipAsName || '',
       dueDate: order.dueDate || '', invoiceDate: invoiceDateStr, poNumber: order.poNumber || '', customerPO: order.customerPO || '',
       notes: order.notes || '', terms: order.terms || 'Net 30', items: normalizedItems, estSubtotal, subtotal: shipSubtotal, tax, shipping, credit, discount,
       estTotal: estSubtotal + tax + shipping - credit - discount, total: shipSubtotal + tax + shipping - credit - discount });
@@ -1679,7 +1680,7 @@ ${raw(labelsHtml)}
                   <input 
                     type="checkbox" 
                     checked={newPO.useShipTo || false}
-                    onChange={e => setNewPO({ ...newPO, useShipTo: e.target.checked, shipToAddress: e.target.checked ? newPO.shipToAddress : '', shipToCompany: e.target.checked ? newPO.shipToCompany : '', shipToUnit: e.target.checked ? newPO.shipToUnit : '', shipToAttention: e.target.checked ? newPO.shipToAttention : '' })}
+                    onChange={e => setNewPO({ ...newPO, useShipTo: e.target.checked, blindShip: e.target.checked ? !!newPO.blindShip : false, shipToAddress: e.target.checked ? newPO.shipToAddress : '', shipToCompany: e.target.checked ? newPO.shipToCompany : '', shipToUnit: e.target.checked ? newPO.shipToUnit : '', shipToAttention: e.target.checked ? newPO.shipToAttention : '' })}
                   />
                   <span style={{ fontWeight: 600 }}>Ship to different address</span>
                 </label>
@@ -1709,6 +1710,22 @@ ${raw(labelsHtml)}
                         onChange={e => setNewPO({ ...newPO, shipToAttention: e.target.value })}
                         style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
                     </div>
+                    {/* Blind drop-ship (2026-10-14): label sender name = the customer, address = ours */}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 10 }}>
+                      <input type="checkbox" checked={!!newPO.blindShip}
+                        onChange={e => setNewPO({ ...newPO, blindShip: e.target.checked, shipAsName: e.target.checked ? (newPO.shipAsName || newPO.customerName || '') : '' })} />
+                      <span style={{ fontWeight: 600 }}>Blind drop-ship: label shows it's from the customer</span>
+                    </label>
+                    {newPO.blindShip && (
+                      <div style={{ marginTop: 6 }}>
+                        <input type="text" placeholder="Sender name on the label (e.g. Billings Army Navy)" value={newPO.shipAsName || ''}
+                          onChange={e => setNewPO({ ...newPO, shipAsName: e.target.value })}
+                          style={{ width: '100%', padding: 10, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)', boxSizing: 'border-box' }} />
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>
+                          This name replaces ours as the sender on the shipping label, and the carrier gets the customer's billing address as the return address, so returns go to them. Invoices are unchanged.
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

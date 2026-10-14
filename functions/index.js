@@ -110,10 +110,12 @@ async function createCustomsDeclaration(apiKey, order, orgSettings) {
   return shippoRequest(apiKey, '/customs/declarations/', 'POST', declaration);
 }
 
-async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDeclarationId, thirdPartyBilling, carrierAccountIds) {
+async function createShipment(apiKey, fromAddress, toAddress, parcels, customsDeclarationId, thirdPartyBilling, carrierAccountIds, returnAddress) {
   var shipmentData = {
     address_from: fromAddress, address_to: toAddress, parcels: parcels, async: false,
   };
+  // Blind drop-ship: returns go to the customer we shipped for (shipToAddress.js labelReturnAddress).
+  if (returnAddress) shipmentData.address_return = returnAddress;
   if (customsDeclarationId) shipmentData.customs_declaration = customsDeclarationId;
   // Force specific carrier accounts if provided
   if (carrierAccountIds && carrierAccountIds.length > 0) {
@@ -286,6 +288,9 @@ function formatParcelsFromOrder(order, insuranceAmount, insuranceProvider) {
 async function processPackedOrder(apiKey, order, orgSettings) {
   var fromAddress = orgSettings.shippingFromAddress;
   if (!fromAddress || !fromAddress.street1) throw new Error('Shipping "From" address not configured.');
+  // Blind drop-ship: the customer's name as sender, our address (see shipToAddress.js labelSender).
+  fromAddress = SHIPTO_ADDR.labelSender(fromAddress, order);
+  var returnAddress = SHIPTO_ADDR.labelReturnAddress(order);
 
   // For drop-shipping: when shipToCompany is set, it goes on the label as the recipient business name,
   // and customerName/contact is used as the "Attention To" person name.
@@ -400,7 +405,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   // DHL — can quote. Forcing UPS-provider insurance previously made non-UPS carriers decline
   // the entire shipment.
   var parcelsAA = formatParcelsFromOrder(order, insuranceAmount, null);
-  var shipmentAA = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAA, customsDeclarationId, null, carrierAccountIds);
+  var shipmentAA = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsAA, customsDeclarationId, null, carrierAccountIds, returnAddress);
   var allRates = mapRates(shipmentAA, 'AA', hasInsurance ? 'shippo' : 'none');
 
   console.log('=== SHIPPO RATES (AA account) ===');
@@ -418,7 +423,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
     console.log('No rates with insurance — retrying without insurance as fallback');
     try {
       var parcelsNoIns = formatParcelsFromOrder(order, 0, null);
-      var shipmentFallback = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsNoIns, customsDeclarationId, null, carrierAccountIds);
+      var shipmentFallback = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsNoIns, customsDeclarationId, null, carrierAccountIds, returnAddress);
       var fallbackRates = mapRates(shipmentFallback, 'AA', 'none');
       if (fallbackRates.length > 0) {
         allRates = fallbackRates;
@@ -446,7 +451,7 @@ async function processPackedOrder(apiKey, order, orgSettings) {
   if (customerBilling) {
     try {
       var parcelsCustomer = formatParcelsFromOrder(order, insuranceAmount, null);
-      var shipmentCustomer = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustomer, customsDeclarationId, customerBilling, carrierAccountIds);
+      var shipmentCustomer = await createShipment(apiKey, fromFormatted, toAddressRaw, parcelsCustomer, customsDeclarationId, customerBilling, carrierAccountIds, returnAddress);
       var custRates = mapRates(shipmentCustomer, 'Customer', hasInsurance ? 'shippo' : 'none');
       billing.customerRateCount += custRates.length;
       allRates = allRates.concat(custRates);
@@ -1392,7 +1397,7 @@ exports.generateShipStationLabel = functions.https.onCall(async (data, context) 
     const apiKey = await carrierKey(orgDoc, 'shipstationApiKey');
     if (!apiKey) throw new Error('ShipStation API key not configured');
 
-    const fromAddr = orgDoc.data()?.settings?.shippingFromAddress;
+    const fromAddr = SHIPTO_ADDR.labelSender(orgDoc.data()?.settings?.shippingFromAddress, order);
 
     // Purchase label using rate ID
     const labelReq = {
@@ -1432,6 +1437,16 @@ exports.generateShipStationLabel = functions.https.onCall(async (data, context) 
         } : undefined,
       })),
     };
+    // Blind drop-ship: returns go to the customer we shipped for.
+    const ssReturn = SHIPTO_ADDR.labelReturnAddress(order);
+    if (ssReturn) {
+      labelReq.return_to = {
+        name: ssReturn.name, company_name: ssReturn.company || '',
+        address_line1: ssReturn.street1, address_line2: ssReturn.street2 || '',
+        city_locality: ssReturn.city, state_province: ssReturn.state, postal_code: ssReturn.zip,
+        country_code: ssReturn.country || 'US', phone: ssReturn.phone || '',
+      };
+    }
 
     const label = await shipstationRequest(apiKey, '/v2/labels', 'POST', labelReq);
 
@@ -1520,7 +1535,7 @@ exports.getEasyPostRates = functions.https.onCall(async (data, context) => {
     const apiKey = await carrierKey(orgDoc, 'easypostApiKey');
     if (!apiKey) throw new Error('EasyPost API key not configured. Go to Shipping Settings and enter your EasyPost API key.');
 
-    const fromAddr = orgDoc.data()?.settings?.shippingFromAddress;
+    const fromAddr = SHIPTO_ADDR.labelSender(orgDoc.data()?.settings?.shippingFromAddress, order);
     if (!fromAddr?.street1) throw new Error('Shipping from address not configured. Go to Shipping Settings.');
 
     const parcel = parcels && parcels[0] ? parcels[0] : { weight: 1 };
@@ -1568,6 +1583,16 @@ exports.getEasyPostRates = functions.https.onCall(async (data, context) => {
         },
       },
     };
+    // Blind drop-ship: returns go to the customer we shipped for.
+    const epReturn = SHIPTO_ADDR.labelReturnAddress(order);
+    if (epReturn) {
+      shipmentPayload.shipment.return_address = {
+        name: epReturn.name, company: epReturn.company || '',
+        street1: epReturn.street1, street2: epReturn.street2 || '',
+        city: epReturn.city, state: epReturn.state, zip: epReturn.zip,
+        country: epReturn.country || 'US', phone: epReturn.phone || '',
+      };
+    }
 
     const shipment = await easypostRequest(apiKey, '/shipments', 'POST', shipmentPayload);
 

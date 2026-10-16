@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../OrgAuthContext';
 import { OrgDB } from '../orgDb';
+import { boxPresetsFor, cleanBoxPreset, presetLabel, MAX_BOX_PRESETS } from '../boxPresets';
 
 function ManageBillingButton({ orgId }) {
   const [loading, setLoading] = useState(false);
@@ -33,6 +34,94 @@ function ManageBillingButton({ orgId }) {
     >
       {loading ? '⏳ Loading...' : '💳 Manage Billing'}
     </button>
+  );
+}
+
+// Box presets (2026-10-16): named box sizes that show as one-click buttons on the packing screen (Pick Lists).
+function BoxPresetsSettings({ organization, refreshOrganization }) {
+  const [presets, setPresets] = useState(() => [...boxPresetsFor(organization)]);
+  const [draft, setDraft] = useState({ name: '', length: '', width: '', height: '' });
+  const [msg, setMsg] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const usingDefaults = !Array.isArray(organization?.boxPresets);
+
+  useEffect(() => { setPresets([...boxPresetsFor(organization)]); }, [organization]);
+
+  const save = async (next, note) => {
+    setSaving(true); setMsg(null);
+    try {
+      await OrgDB.updateOrganization(organization.id, { boxPresets: next });
+      setPresets(next);
+      await refreshOrganization();
+      setMsg({ ok: true, text: note });
+    } catch (err) {
+      setMsg({ ok: false, text: 'Could not save: ' + (err.message || err) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const add = () => {
+    if (presets.length >= MAX_BOX_PRESETS) { setMsg({ ok: false, text: `Up to ${MAX_BOX_PRESETS} box presets.` }); return; }
+    const { preset, error } = cleanBoxPreset(draft);
+    if (error) { setMsg({ ok: false, text: error }); return; }
+    save([...presets, preset], `Added ${preset.name}.`);
+    setDraft({ name: '', length: '', width: '', height: '' });
+  };
+  const move = (i, d) => {
+    const next = [...presets]; const j = i + d;
+    if (j < 0 || j >= next.length) return;
+    [next[i], next[j]] = [next[j], next[i]];
+    save(next, 'Order saved.');
+  };
+  const remove = (i) => save(presets.filter((_, k) => k !== i), `Removed ${presets[i].name}.`);
+
+  const inp = { padding: 8, borderRadius: 4, border: '1px solid var(--border)', background: 'var(--bg-input)', color: 'var(--text-primary)' };
+  const num = (k, ph) => (
+    <input type="number" min="0" step="0.5" placeholder={ph} value={draft[k]}
+      onChange={e => setDraft({ ...draft, [k]: e.target.value })}
+      onKeyDown={e => e.key === 'Enter' && add()}
+      style={{ ...inp, width: 70, textAlign: 'center' }} />
+  );
+
+  return (
+    <div style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 8, marginTop: 20 }}>
+      <h3 style={{ marginBottom: 8 }}>📦 Box Presets</h3>
+      <p style={{ marginBottom: 15, color: 'var(--text-muted)', fontSize: 14 }}>
+        Box sizes you ship in most. They show as one-click buttons under Box Weight &amp; Dimensions when packing a pick list.
+        {usingDefaults && ' You are seeing the two starter sizes; change them to match your boxes.'}
+      </p>
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16 }}>
+        <input type="text" placeholder='Name, e.g. "Medium" or "18 cube"' maxLength={24} value={draft.name}
+          onChange={e => setDraft({ ...draft, name: e.target.value })}
+          onKeyDown={e => e.key === 'Enter' && add()}
+          style={{ ...inp, flex: '1 1 180px' }} />
+        {num('length', 'L')}<span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>×</span>
+        {num('width', 'W')}<span style={{ color: 'var(--text-muted)', fontWeight: 700 }}>×</span>
+        {num('height', 'H')}<span style={{ color: 'var(--text-muted)', fontSize: 12 }}>in</span>
+        <button className="btn btn-primary" onClick={add} disabled={saving}>+ Add box</button>
+      </div>
+
+      {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.ok ? 'var(--text-badge-green)' : 'var(--text-error)' }}>{msg.text}</div>}
+
+      {presets.length === 0 ? (
+        <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>No box presets. The packing screen shows no quick-fill buttons.</p>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {presets.map((p, i) => (
+            <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 10, background: 'var(--bg-surface-2)', borderRadius: 4 }}>
+              <span style={{ fontSize: 18 }}>📦</span>
+              <span style={{ flex: 1, fontWeight: 600 }}>{p.name}</span>
+              <span style={{ color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{presetLabel(p)} in</span>
+              <button className="btn btn-sm" title="Move up" disabled={saving || i === 0} onClick={() => move(i, -1)} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>↑</button>
+              <button className="btn btn-sm" title="Move down" disabled={saving || i === presets.length - 1} onClick={() => move(i, 1)} style={{ background: 'var(--btn-secondary-bg)', color: 'var(--btn-secondary-color)' }}>↓</button>
+              <button className="btn btn-sm btn-danger" disabled={saving} onClick={() => { if (confirm(`Remove the "${p.name}" box preset?`)) remove(i); }}>🗑️</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1015,6 +1104,8 @@ export default function OrgSettings() {
           )}
         </div>
       )}
+
+      {isAdmin && <BoxPresetsSettings organization={organization} refreshOrganization={refreshOrganization} />}
 
       {/* Danger Zone */}
             {/* Contact Admin */}

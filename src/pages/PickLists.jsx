@@ -4,6 +4,7 @@ import { BrowserMultiFormatReader } from '@zxing/library';
 import { resolvePickLocation, shouldFlagStockDeducted, withStagingOption, needsLocationChoice, resolveStagingAwarePick, STAGING } from '../pickDeduction';
 import { OrgDB as DB, OWNER_ORG_ID } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
+import { boxPresetsFor, matchesPreset, presetLabel } from '../boxPresets';
 
 // Two-step confirm: window.confirm() can be suppressed by the browser, which
 // silently aborts the action. Returns true only on the SECOND call within the
@@ -25,6 +26,7 @@ export default function PickLists() {
   // AA Surplus Sales only: every line can also be picked from STAGING, and a line
   // with nothing on any shelf picks from staging by itself.
   const stagingPicks = organization?.id === OWNER_ORG_ID;
+  const boxPresets = boxPresetsFor(organization);
   const { armed, confirmStep } = useTwoStep();
   const [pickLists, setPickLists] = useState([]);
   const [selectedIds, setSelectedIds] = useState(new Set()); // for bulk print
@@ -2666,29 +2668,29 @@ export default function PickLists() {
                         />
                         <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>in</span>
                         
-                        {/* Quick fill buttons */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            updateBoxDetail(boxNum, 'length', '24');
-                            updateBoxDetail(boxNum, 'width', '16');
-                            updateBoxDetail(boxNum, 'height', '17');
-                          }}
-                          style={{ marginLeft: 10, padding: '4px 8px', background: 'var(--bg-badge-blue)', color: 'var(--text-link)', border: '1px solid #1976d2', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-                        >
-                          17"
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            updateBoxDetail(boxNum, 'length', '24');
-                            updateBoxDetail(boxNum, 'width', '16');
-                            updateBoxDetail(boxNum, 'height', '24');
-                          }}
-                          style={{ padding: '4px 8px', background: 'var(--bg-badge-green)', color: 'var(--text-badge-green)', border: '1px solid #2e7d32', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-                        >
-                          24"
-                        </button>
+                        {/* Box presets from Settings: one click fills L × W × H */}
+                        {boxPresets.length > 0 && (
+                          <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginLeft: 10 }}>
+                            {boxPresets.map(p => {
+                              const on = matchesPreset(boxDetails[boxNum], p);
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  title={`${p.name}: ${presetLabel(p)} in`}
+                                  onClick={() => {
+                                    updateBoxDetail(boxNum, 'length', String(p.length));
+                                    updateBoxDetail(boxNum, 'width', String(p.width));
+                                    updateBoxDetail(boxNum, 'height', String(p.height));
+                                  }}
+                                  style={{ padding: '4px 9px', background: on ? '#1976d2' : 'var(--bg-badge-blue)', color: on ? '#fff' : 'var(--text-link)', border: '1px solid #1976d2', borderRadius: 4, cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}
+                                >
+                                  📦 {p.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                       
                       {/* Calculated box contents value */}

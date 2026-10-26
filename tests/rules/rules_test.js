@@ -14,7 +14,16 @@ put('orgMembers/acme_carol',  { orgId:'acme', userId:'carol', role:'staff',   st
 put('orgMembers/acme_erin',   { orgId:'acme', userId:'erin',  role:'staff',   status:'removed' });
 // plan caps (audit 2026-10-07): 'full' is a Starter org at every cap; time 0 in the engine = January 1970 = 197001
 put('organizations/full', { id:'full', createdBy:'fay', plan:'starter', status:'active',
-  usage:{ items:2000, users:2, locations:250, orders:50, ordersMonth:197001 } });
+  usage:{ items:5000, users:2, locations:250, orders:50, ordersMonth:197001,
+          warehouseKey:'warehouse', warehouseKeys:['W1'], warehouses:1 } });
+// warehouse cap (2026-10-26): a Pro org already using all 3 of its warehouses, with a custom schema whose first
+// level is 'site'; and a Starter org with no warehouse list yet (before the trigger has run)
+put('organizations/prowh', { id:'prowh', createdBy:'hal', plan:'pro', status:'active',
+  usage:{ items:10, users:1, locations:30, warehouseKey:'site', warehouseKeys:['A','B','C'], warehouses:3 } });
+put('organizations/fresh', { id:'fresh', createdBy:'ivy', plan:'starter', status:'active', usage:{ items:0, users:1, locations:0 } });
+put('orgMembers/prowh_hal', { orgId:'prowh', userId:'hal', role:'admin', status:'active' });
+put('orgMembers/fresh_ivy', { orgId:'fresh', userId:'ivy', role:'admin', status:'active' });
+put('locations/locA', { orgId:'prowh', site:'A', rack:'1', locationCode:'A-R1', inventory:{} });
 put('organizations/lastmonth', { id:'lastmonth', createdBy:'gus', plan:'starter', status:'active',
   usage:{ items:10, users:1, locations:1, orders:50, ordersMonth:196912 } });
 put('orgMembers/full_fay', { orgId:'full', userId:'fay', role:'admin', status:'active' });
@@ -66,13 +75,25 @@ T('admin deletes item',            true,  { path:P+'items/item1', op:'delete', a
 T('staff creates PO in own org',   true,  { path:P+'purchaseOrders/po9', op:'create', auth:carol, request_resource:{ orgId:'acme', number:'AA1' } });
 // ---- plan caps --------------------------------------------------------------
 { const fay = U('fay'), gus = U('gus'), own = U('owner');
-T('starter org at 2,000 items cannot add another', false, { path:P+'items/new1', op:'create', auth:fay, request_resource:{ orgId:'full', sku:'X' } });
+T('starter org at 5,000 items cannot add another', false, { path:P+'items/new1', op:'create', auth:fay, request_resource:{ orgId:'full', sku:'X' } });
 T('starter org at 250 locations cannot add another', false, { path:P+'locations/new1', op:'create', auth:fay, request_resource:{ orgId:'full', warehouse:'W' } });
-T('starter org at 50 orders this month cannot add another', false, { path:P+'purchaseOrders/new1', op:'create', auth:fay, request_resource:{ orgId:'full', number:'AA9' } });
+T('orders are unlimited: a starter org past the old 50/month cap still adds one', true, { path:P+'purchaseOrders/new1', op:'create', auth:fay, request_resource:{ orgId:'full', number:'AA9' } });
 T('starter org at 2 users cannot add a third', false, { path:P+'orgMembers/full_zed', op:'create', auth:fay, request_resource:{ orgId:'full', userId:'zed', role:'staff', status:'active' } });
 T("last month's 50 orders don't count this month", true, { path:P+'purchaseOrders/new2', op:'create', auth:gus, request_resource:{ orgId:'lastmonth', number:'AA9' } });
 T('starter org under its item cap adds an item', true, { path:P+'items/new2', op:'create', auth:gus, request_resource:{ orgId:'lastmonth', sku:'Y' } });
-T('owner plan is unlimited', true, { path:P+'items/new3', op:'create', auth:own, request_resource:{ orgId:'aa-surplus-sales', sku:'Z' } }); }
+T('owner plan is unlimited', true, { path:P+'items/new3', op:'create', auth:own, request_resource:{ orgId:'aa-surplus-sales', sku:'Z' } });
+// ---- warehouse cap (2026-10-26): enforced in the database, not only in the browser ----
+const hal = U('hal'), ivy = U('ivy');
+T('pro org at 3 warehouses adds a shelf in an existing one', true, { path:P+'locations/n1', op:'create', auth:hal, request_resource:{ orgId:'prowh', site:'B', rack:'2' } });
+T('pro org at 3 warehouses cannot open a 4th', false, { path:P+'locations/n2', op:'create', auth:hal, request_resource:{ orgId:'prowh', site:'D', rack:'1' } });
+T('STAGING never counts as a warehouse', true, { path:P+'locations/n3', op:'create', auth:hal, request_resource:{ orgId:'prowh', isStaging:true, site:'', locationCode:'STAGING' } });
+T('a location with no warehouse value never counts', true, { path:P+'locations/n4', op:'create', auth:hal, request_resource:{ orgId:'prowh', rack:'9' } });
+T('moving a shelf into a 4th warehouse is refused too', false, { path:P+'locations/locA', op:'update', auth:hal, resource:D('locations/locA'), request_resource:Object.assign({}, D('locations/locA'), { site:'Z', locationCode:'Z-R1', updatedAt:2 }) });
+T('moving a shelf between existing warehouses is fine', true, { path:P+'locations/locA', op:'update', auth:hal, resource:D('locations/locA'), request_resource:Object.assign({}, D('locations/locA'), { site:'C', locationCode:'C-R1', updatedAt:2 }) });
+T('a stock-mirror edit on a shelf is fine', true, { path:P+'locations/locA', op:'update', auth:hal, resource:D('locations/locA'), request_resource:Object.assign({}, D('locations/locA'), { inventory:{ i1:3 }, updatedAt:2 }) });
+T('starter org with 1 warehouse cannot open a 2nd', false, { path:P+'locations/n5', op:'create', auth:fay, request_resource:{ orgId:'full', warehouse:'W2' } });
+T('starter org before its first recount can open its first warehouse', true, { path:P+'locations/n6', op:'create', auth:ivy, request_resource:{ orgId:'fresh', warehouse:'W1' } });
+T('owner plan has no warehouse cap', true, { path:P+'locations/n7', op:'create', auth:own, request_resource:{ orgId:'aa-surplus-sales', warehouse:'W99' } }); }
 
 T('staff creates PO in other org', false, { path:P+'purchaseOrders/po9', op:'create', auth:carol, request_resource:{ orgId:'victim', number:'AA1' } });
 
@@ -188,6 +209,18 @@ T('admin cannot grant themselves a plan', false, { path:P+'organizations/acme', 
 T('admin cannot rewrite the Stripe customer id', false, { path:P+'organizations/acme', op:'update', auth:alice, resource:acmeOrg, request_resource:orgWith({ stripeCustomerId:'cus_hijack' }) });
 T('admin cannot reassign org ownership', false, { path:P+'organizations/acme', op:'update', auth:alice, resource:acmeOrg, request_resource:orgWith({ createdBy:'mallory' }) });
 T('staff cannot edit org settings', false, { path:P+'organizations/acme', op:'update', auth:carol, resource:acmeOrg, request_resource:orgWith({ name:'Acme Inc' }) });
+// usage counters feed the caps; founder is granted by the SkidSling owner only (2026-10-26)
+T('admin cannot reset the usage counters', false, { path:P+'organizations/acme', op:'update', auth:alice, resource:acmeOrg, request_resource:orgWith({ usage:{ items:0 } }) });
+T('admin cannot make their own org a founder', false, { path:P+'organizations/acme', op:'update', auth:alice, resource:acmeOrg, request_resource:orgWith({ founder:true }) });
+T('owner marks an org as a founder', true, { path:P+'organizations/acme', op:'update', auth:owner, resource:acmeOrg, request_resource:orgWith({ founder:true, founderSetAt:5 }) });
+T('owner removes the founder flag', true, { path:P+'organizations/acme', op:'update', auth:owner, resource:Object.assign({}, acmeOrg, { founder:true }), request_resource:orgWith({ founder:false }) });
+T('owner founder edit cannot carry a plan change', false, { path:P+'organizations/acme', op:'update', auth:owner, resource:acmeOrg, request_resource:orgWith({ founder:true, plan:'enterprise' }) });
+T('owner founder edit cannot touch other settings', false, { path:P+'organizations/acme', op:'update', auth:owner, resource:acmeOrg, request_resource:orgWith({ founder:true, name:'Owned' }) });
+T('founder must be true or false', false, { path:P+'organizations/acme', op:'update', auth:owner, resource:acmeOrg, request_resource:orgWith({ founder:'yes' }) });
+T('owner-org staff cannot set founder', false, { path:P+'organizations/acme', op:'update', auth:ops, resource:acmeOrg, request_resource:orgWith({ founder:true }) });
+T('signup cannot start as a founder', false, { path:P+'organizations/newco', op:'create', auth:zoe, request_resource:{ id:'newco', createdBy:'zoe', plan:'trial', status:'active', founder:true } });
+T('signup cannot preset usage counters', false, { path:P+'organizations/newco', op:'create', auth:zoe, request_resource:{ id:'newco', createdBy:'zoe', plan:'trial', status:'active', usage:{ items:-99999 } } });
+T('admin sets AI notes for their own agent', true, { path:P+'organizations/acme', op:'update', auth:alice, resource:acmeOrg, request_resource:orgWith({ aiNotes:'Grades: A, B, C' }) });
 T('signup creates an org on a trial', true, { path:P+'organizations/newco', op:'create', auth:zoe, request_resource:{ id:'newco', createdBy:'zoe', plan:'trial', status:'active' } });
 T('signup cannot start on a paid plan', false, { path:P+'organizations/newco', op:'create', auth:zoe, request_resource:{ id:'newco', createdBy:'zoe', plan:'enterprise', status:'active' } });
 T('cannot create an org owned by someone else', false, { path:P+'organizations/newco', op:'create', auth:mallory, request_resource:{ id:'newco', createdBy:'alice', plan:'trial', status:'active' } });

@@ -109,21 +109,34 @@ service cloud.firestore {
         // (invoicing.js), which validate them. A client that could set
         // payments.stripeAccountId could point its customers' payments at an
         // account it does not own.
-        'payments'
+        'payments',
+        // Plan usage counters are written by Cloud Functions; the caps above
+        // read them, so a tenant admin must not be able to reset them.
+        'usage',
+        // Founding customer flag (2026-10-26): granted by the SkidSling owner
+        // only (see the organizations update rule below).
+        'founder', 'founderSetAt'
       ]);
     }
+    // The SkidSling owner marks an org as a founding customer, and touches
+    // nothing else on it.
+    function founderFlagOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['founder', 'founderSetAt', 'updatedAt'])
+        && request.resource.data.get('founder', false) is bool;
+    }
     // Carrier API keys: Cloud Functions only (saveCarrierKeys / carrierKey in functions/index.js).
-    // ── Plan caps (audit 2026-10-07) ──
+    // ── Plan caps (audit 2026-10-07; matrix 2026-10-26) ──
     // Same numbers as src/useTier.js LIMITS / functions/planLimits.js. organizations/{orgId}.usage is kept exact
     // by Cloud Functions (usage* triggers); a create is refused once the plan's cap is reached. null = unlimited.
+    // Orders are unlimited on every plan (2026-10-26), so purchase orders are not capped here.
     // Plan index: 0 starter, 1 pro, 2 business, 3 trial (and anything unknown). enterprise / owner: unlimited.
     function planIdx(plan) {
       return plan == 'starter' ? 0 : (plan == 'pro' ? 1 : (plan == 'business' ? 2 : 3));
     }
     function planCap(plan, kind) {
       return kind == 'users' ? [2, 5, 15, 15][planIdx(plan)]
-        : (kind == 'orders' ? [50, 200, 1000, 1000][planIdx(plan)]
-        : (kind == 'items' ? [2000, 10000, 50000, 10000][planIdx(plan)]
+        : (kind == 'items' ? [5000, 10000, 50000, 10000][planIdx(plan)]
+        : (kind == 'warehouses' ? [1, 3, 10, 2][planIdx(plan)]
         : [250, 2000, 20000, 500][planIdx(plan)]));
     }
     function orgOf(orgId) {
@@ -132,16 +145,41 @@ service cloud.firestore {
     function usageOf(org, kind) {
       return ('usage' in org) ? org.usage.get(kind, 0) : 0;
     }
-    function thisMonth() {
-      return request.time.year() * 100 + request.time.month();
+    function unlimitedPlan(org) {
+      return org.get('plan', 'trial') in ['enterprise', 'owner'];
     }
-    function usedOf(org, kind) {
-      return kind != 'orders' ? usageOf(org, kind)
-        : (usageOf(org, 'ordersMonth') == thisMonth() ? usageOf(org, 'orders') : 0);
+    // Takes the org document rather than its id so one get() serves every check below.
+    function hasRoomIn(org, kind) {
+      return unlimitedPlan(org) || usageOf(org, kind) < planCap(org.get('plan', 'trial'), kind);
     }
     function hasRoom(orgId, kind) {
-      return orgOf(orgId).get('plan', 'trial') in ['enterprise', 'owner']
-        || usedOf(orgOf(orgId), kind) < planCap(orgOf(orgId).get('plan', 'trial'), kind);
+      return hasRoomIn(orgOf(orgId), kind);
+    }
+    // ── Warehouse cap (2026-10-26) ──
+    // usage.warehouseKey is the location field that names the warehouse (first level of the org's location
+    // schema) and usage.warehouseKeys the distinct values in use, both kept by the usageLocations trigger
+    // (functions/planLimits.js syncWarehouses). A location may go into a warehouse already on the list, or into a
+    // new one while the list is below the plan's cap. STAGING and blank warehouses never count.
+    function whKey(org) {
+      return ('usage' in org) ? org.usage.get('warehouseKey', 'warehouse') : 'warehouse';
+    }
+    function whKeys(org) {
+      return ('usage' in org) ? org.usage.get('warehouseKeys', []) : [];
+    }
+    function warehouseRoomIn(org, loc) {
+      return unlimitedPlan(org)
+        || loc.get('isStaging', false) == true
+        || loc.get(whKey(org), '') == ''
+        || loc.get(whKey(org), '') in whKeys(org)
+        || whKeys(org).size() < planCap(org.get('plan', 'trial'), 'warehouses');
+    }
+    function locationCreateOk(org, loc) {
+      return hasRoomIn(org, 'locations') && warehouseRoomIn(org, loc);
+    }
+    // An edit that leaves the warehouse alone is always fine; one that moves the shelf to another warehouse is
+    // checked like a create.
+    function locationUpdateOk(org, before, after) {
+      return after.get(whKey(org), '') == before.get(whKey(org), '') || warehouseRoomIn(org, after);
     }
 
     match /orgSecrets/{orgId} {
@@ -150,13 +188,15 @@ service cloud.firestore {
 
     match /organizations/{orgId} {
       allow read: if isAuthed() && (isMember(orgId) || isOwnerUser());
-      allow update: if isAdmin(orgId) && billingFieldsUntouched();
+      allow update: if (isAdmin(orgId) && billingFieldsUntouched())
+        || (isOwnerUser() && founderFlagOnly());
       // Signup creates the org before any membership exists, so this cannot
       // require membership - but it can require the caller to own what they
       // create and to start on a trial like everyone else.
       allow create: if isAuthed()
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.plan == 'trial';
+        && request.resource.data.plan == 'trial'
+        && !request.resource.data.keys().hasAny(['usage', 'founder', 'founderSetAt']);
       allow delete: if false;
     }
 
@@ -256,8 +296,12 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     match /locations/{locId} {
       allow read: if isStaff(resource.data.orgId);
-      allow create: if isManager(request.resource.data.orgId) && hasRoom(request.resource.data.orgId, 'locations');
-      allow update: if isManager(resource.data.orgId) && staysInOrg();
+      allow create: if isManager(request.resource.data.orgId)
+        && locationCreateOk(orgOf(request.resource.data.orgId), request.resource.data);
+      // Stock mirror / note edits skip the org read; anything else re-checks the warehouse cap.
+      allow update: if isManager(resource.data.orgId) && staysInOrg()
+        && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inventory', 'updatedAt', 'description', 'notes', 'qrCode'])
+          || locationUpdateOk(orgOf(resource.data.orgId), resource.data, request.resource.data));
       allow delete: if isAdmin(resource.data.orgId);
     }
 
@@ -276,8 +320,8 @@ service cloud.firestore {
     }
     match /purchaseOrders/{poId} {
       allow read: if isStaff(resource.data.orgId);
+      // No plan cap: orders are unlimited on every plan (2026-10-26).
       allow create: if isStaff(request.resource.data.orgId)
-        && hasRoom(request.resource.data.orgId, 'orders')
         && !request.resource.data.keys().hasAny(paymentFields());
       allow update: if isStaff(resource.data.orgId) && staysInOrg()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(paymentFields());

@@ -3401,7 +3401,13 @@ exports.usageItems = functions.firestore.document('items/{id}').onWrite(async (c
   return recountFor('orgId')(change);
 });
 exports.usageLocations = functions.firestore.document('locations/{id}').onWrite(async (change) => {
-  if (change.before.exists && change.after.exists) return null;
+  const before = change.before.exists ? change.before.data() : null;
+  const after = change.after.exists ? change.after.data() : null;
+  const orgId = (after || before || {}).orgId;
+  // Warehouse list (2026-10-26): firestore.rules reads usage.warehouseKeys to enforce the plan's warehouse cap.
+  // Edits matter too - moving a shelf to another warehouse can add or empty one.
+  if (orgId) await PLAN.syncWarehouses(db, orgId, before, after).catch((e) => console.warn('syncWarehouses', orgId, e.message));
+  if (before && after) return null;   // an edit doesn't change the location count
   return recountFor('orgId')(change);
 });
 exports.usageMembers = functions.firestore.document('orgMembers/{id}').onWrite(recountFor('orgId'));

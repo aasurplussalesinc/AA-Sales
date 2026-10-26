@@ -249,6 +249,9 @@ function evalNode(n, ctx) {
       if (isMap(base) && Object.prototype.hasOwnProperty.call(base, key)) return base[key];
       throw new RuleError('bad lookup: ' + txt(n));
     }
+    // A bare identifier as the receiver of a method call (`org.get(...)`, where org is a function parameter)
+    // parses as IdContext rather than VariableSimpleExpression. Same lookup.
+    case 'IdContext':
     case 'VariableSimpleExpressionContext': {
       const name = txt(n);
       if (!Object.prototype.hasOwnProperty.call(ctx.vars, name)) throw new RuleError('undefined variable ' + name);

@@ -237,6 +237,11 @@ const key1 = D('apiKeys/key1');
 T('admin reads api keys', true,  { path:P+'apiKeys/key1', op:'get', auth:alice, resource:key1 });
 T('staff cannot read api keys', false, { path:P+'apiKeys/key1', op:'get', auth:carol, resource:key1 });
 T('admin mints a read key', true, { path:P+'apiKeys/key2', op:'create', auth:alice, request_resource:{ orgId:'acme', scope:'read', revoked:false } });
+T('a trial org admin mints a write key', true, { path:P+'apiKeys/key3', op:'create', auth:alice, request_resource:{ orgId:'acme', scope:'write', revoked:false } });
+{ const fay = U('fay');
+T('a Starter org cannot mint a write key (AI full control is Pro+)', false, { path:P+'apiKeys/key4', op:'create', auth:fay, request_resource:{ orgId:'full', scope:'write', revoked:false } });
+T('a Starter org mints a read key', true, { path:P+'apiKeys/key5', op:'create', auth:fay, request_resource:{ orgId:'full', scope:'read', revoked:false } }); }
+T('a Pro org admin mints a write key', true, { path:P+'apiKeys/key6', op:'create', auth:bob, request_resource:{ orgId:'victim', scope:'write', revoked:false } });
 T('a key cannot be minted with an invented scope', false, { path:P+'apiKeys/key2', op:'create', auth:alice, request_resource:{ orgId:'acme', scope:'admin', revoked:false } });
 T('a key cannot be silently upgraded to write', false, { path:P+'apiKeys/key1', op:'update', auth:alice, resource:key1, request_resource:Object.assign({}, key1, { scope:'write', updatedAt:2 }) });
 T('admin revokes a key', true, { path:P+'apiKeys/key1', op:'update', auth:alice, resource:key1, request_resource:Object.assign({}, key1, { revoked:true, revokedAt:2, updatedAt:2 }) });

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../OrgAuthContext';
-import { OrgDB } from '../orgDb';
+import { OrgDB, OWNER_ORG_ID } from '../orgDb';
+import { useTier } from '../useTier';
+import { AA_DEFAULT_AI_NOTES, MAX_AI_NOTES } from '../aiNotesDefaults';
 import { boxPresetsFor, cleanBoxPreset, presetLabel, MAX_BOX_PRESETS } from '../boxPresets';
 
 function ManageBillingButton({ orgId }) {
@@ -127,6 +129,9 @@ function BoxPresetsSettings({ organization, refreshOrganization }) {
 
 export default function OrgSettings() {
   const { organization, userRole, subscriptionStatus, refreshOrganization, isOwnerOrg } = useAuth();
+  const tier = useTier();
+  // AI assistant: read-only below Pro; full control (read & write keys) on Pro and up (plan matrix 2026-10-26)
+  const aiWriteAllowed = tier.canUseAIWrite;
   const [members, setMembers] = useState([]);
   const [inviteCodes, setInviteCodes] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -163,6 +168,24 @@ export default function OrgSettings() {
   const [newKeyScope, setNewKeyScope] = useState('read');
   const [freshKey, setFreshKey] = useState(null);   // shown once, then gone
   const [keyBusy, setKeyBusy] = useState(false);
+  // ---- notes for the org's AI assistant (organizations/{id}.aiNotes, read by the MCP endpoint) ----
+  const savedAiNotes = typeof organization?.aiNotes === 'string'
+    ? organization.aiNotes
+    : (organization?.id === OWNER_ORG_ID ? AA_DEFAULT_AI_NOTES : '');
+  const [aiNotes, setAiNotes] = useState(savedAiNotes);
+  const [aiNotesMsg, setAiNotesMsg] = useState(null);
+  useEffect(() => { setAiNotes(savedAiNotes); }, [organization?.id, organization?.aiNotes]);
+  useEffect(() => { if (!aiWriteAllowed) setNewKeyScope('read'); }, [aiWriteAllowed]);
+  const saveAiNotes = async () => {
+    setAiNotesMsg(null);
+    try {
+      await OrgDB.updateOrganization(organization.id, { aiNotes: aiNotes.slice(0, MAX_AI_NOTES) });
+      await refreshOrganization();
+      setAiNotesMsg({ ok: true, text: 'Saved. Your assistant picks this up the next time it connects.' });
+    } catch (e) {
+      setAiNotesMsg({ ok: false, text: 'Could not save: ' + (e.message || e) });
+    }
+  };
 
   const loadApiKeys = async () => {
     try { setApiKeys(await OrgDB.getApiKeys()); } catch (e) { console.warn(e); }
@@ -173,7 +196,7 @@ export default function OrgSettings() {
     if (keyBusy) return;
     setKeyBusy(true);
     try {
-      const res = await OrgDB.createApiKey({ label: newKeyLabel.trim(), scope: newKeyScope });
+      const res = await OrgDB.createApiKey({ label: newKeyLabel.trim(), scope: aiWriteAllowed ? newKeyScope : 'read' });
       setFreshKey(res);
       setNewKeyLabel('');
       await loadApiKeys();
@@ -338,6 +361,13 @@ export default function OrgSettings() {
           gap: 10
         }}>
           <div>
+            {organization?.founder === true && (
+              <span title="Founding customer: free done-for-you setup, AI assistant setup and a direct line"
+                style={{ marginRight: 10, fontSize: 11, fontWeight: 800, padding: '2px 9px', borderRadius: 10,
+                  background: '#0d7a52', color: '#fff', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                ⭐ Founder
+              </span>
+            )}
             {subscriptionStatus.plan === 'trial' && (
               <>
                 <strong>🕐 Trial Period</strong>
@@ -506,11 +536,22 @@ export default function OrgSettings() {
                   🔌 API Access
                 </label>
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 12 }}>
-                  Create a key so your own AI agent can read (and optionally update) your
-                  inventory. Keys only ever reach <strong>your</strong> data. The key is shown
+                  Create a key so your own AI assistant (Claude, ChatGPT and other assistants that
+                  support connectors) can read your inventory, and on Pro and up run orders and
+                  invoices too. Keys only ever reach <strong>your</strong> data. The key is shown
                   once when created &mdash; store it somewhere safe, because it can&rsquo;t be
                   displayed again. Revoke any key instantly below.
                 </p>
+                {!aiWriteAllowed && (
+                  <div style={{ fontSize: 12, padding: '8px 10px', marginBottom: 12, borderRadius: 6,
+                    background: 'var(--bg-badge-blue)', color: 'var(--text-primary)' }}>
+                    On the {tier.plan.charAt(0).toUpperCase() + tier.plan.slice(1)} plan your assistant is
+                    <strong> read-only</strong>: it can look up stock, shelves, customers and history.
+                    Letting it run orders and invoices and change stock (read &amp; write keys) is on
+                    the <strong>Pro</strong> plan and up.{' '}
+                    <Link to="/subscription-required">See plans</Link>
+                  </div>
+                )}
 
                 {freshKey && (
                   <div style={{ padding: 12, marginBottom: 12, borderRadius: 6,
@@ -544,11 +585,11 @@ export default function OrgSettings() {
                   <div>
                     <label style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4,
                       color: 'var(--text-muted)', textTransform: 'uppercase' }}>Access</label>
-                    <select value={newKeyScope} onChange={e => setNewKeyScope(e.target.value)}
+                    <select value={aiWriteAllowed ? newKeyScope : 'read'} onChange={e => setNewKeyScope(e.target.value)}
                       style={{ padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)',
                         background: 'var(--bg-input)', color: 'var(--text-primary)' }}>
                       <option value="read">Read only</option>
-                      <option value="write">Read &amp; write</option>
+                      {aiWriteAllowed && <option value="write">Read &amp; write</option>}
                     </select>
                   </div>
                   <button className="btn" onClick={makeApiKey} disabled={keyBusy}
@@ -572,6 +613,11 @@ export default function OrgSettings() {
                             color: k.scope === 'write' ? '#e65100' : '#2e7d32' }}>
                             {k.scope === 'write' ? 'read & write' : 'read only'}
                           </span>
+                          {k.scope === 'write' && !aiWriteAllowed && (
+                            <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>
+                              (works as read only on your plan)
+                            </span>
+                          )}
                           <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                             <code>{k.preview}</code>
                             {' · '}{k.callCount || 0} calls
@@ -584,6 +630,30 @@ export default function OrgSettings() {
                     ))}
                   </div>
                 )}
+
+                <div style={{ marginTop: 16 }}>
+                  <label style={{ display: 'block', fontSize: 11, fontWeight: 700, marginBottom: 4,
+                    color: 'var(--text-muted)', textTransform: 'uppercase' }}>Notes for your AI assistant</label>
+                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 0, marginBottom: 6 }}>
+                    Your own conventions, sent to the assistant when it connects: what your grades or
+                    conditions mean, how your shelf codes read, words your team uses. Leave blank if
+                    you have none.
+                  </p>
+                  <textarea value={aiNotes} onChange={e => setAiNotes(e.target.value)}
+                    maxLength={MAX_AI_NOTES} rows={6}
+                    placeholder="e.g. Grade A = new in box, B = open box. Shelf codes read aisle-rack-shelf."
+                    style={{ width: '100%', padding: '7px 9px', borderRadius: 6, border: '1px solid var(--border)',
+                      background: 'var(--bg-input)', color: 'var(--text-primary)', fontFamily: 'inherit', fontSize: 13 }} />
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 6 }}>
+                    <button className="btn btn-sm" onClick={saveAiNotes}
+                      disabled={aiNotes === savedAiNotes && typeof organization?.aiNotes === 'string'}
+                      style={{ background: '#4f6180', color: '#fff' }}>Save notes</button>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{aiNotes.length} / {MAX_AI_NOTES}</span>
+                    {aiNotesMsg && (
+                      <span style={{ fontSize: 12, color: aiNotesMsg.ok ? '#2e7d32' : '#c62828' }}>{aiNotesMsg.text}</span>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 

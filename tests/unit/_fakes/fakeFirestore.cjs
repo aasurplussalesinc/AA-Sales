@@ -76,6 +76,7 @@ function createFakeDb(seed) {
     writes.push({ op: 'update', path: path, data: clone(data) });
     Object.keys(data).forEach(function (k) {
       var v = data[k];
+      if (v && v.__sentinel === 'increment') { setPath(store[path], k, (Number(getPath(store[path], k)) || 0) + v.by); return; }
       setPath(store[path], k, (v && v.__sentinel) ? v : clone(v));
     });
   }
@@ -171,7 +172,8 @@ function createFakeDb(seed) {
 // Mimics admin.firestore.FieldValue for the handful of sentinels in use.
 var FieldValue = {
   serverTimestamp: function () { return { __sentinel: 'serverTimestamp' }; },
-  delete: function () { return { __sentinel: 'delete', __delete: true }; }
+  delete: function () { return { __sentinel: 'delete', __delete: true }; },
+  increment: function (by) { return { __sentinel: 'increment', by: by }; }
 };
 
 module.exports = { createFakeDb: createFakeDb, FieldValue: FieldValue };

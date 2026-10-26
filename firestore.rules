@@ -402,9 +402,13 @@ service cloud.firestore {
     // ═══════════════════════════════════════════════════════════
     match /apiKeys/{keyId} {
       allow read: if isAdmin(resource.data.orgId);
+      // Read & write keys (AI full control) are a Pro+ feature (plan matrix 2026-10-26). The API also treats a
+      // write key as read-only while the org is below Pro (functions/apiAccess.js), so a downgrade is covered.
       allow create: if isAdmin(request.resource.data.orgId)
         && request.resource.data.revoked == false
-        && request.resource.data.scope in ['read', 'write'];
+        && (request.resource.data.scope == 'read'
+          || (request.resource.data.scope == 'write'
+            && orgOf(request.resource.data.orgId).get('plan', 'trial') in ['trial', 'pro', 'business', 'enterprise', 'owner']));
       allow update: if isAdmin(resource.data.orgId)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['revoked', 'revokedAt', 'updatedAt'])
         && request.resource.data.revoked == true;

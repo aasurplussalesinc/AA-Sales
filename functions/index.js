@@ -2737,29 +2737,10 @@ function sha256Hex(text) {
   return crypto.createHash('sha256').update(text).digest('hex');
 }
 
-// Resolve a bearer token to its org. Returns null if unknown or revoked.
-async function resolveApiKey(authHeader) {
-  if (!authHeader || authHeader.indexOf('Bearer ') !== 0) return null;
-  var raw = authHeader.slice(7).trim();
-  if (!raw) return null;
-
-  var snap = await db.collection('apiKeys')
-    .where('keyHash', '==', sha256Hex(raw))
-    .limit(1).get();
-  if (snap.empty) return null;
-
-  var docSnap = snap.docs[0];
-  var data = docSnap.data();
-  if (data.revoked) return null;
-
-  // Fire-and-forget usage stamp; never block the request on it.
-  docSnap.ref.update({
-    lastUsedAt: Date.now(),
-    callCount: (data.callCount || 0) + 1
-  }).catch(function () {});
-
-  return { orgId: data.orgId, scope: data.scope || 'read', keyId: docSnap.id, label: data.label };
-}
+// Resolve a bearer token to its org. Returns null if unknown or revoked. Plan rules (Starter keys read-only,
+// orders/invoices Pro+) and the per-key hourly safety limit live in ./apiAccess.js (plan matrix 2026-10-26).
+var ACCESS = require('./apiAccess');
+var resolveApiKey = ACCESS.makeResolveApiKey({ db: db, FieldValue: admin.firestore.FieldValue, sha256Hex: sha256Hex });
 
 function apiError(res, code, message) {
   return res.status(code).json({ error: message });
@@ -2799,6 +2780,10 @@ exports.api = functions
       return apiError(res, 500, 'Authentication failed');
     }
     if (!auth) return apiError(res, 401, 'Invalid or missing API key');
+    if (auth.rateLimited) {
+      res.set('Retry-After', String(auth.rate.retryAfterSeconds));
+      return apiError(res, 429, ACCESS.rateLimitMessage(auth.rate));
+    }
 
     if (!checkRateLimit('api_' + auth.keyId, 300, 60 * 1000)) {
       return apiError(res, 429, 'Rate limit exceeded — 300 requests per minute');
@@ -2806,10 +2791,9 @@ exports.api = functions
 
     // Route: everything after /api
     var path = (req.path || '/').replace(/\/+$/, '') || '/';
-    var needsWrite = req.method === 'POST' || req.method === 'PATCH';
-    if (needsWrite && auth.scope !== 'write') {
-      return apiError(res, 403, 'This key is read-only');
-    }
+    // Below Pro: read-only, and no order / invoice routes. Writes need a write key.
+    var blocked = ACCESS.restBlock(req.method, path, auth);
+    if (blocked) return apiError(res, blocked.status, blocked.message);
 
     try {
       // ---- GET /items ---------------------------------------------------
@@ -3296,7 +3280,8 @@ exports.api = functions
 
       // ---- GET /  (discovery) ---------------------------------------------
       if (req.method === 'GET' && path === '/ping') {
-        return res.json({ ok: true, org: auth.orgId, scope: auth.scope });
+        return res.json({ ok: true, org: auth.orgId, scope: auth.scope, plan: auth.plan,
+          aiAccess: auth.aiFullControl ? 'full control' : 'read-only (Pro plan or higher for changes, orders and invoices)' });
       }
 
       return apiError(res, 404, 'Unknown endpoint: ' + req.method + ' ' + path);

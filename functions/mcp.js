@@ -20,6 +20,7 @@ var INV = require('./inventory');
 var ORD = require('./orders');
 var HIST = require('./itemHistory');
 var INVC = require('./invoicingCore');
+var ACCESS = require('./apiAccess');
 
 module.exports = function createMcpFunction(deps) {
   var functions = deps.functions;
@@ -33,38 +34,9 @@ module.exports = function createMcpFunction(deps) {
   var SUPPORTED_PROTOCOLS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
   var MAX_RESULT_CHARS = 140000;
 
-  var INSTRUCTIONS = [
-    'SkidSling inventory for AA Surplus Sales Inc., a military surplus wholesaler.',
-    '',
-    'Read this before interpreting any data:',
-    '',
-    'GRADE is the most important field after SKU. The same product exists in several',
-    'conditions and they are different products at different prices: NEW (unissued),',
-    '#1 (good used), #2 (lower grade used). Never merge grades in a count or a',
-    'recommendation. "How many assault pouches" almost always means "how many of each',
-    'grade". Note that the grade field is frequently blank with the grade written into',
-    'the item name instead - say so rather than silently guessing.',
-    '',
-    'LOCATION CODES look like W4-R1-F2: W4 warehouse, R1 rack, F bay/column, 2 shelf.',
-    'One item can sit on SEVERAL shelves at once. The `locations` array is the truth;',
-    '`location` is only the largest single holding. When asked where something is,',
-    'report every shelf and its quantity. STAGING means received but not yet put away.',
-    '',
-    'QUANTITIES are what is physically on the shelf. Surplus moves in irregular lots -',
-    'a number that looks odd usually is odd, not a typo. Never estimate, round, or',
-    'infer a quantity you did not read from a tool result.',
-    '',
-    'If `quantity` does not equal the sum of the `locations` quantities, that is a real',
-    'data problem. Report it. Do not fix it.',
-    '',
-    'Never adjust a quantity unless the user explicitly asked for that change in that',
-    'message. "Check the count on 2091" means look, not fix. Always pass a reason.',
-    '',
-    'INVOICES AND PAYMENTS: list_orders and list_open_invoices carry each invoice\'s',
-    'real payment status from the payments ledger (Stripe and recorded checks/cash).',
-    'balanceDue is what is still owed; daysOverdue counts from the due date. Report',
-    'these as read - never infer that an invoice was paid from anything else.'
-  ].join('\n');
+  // Instructions are built per organization (apiAccess.buildInstructions): the org's own name, generic
+  // guidance, what its plan allows, and the org's own notes (organizations/{id}.aiNotes, set in Settings ->
+  // API Access; AA Surplus Sales' grade and shelf-code conventions are its default notes).
 
   // ---------------------------------------------------------------- tools ----
 
@@ -348,7 +320,7 @@ module.exports = function createMcpFunction(deps) {
         type: 'object',
         properties: {
           name: { type: 'string', description: 'Item name, e.g. "POLY FROG TOP COYOTE LG"' },
-          grade: { type: 'string', description: 'NEW, #1, #2 ... - a different grade is a different item' },
+          grade: { type: 'string', description: 'Grade / condition, if the business uses them - a different grade is a different item' },
           category: { type: 'string', description: 'Category, e.g. "CLOTHING - BASE LAYER"' },
           sku: { type: 'string', description: 'Optional. Leave out to get the next SKU in the series.' },
           price: { type: 'number', minimum: 0, description: 'Sell price' },
@@ -450,8 +422,19 @@ module.exports = function createMcpFunction(deps) {
     args = args || {};
 
     if (name === 'check_connection') {
-      return { ok: true, org: auth.orgId, scope: auth.scope, key: auth.label || auth.keyId };
+      return {
+        ok: true, org: auth.orgId, organization: auth.orgName || undefined, plan: auth.plan,
+        scope: auth.scope, key: auth.label || auth.keyId,
+        aiAccess: auth.aiFullControl
+          ? 'full control (Pro plan or higher)' + (auth.scope === 'write' ? '' : ' - this key is read-only')
+          : 'read-only on the ' + auth.plan + ' plan: orders, invoices and changes need Pro or higher',
+        rateLimitPerHour: ACCESS.RATE_LIMIT_PER_HOUR
+      };
     }
+
+    // Plan and scope rules (Starter read-only; orders / invoices / changes Pro+ with a write key where needed).
+    var blockedMsg = ACCESS.toolBlock(name, auth);
+    if (blockedMsg) throw new Error(blockedMsg);
 
     if (name === 'search_items') {
       var search = String(args.search || '').toLowerCase().trim();
@@ -982,7 +965,6 @@ module.exports = function createMcpFunction(deps) {
     }
 
     if (name === 'adjust_item_quantity') {
-      if (auth.scope !== 'write') throw new Error('This API key is read-only. Ask Alan for a write-scoped key to make adjustments.');
       if (!args.reason || !String(args.reason).trim()) throw new Error('A reason is required - it lands in the audit log.');
 
       var iref = db.collection('items').doc(String(args.itemId));
@@ -1035,7 +1017,6 @@ module.exports = function createMcpFunction(deps) {
     }
 
     if (name === 'create_item') {
-      if (auth.scope !== 'write') throw new Error('This API key is read-only. Ask Alan for a write-scoped key to create items.');
       if (!args.reason || !String(args.reason).trim()) throw new Error('A reason is required - it lands in the audit log.');
       var newName = String(args.name || '').trim().replace(/\s+/g, ' ');
       if (!newName) throw new Error('"name" is required.');
@@ -1137,13 +1118,13 @@ module.exports = function createMcpFunction(deps) {
         protocolVersion: negotiated,
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: SERVER_NAME, title: 'SkidSling Inventory', version: SERVER_VERSION },
-        instructions: INSTRUCTIONS
+        instructions: ACCESS.buildInstructions(auth)
       });
     }
 
     if (msg.method === 'notifications/initialized' || msg.method.indexOf('notifications/') === 0) return null;
     if (msg.method === 'ping') return rpcResult(id, {});
-    if (msg.method === 'tools/list') return rpcResult(id, { tools: TOOLS });
+    if (msg.method === 'tools/list') return rpcResult(id, { tools: ACCESS.visibleTools(TOOLS, auth) });
 
     if (msg.method === 'tools/call') {
       var params = msg.params || {};
@@ -1196,6 +1177,20 @@ module.exports = function createMcpFunction(deps) {
         // Must be a transport-level 401 - an in-band error would not prompt for auth.
         res.set('WWW-Authenticate', 'Bearer error="invalid_token", error_description="Provide a SkidSling API key as: Authorization: Bearer <key>"');
         return res.status(401).json({ error: 'invalid_token', error_description: 'Invalid or missing API key' });
+      }
+      if (auth.rateLimited) {
+        res.set('Retry-After', String(auth.rate.retryAfterSeconds));
+        return res.status(429).json({ error: 'rate_limited', error_description: ACCESS.rateLimitMessage(auth.rate) });
+      }
+      // The plan comes from the org document, never from the caller. resolveApiKey normally fills it in.
+      if (auth.plan === undefined) {
+        try {
+          var orgSnap0 = await db.collection('organizations').doc(String(auth.orgId)).get();
+          ACCESS.applyPlan(auth, orgSnap0.exists ? orgSnap0.data() : {});
+        } catch (e) {
+          console.error('MCP org lookup failed:', e.message);
+          return res.status(500).json({ error: 'Authentication failed' });
+        }
       }
 
       var body = req.body;

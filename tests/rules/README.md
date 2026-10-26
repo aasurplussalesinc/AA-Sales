@@ -61,3 +61,10 @@ only that "some" repeated reads are cached — so the count is treated as if not
 is deduplicated. It currently peaks at 7. If a change pushes that toward 10,
 legitimate requests start failing with permission-denied in production and the bill
 goes up on every read.
+
+## Emulator smoke test (2026-10-26)
+
+When the emulator jar can be downloaded, `emulator_smoke.mjs` checks the plan-matrix
+rules (warehouse cap, unlimited orders, write keys on Pro+, founder flag, usage
+counters) against the real emulator. Instructions are at the top of the file; it uses
+the demo project id `demo-ss`, so nothing reaches the live project.

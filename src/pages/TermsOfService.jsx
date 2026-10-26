@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 
 export default function TermsOfService() {
-  const lastUpdated = 'October 7, 2026';
+  const lastUpdated = 'October 26, 2026';
 
   return (
     <div style={{
@@ -72,7 +72,7 @@ export default function TermsOfService() {
           </Section>
 
           <Section title="4. Subscription Plans and Payment">
-            <P>SkidSling offers the following subscription tiers, billed monthly or annually: Starter ($100/month or $1,000/year), Pro ($250/month or $2,500/year), Business ($350/month or $3,500/year), and Enterprise ($500/month or $5,000/year). Annual plans offer a discount equivalent to two months free. Pricing is subject to change with 30 days' notice.</P>
+            <P>SkidSling offers the following subscription tiers, billed monthly or annually: Starter ($100/month or $1,000/year), Pro ($250/month or $2,500/year), Business ($400/month or $4,000/year), and Enterprise (custom pricing, arranged with us directly). Annual plans offer a discount equivalent to two months free. Pricing is subject to change with 30 days' notice.</P>
             <P>New accounts receive a 14-day free trial with no credit card required. After the trial period, continued use requires a paid subscription.</P>
             <P>Monthly subscriptions are billed monthly in advance; annual subscriptions are billed once per year in advance. Payment is processed through Stripe. You authorize us to charge your payment method on a recurring basis until you cancel.</P>
             <P><strong>30-day money-back guarantee:</strong> if you cancel within 30 days of your first paid subscription charge, email support@skidsling.com and we will refund that first charge in full. Apart from that guarantee, fees are non-refundable except as required by law; we may issue credits or refunds case by case.</P>

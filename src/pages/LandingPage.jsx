@@ -1,65 +1,15 @@
 import { Link } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { PLANS, FOUNDERS_LINE, ENTERPRISE_MAILTO, EVERY_PLAN_LINE } from '../pricingPlans';
 
-const TIERS = [
-  {
-    name: 'Starter', monthly: 100, annual: 1000, color: '#b8860b', bg: 'rgba(184,134,11,0.12)',
-    tagline: 'Get off spreadsheets',
-    limits: '2 users · 2,000 SKUs · 1 warehouse · 50 orders/mo',
-    features: [
-      '📦 Real-time inventory tracking',
-      '📍 Multi-location management',
-      '📷 QR code scanning',
-      '👥 Customer CRM',
-      '📥 Receiving & stock-in',
-      '📋 CSV import / export',
-      '🔐 Role-based access control',
-      '📜 Full audit trail',
-    ],
-  },
-  {
-    name: 'Pro', monthly: 250, annual: 2500, color: '#4a9eff', bg: 'rgba(74,158,255,0.12)',
-    tagline: 'Run your orders',
-    limits: '5 users · 10,000 SKUs · 3 warehouses · 200 orders/mo',
-    features: [
-      '✅ Everything in Starter',
-      '🧾 Full purchase order lifecycle',
-      '📋 Pick lists with priority & assignee',
-      '📦 Box packing with per-box contents',
-      '🖨️ Printable invoices & packing slips',
-      '📊 Reports & analytics',
-      '📈 Dead stock & inventory turnover',
-    ],
-    popular: true,
-  },
-  {
-    name: 'Business', monthly: 350, annual: 3500, color: '#a78bfa', bg: 'rgba(167,139,250,0.12)',
-    tagline: 'Ship professionally',
-    limits: '15 users · 50,000 SKUs · 10 warehouses · 1,000 orders/mo',
-    features: [
-      '✅ Everything in Pro',
-      '🚚 Live rates — UPS, USPS, FedEx, DHL',
-      '🔗 Integrate Shippo, ShipStation & EasyPost accounts',
-      '🏷️ Label generation & batch printing',
-      '🌍 International & customs declarations',
-      '🪵 Triwall packing mode',
-      '⏰ Scheduled auto-shipping',
-      '📄 Vendor contracts module',
-    ],
-  },
-  {
-    name: 'Enterprise', monthly: 500, annual: 5000, color: '#34d399', bg: 'rgba(52,211,153,0.12)',
-    tagline: 'The full operation',
-    limits: 'Unlimited users · Unlimited SKUs · Unlimited orders',
-    features: [
-      '✅ Everything in Business',
-      '📦 Bill shipping to customer UPS account',
-      '🛡️ Dual insurance comparison',
-      '♾️ Unlimited users, SKUs & orders',
-      '⭐ Priority support & SLA',
-    ],
-  },
-];
+// Plan data lives in src/pricingPlans.js (plan matrix 2026-10-26); this page only adds its colours.
+const TIER_COLORS = {
+  starter:    { color: '#b8860b', bg: 'rgba(184,134,11,0.12)' },
+  pro:        { color: '#4a9eff', bg: 'rgba(74,158,255,0.12)' },
+  business:   { color: '#a78bfa', bg: 'rgba(167,139,250,0.12)' },
+  enterprise: { color: '#34d399', bg: 'rgba(52,211,153,0.12)' },
+};
+const TIERS = PLANS.map(p => ({ ...p, ...TIER_COLORS[p.key] }));
 
 const FEATURES = [
   { icon: '📦', title: 'Real-Time Inventory', description: 'Track stock across warehouses, racks, and shelves with instant updates and low-stock alerts.' },
@@ -70,6 +20,7 @@ const FEATURES = [
   { icon: '🌍', title: 'International Shipping', description: 'Full customs declaration support. Ship anywhere with automated duties and document generation.' },
   { icon: '👥', title: 'Team Management', description: 'Role-based access for Admin, Manager, and Staff. Invite codes for frictionless onboarding.' },
   { icon: '📜', title: 'Full Audit Trail', description: 'Every pick, move, login, and update logged. Filter by user or action type for full accountability.' },
+  { icon: '🤖', title: 'AI Assistant', description: 'Connect your own AI (Claude, ChatGPT and other assistants that support connectors) to your warehouse: ask about stock on any plan, let it run orders and invoices on Pro and up.' },
 ];
 
 export default function LandingPage() {
@@ -329,26 +280,14 @@ export default function LandingPage() {
             }}>Simple, Transparent Pricing</h2>
             <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 16, marginBottom: 22 }}>Start free. Upgrade when you're ready. Downgrade anytime.</p>
 
-            {/* Founding customer offer */}
+            {/* Founding customers (plan matrix 2026-10-26): granted by hand to the first 10 */}
             <div style={{
-              display: 'inline-block', textAlign: 'left', maxWidth: 660, marginBottom: 26,
+              display: 'block', textAlign: 'center', maxWidth: 660, margin: '0 auto 26px',
               background: 'linear-gradient(135deg, rgba(52,211,153,0.14), rgba(74,158,255,0.10))',
-              border: '1px solid rgba(52,211,153,0.45)', borderRadius: 12, padding: '16px 20px'
+              border: '1px solid rgba(52,211,153,0.45)', borderRadius: 12, padding: '14px 20px',
+              fontSize: 15, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6
             }}>
-              <div style={{
-                fontSize: 11, fontWeight: 800, letterSpacing: 2, color: '#34d399',
-                textTransform: 'uppercase', marginBottom: 6
-              }}>
-                ⭐ Founding Customer Program
-              </div>
-              <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.85)', lineHeight: 1.6 }}>
-                <strong style={{ color: '#fff' }}>40% off for 24 months</strong>, locked in — plus
-                onboarding &amp; data migration <strong style={{ color: '#fff' }}>free</strong>.
-                In exchange we&rsquo;ll ask for a short case study once you&rsquo;re up and running.
-              </div>
-              <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>
-                Month-to-month · 30-day money-back guarantee.
-              </div>
+              ⭐ {FOUNDERS_LINE}
             </div>
 
             {/* Monthly / Annual toggle */}
@@ -416,12 +355,14 @@ export default function LandingPage() {
                   <span style={{
                     fontFamily: "'Barlow Condensed', sans-serif",
                     fontSize: 56, fontWeight: 800, color: 'white', lineHeight: 1
-                  }}>${billingCycle === 'annual' ? tier.annual.toLocaleString() : tier.monthly}</span>
-                  <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
-                    {billingCycle === 'annual' ? '/year' : '/month'}
-                  </span>
+                  }}>{tier.contact ? tier.priceLabel : `$${billingCycle === 'annual' ? tier.annual.toLocaleString() : tier.monthly}`}</span>
+                  {!tier.contact && (
+                    <span style={{ color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>
+                      {billingCycle === 'annual' ? '/year' : '/month'}
+                    </span>
+                  )}
                 </div>
-                {billingCycle === 'annual' && (
+                {billingCycle === 'annual' && !tier.contact && (
                   <div style={{
                     display: 'inline-block', marginBottom: 10,
                     background: 'rgba(52,211,153,0.15)', color: '#34d399',
@@ -443,8 +384,35 @@ export default function LandingPage() {
                       borderBottom: '1px solid rgba(255,255,255,0.05)', lineHeight: 1.4
                     }}>{f}</div>
                   ))}
+                  {tier.service && (
+                    <>
+                      <div style={{ marginTop: 14, fontSize: 10, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: tier.color }}>Service included</div>
+                      {tier.service.map(f => (
+                        <div key={f} style={{ padding: '7px 0', fontSize: 13, color: 'rgba(255,255,255,0.65)', borderBottom: '1px solid rgba(255,255,255,0.05)', lineHeight: 1.4 }}>{f}</div>
+                      ))}
+                    </>
+                  )}
+                  {tier.comingSoon && (
+                    <>
+                      <div style={{ marginTop: 14, fontSize: 10, fontWeight: 800, letterSpacing: 1.5, textTransform: 'uppercase', color: 'rgba(255,255,255,0.35)' }}>Coming soon</div>
+                      {tier.comingSoon.map(f => (
+                        <div key={f} style={{ padding: '7px 0', fontSize: 13, color: 'rgba(255,255,255,0.4)', borderBottom: '1px solid rgba(255,255,255,0.05)', lineHeight: 1.4 }}>{f}</div>
+                      ))}
+                    </>
+                  )}
                 </div>
 
+                {tier.contact ? (
+                <a href={ENTERPRISE_MAILTO} style={{
+                  display: 'block', textAlign: 'center',
+                  padding: '13px 20px', borderRadius: 6,
+                  textDecoration: 'none', fontWeight: 700, fontSize: 13,
+                  letterSpacing: 0.5, textTransform: 'uppercase',
+                  background: 'transparent', color: tier.color,
+                  border: `1px solid ${tier.color}`,
+                  transition: 'all 0.2s'
+                }}>Contact Us</a>
+                ) : (
                 <Link to="/login?mode=signup" style={{
                   display: 'block', textAlign: 'center',
                   padding: '13px 20px', borderRadius: 6,
@@ -455,10 +423,14 @@ export default function LandingPage() {
                   border: `1px solid ${tier.color}`,
                   transition: 'all 0.2s'
                 }}>Start Free Trial</Link>
+                )}
               </div>
             ))}
           </div>
-          <p style={{ textAlign: 'center', marginTop: 32, color: 'rgba(255,255,255,0.3)', fontSize: 13, letterSpacing: 0.3 }}>
+          <p style={{ textAlign: 'center', marginTop: 32, color: 'rgba(255,255,255,0.45)', fontSize: 13, letterSpacing: 0.3, maxWidth: 820, marginLeft: 'auto', marginRight: 'auto', lineHeight: 1.6 }}>
+            {EVERY_PLAN_LINE}
+          </p>
+          <p style={{ textAlign: 'center', marginTop: 8, color: 'rgba(255,255,255,0.3)', fontSize: 13, letterSpacing: 0.3 }}>
             All plans include a 14-day free trial. No credit card required.
           </p>
         </div>

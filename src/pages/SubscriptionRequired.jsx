@@ -2,34 +2,19 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../OrgAuthContext';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { PLANS, FOUNDERS_LINE, ENTERPRISE_MAILTO, EVERY_PLAN_LINE } from '../pricingPlans';
 
-const TIERS = [
-  {
-    name: 'Starter', monthly: 100, annual: 1000, color: '#546e7a', accent: '#546e7a',
-    tagline: 'Get off spreadsheets',
-    limits: '2 users · 2,000 SKUs · 1 warehouse · 50 orders/mo',
-    features: ['Real-time inventory', 'QR scanning', 'Customer CRM', 'CSV import/export', 'Receiving & stock-in', 'Audit trail'],
-  },
-  {
-    name: 'Pro', monthly: 250, annual: 2500, color: '#1976d2', accent: '#1976d2',
-    tagline: 'Run your orders',
-    limits: '5 users · 10,000 SKUs · 3 warehouses · 200 orders/mo',
-    features: ['Everything in Starter', 'Purchase orders', 'Pick lists', 'Box packing & invoices', 'Reports & analytics'],
-    popular: true,
-  },
-  {
-    name: 'Business', monthly: 350, annual: 3500, color: '#7b1fa2', accent: '#7b1fa2',
-    tagline: 'Ship professionally',
-    limits: '15 users · 50,000 SKUs · 10 warehouses · 1,000 orders/mo',
-    features: ['Everything in Pro', 'Live shipping rates', 'Integrate Shippo, ShipStation & EasyPost accounts', 'Batch label printing', 'International & customs', 'Triwall packing', 'Vendor contracts'],
-  },
-  {
-    name: 'Enterprise', monthly: 500, annual: 5000, color: '#0d7a52', accent: '#0d7a52',
-    tagline: 'The full operation',
-    limits: 'Unlimited users · Unlimited SKUs · Unlimited orders',
-    features: ['Everything in Business', 'Bill to customer UPS account', 'Dual insurance comparison', 'Unlimited everything', 'Priority support & SLA'],
-  },
-];
+// Plan data lives in src/pricingPlans.js (plan matrix 2026-10-26); this page only adds its colours.
+// Enterprise is "Contact us": its card links to email and never starts a checkout (the server refuses it too).
+const TIER_ACCENTS = { starter: '#546e7a', pro: '#1976d2', business: '#7b1fa2', enterprise: '#0d7a52' };
+const TIERS = PLANS.map(p => ({
+  ...p,
+  color: TIER_ACCENTS[p.key], accent: TIER_ACCENTS[p.key],
+  // the in-app cards are compact: drop the emoji the landing page uses
+  features: p.features.map(f => f.replace(/^\S+\s/, '')),
+  service: p.service && p.service.map(f => f.replace(/^\S+\s/, '')),
+  comingSoon: p.comingSoon && p.comingSoon.map(f => f.replace(/^\S+\s/, '')),
+}));
 
 export default function SubscriptionRequired() {
   const { organization, logout, subscriptionStatus, loading } = useAuth();
@@ -90,6 +75,7 @@ export default function SubscriptionRequired() {
   }
 
   const handleSelectPlan = async (planName) => {
+    if (String(planName).toLowerCase() === 'enterprise') { window.location.href = ENTERPRISE_MAILTO; return; }
     if (!organization?.id) {
       setError('Organization is still loading. Please wait a moment and try again.');
       return;
@@ -235,6 +221,11 @@ export default function SubscriptionRequired() {
           </div>
         </div>
 
+        {/* Founding customers (plan matrix 2026-10-26) */}
+        <div style={{ textAlign: 'center', color: '#a0a0a0', fontSize: 13.5, marginBottom: 24 }}>
+          ⭐ {FOUNDERS_LINE}
+        </div>
+
         {/* Pricing cards */}
         <div style={{
           display: 'grid',
@@ -272,13 +263,15 @@ export default function SubscriptionRequired() {
                 <div style={{ fontSize: 13, color: '#606060', marginBottom: 8 }}>{tier.tagline}</div>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                   <span style={{ fontSize: 38, fontWeight: 800, color: '#f0f0f0', letterSpacing: '-1px' }}>
-                    ${billingCycle === 'annual' ? tier.annual.toLocaleString() : tier.monthly}
+                    {tier.contact ? tier.priceLabel : `$${billingCycle === 'annual' ? tier.annual.toLocaleString() : tier.monthly}`}
                   </span>
-                  <span style={{ color: '#606060', fontSize: 13 }}>
-                    {billingCycle === 'annual' ? '/year' : '/month'}
-                  </span>
+                  {!tier.contact && (
+                    <span style={{ color: '#606060', fontSize: 13 }}>
+                      {billingCycle === 'annual' ? '/year' : '/month'}
+                    </span>
+                  )}
                 </div>
-                {billingCycle === 'annual' && (
+                {billingCycle === 'annual' && !tier.contact && (
                   <div style={{
                     display: 'inline-block', marginTop: 6,
                     background: 'rgba(52,211,153,0.12)', color: '#34d399',
@@ -303,6 +296,26 @@ export default function SubscriptionRequired() {
                     {f}
                   </li>
                 ))}
+                {tier.service && tier.service.map(f => (
+                  <li key={f} style={{
+                    fontSize: 13, color: '#a0a0a0', padding: '5px 0',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    display: 'flex', alignItems: 'center', gap: 8
+                  }}>
+                    <span style={{ color: tier.accent, fontSize: 12, flexShrink: 0 }}>★</span>
+                    {f}
+                  </li>
+                ))}
+                {tier.comingSoon && tier.comingSoon.map(f => (
+                  <li key={f} style={{
+                    fontSize: 13, color: '#606060', padding: '5px 0',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    display: 'flex', alignItems: 'center', gap: 8
+                  }}>
+                    <span style={{ fontSize: 12, flexShrink: 0 }}>○</span>
+                    {f} (coming soon)
+                  </li>
+                ))}
               </ul>
 
               {/* CTA Button */}
@@ -320,7 +333,7 @@ export default function SubscriptionRequired() {
                   transition: 'all 0.2s'
                 }}
               >
-                {loadingPlan === tier.name ? '⏳ Loading...' : `Get ${tier.name}`}
+                {tier.contact ? 'Contact us' : loadingPlan === tier.name ? '⏳ Loading...' : `Get ${tier.name}`}
               </button>
             </div>
           ))}
@@ -345,6 +358,7 @@ export default function SubscriptionRequired() {
 
         {/* Footer */}
         <div style={{ textAlign: 'center', color: '#404040', fontSize: 12 }}>
+          <p style={{ marginBottom: 10, color: '#8a8a8a', fontSize: 12.5, lineHeight: 1.6 }}>{EVERY_PLAN_LINE}</p>
           <p style={{ marginBottom: 6, color: '#8a8a8a', fontSize: 12.5, lineHeight: 1.6 }}>
             Subscriptions renew automatically each month (or year) at the price shown until you cancel.
             Cancel anytime online in Settings → Manage Billing; it takes effect at the end of the paid period.

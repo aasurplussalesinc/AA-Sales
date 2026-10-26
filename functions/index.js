@@ -2062,9 +2062,9 @@ function buildWelcomeEmailHtml(orgName, userName) {
 
         <h3 style="color:#0d1b17;font-size:16px;margin:28px 0 12px">What's unlocked during your trial:</h3>
         <ul style="color:#555;line-height:1.8;margin:0 0 16px;padding-left:20px">
-          <li>Unlimited locations across multiple warehouses</li>
-          <li>Up to 2,000 inventory items</li>
-          <li>Up to 1,000 orders per month</li>
+          <li>Up to 2 warehouses and 500 shelf locations</li>
+          <li>Up to 10,000 inventory items</li>
+          <li>Unlimited orders</li>
           <li>Pick lists, packing slips, invoices</li>
           <li>Shipping label generation (Shippo, ShipStation, EasyPost)</li>
           <li>Reports and activity logs</li>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../OrgAuthContext';
 import { OrgDB as DB, OWNER_ORG_ID } from '../orgDb';
-import { collection, getDocs, query, orderBy, limit, where } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, where, doc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../firebase';
 import { useNavigate } from 'react-router-dom';
@@ -21,6 +21,26 @@ export default function AdminDashboard() {
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [founderBusy, setFounderBusy] = useState(null);
+
+  // Founding customers (first 10, granted by hand): free done-for-you setup, AI assistant setup and a direct
+  // line on any plan. firestore.rules lets only the owner set organizations/{id}.founder, and nothing else with it.
+  const FOUNDER_SLOTS = 10;
+  const toggleFounder = async (org) => {
+    const next = org.founder !== true;
+    if (next && orgs.filter(o => o.founder === true).length >= FOUNDER_SLOTS &&
+        !window.confirm(`There are already ${FOUNDER_SLOTS} founders. Add ${org.name || org.id} anyway?`)) return;
+    setFounderBusy(org.id);
+    try {
+      const now = Date.now();
+      await updateDoc(doc(db, 'organizations', org.id), { founder: next, founderSetAt: now, updatedAt: now });
+      setOrgs(list => list.map(o => (o.id === org.id ? { ...o, founder: next, founderSetAt: now } : o)));
+      setSelectedOrg(o => (o && o.id === org.id ? { ...o, founder: next, founderSetAt: now } : o));
+    } catch (e) {
+      alert('Could not update founder: ' + (e.message || e));
+    }
+    setFounderBusy(null);
+  };
 
   useEffect(() => {
     if (!isOwnerOrg()) { navigate('/dashboard'); return; }
@@ -253,6 +273,10 @@ export default function AdminDashboard() {
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>
+            <div title="Founding customers: free done-for-you setup, AI assistant setup and a direct line, on any plan"
+              style={{ alignSelf: 'center', fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
+              ⭐ Founders: {orgs.filter(o => o.founder === true).length} / {FOUNDER_SLOTS}
+            </div>
           </div>
 
           {/* Org table */}
@@ -266,6 +290,7 @@ export default function AdminDashboard() {
                   <th>Status</th>
                   <th>Trial Ends</th>
                   <th>Created</th>
+                  <th>Founder</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -296,6 +321,13 @@ export default function AdminDashboard() {
                       {org.createdAt ? new Date(org.createdAt).toLocaleDateString() : '—'}
                     </td>
                     <td>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={org.founder === true} disabled={founderBusy === org.id}
+                          onChange={() => toggleFounder(org)} />
+                        {org.founder === true ? '⭐ Founder' : ''}
+                      </label>
+                    </td>
+                    <td>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <button className="btn btn-sm" onClick={async () => {
                           setSelectedOrg(org);
@@ -318,7 +350,7 @@ export default function AdminDashboard() {
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan="7" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>No organizations found</td></tr>
+                  <tr><td colSpan="8" style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>No organizations found</td></tr>
                 )}
               </tbody>
             </table>
@@ -511,6 +543,7 @@ export default function AdminDashboard() {
                   ['Org ID', selectedOrg.id],
                   ['Email', selectedOrg.email || '—'],
                   ['Plan', selectedOrg.plan],
+                  ['Founder', selectedOrg.founder === true ? 'Yes' : 'No'],
                   ['Status', selectedOrg.status],
                   ['Stripe Customer', selectedOrg.stripeCustomerId || 'None'],
                   ['Stripe Sub', selectedOrg.stripeSubscriptionId || 'None'],

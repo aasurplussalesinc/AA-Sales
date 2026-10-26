@@ -93,10 +93,12 @@ export default function AdminDashboard() {
 
   // Plan pricing — monthly subs count at face value, annual subs normalized as annual/12.
   // Orgs without a billingCycle (legacy subs) default to monthly.
+  // Business moved to $400 / $4,000 on 2026-10-26 (earlier Business subscribers may still pay $350 / $3,500).
+  // Enterprise is custom-priced; 500 is only a placeholder for this estimate.
   const PLAN_PRICES = {
     starter:    { monthly: 100, annual: 1000 },
     pro:        { monthly: 250, annual: 2500 },
-    business:   { monthly: 350, annual: 3500 },
+    business:   { monthly: 400, annual: 4000 },
     enterprise: { monthly: 500, annual: 5000 },
   };
   const mrrContribution = (org) => {

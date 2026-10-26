@@ -1073,34 +1073,14 @@ exports.updateCarrierInvoice = functions.https.onCall(async function(data, conte
 
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
-// Price IDs from environment variables — nested by billing cycle
-const PRICE_IDS = {
-  starter: {
-    monthly: process.env.STRIPE_PRICE_STARTER_MONTHLY,
-    annual:  process.env.STRIPE_PRICE_STARTER_ANNUAL,
-  },
-  pro: {
-    monthly: process.env.STRIPE_PRICE_PRO_MONTHLY,
-    annual:  process.env.STRIPE_PRICE_PRO_ANNUAL,
-  },
-  business: {
-    monthly: process.env.STRIPE_PRICE_BUSINESS_MONTHLY,
-    annual:  process.env.STRIPE_PRICE_BUSINESS_ANNUAL,
-  },
-  enterprise: {
-    monthly: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY,
-    annual:  process.env.STRIPE_PRICE_ENTERPRISE_ANNUAL,
-  },
-};
+// Price IDs from environment variables — nested by billing cycle. Plan -> price mapping, the legacy
+// Business prices and the Enterprise "contact us" rule live in ./billingPlans.js (plan matrix 2026-10-26).
+const BILLING_PLANS = require('./billingPlans');
+const PRICE_IDS = BILLING_PLANS.priceIdsFromEnv(process.env);
 
 // Reverse lookup: price_id -> { plan, billingCycle }
 // Built once at module load so the webhook can map a Stripe price back to our plan.
-const PRICE_TO_PLAN = {};
-for (const [plan, cycles] of Object.entries(PRICE_IDS)) {
-  for (const [cycle, id] of Object.entries(cycles)) {
-    if (id) PRICE_TO_PLAN[id] = { plan, billingCycle: cycle };
-  }
-}
+const PRICE_TO_PLAN = BILLING_PLANS.priceToPlanFromEnv(process.env);
 
 // Subscription webhook event handling (SkidSling's own billing). See stripeBilling.js.
 const BILLING = require('./stripeBilling')({ db, admin, PRICE_TO_PLAN });
@@ -1117,18 +1097,12 @@ exports.createCheckoutSession = functions.https.onCall(async (data, context) => 
     throw new functions.https.HttpsError('invalid-argument', 'plan and orgId required');
   }
 
-  if (!['monthly', 'annual'].includes(billingCycle)) {
-    throw new functions.https.HttpsError('invalid-argument', `Invalid billingCycle: ${billingCycle}`);
+  // Starter / Pro / Business only: Enterprise is "contact us" and is refused here even if the browser asks.
+  const chosen = BILLING_PLANS.checkoutPrice(PRICE_IDS, plan, billingCycle);
+  if (chosen.error) {
+    throw new functions.https.HttpsError(chosen.error.code, chosen.error.message);
   }
-
-  const planCycles = PRICE_IDS[plan.toLowerCase()];
-  if (!planCycles) {
-    throw new functions.https.HttpsError('invalid-argument', `Unknown plan: ${plan}`);
-  }
-  const priceId = planCycles[billingCycle];
-  if (!priceId) {
-    throw new functions.https.HttpsError('invalid-argument', `No ${billingCycle} price configured for plan: ${plan}`);
-  }
+  const priceId = chosen.priceId;
   // Without this, a user of tenant A could bind a Stripe customer of their own
   // to tenant B's org doc and then steer B's plan through the webhook.
   await assertOrgMember(context, orgId, 'admin');

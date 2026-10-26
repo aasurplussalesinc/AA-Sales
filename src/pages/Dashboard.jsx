@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { OrgDB as DB } from '../orgDb';
 import { Link } from 'react-router-dom';
+import { useTier } from '../useTier';
 
 export default function Dashboard() {
+  const tier = useTier();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -248,9 +250,9 @@ export default function Dashboard() {
           <a href="/scanner" className="btn btn-primary">📷 Scan QR</a>
           <a href="/items" className="btn btn-primary">📦 View Items</a>
           <a href="/locations" className="btn btn-primary">📍 Locations</a>
-          <a href="/pick-lists" className="btn btn-primary">📋 Pick Lists</a>
+          {tier.canUsePickLists && <a href="/pick-lists" className="btn btn-primary">📋 Pick Lists</a>}
           <a href="/receiving" className="btn btn-primary">📥 Receiving</a>
-          <a href="/reports" className="btn btn-primary">📊 Reports</a>
+          {tier.canUseReports && <a href="/reports" className="btn btn-primary">📊 Reports</a>}
         </div>
       </div>
     </div>

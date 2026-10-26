@@ -38,8 +38,9 @@ export function useTier() {
     isOwner,
     limits,
 
-    // ── Feature flags ──────────────────────────────────────
-    // Starter+: inventory, QR, CRM, CSV, audit log, receiving
+    // ── Feature flags (plan matrix 2026-10-26) ─────────────
+    // All plans: inventory, multi-location shelves, QR, warehouse map, receiving, CSV, CRM, roles & audit log,
+    // company logo branding, and the AI assistant read-only (functions/apiAccess.js enforces the AI rules).
     canUseInventory:    true,
     canUseQR:           true,
     canUseCustomers:    true,
@@ -47,29 +48,28 @@ export function useTier() {
     canUseActivityLog:  true,
     canUseReceiving:    true,
 
-    // Pro+: orders, pick lists, packing, invoices, reports
+    // Pro+: orders, pick lists, box + triwall packing, invoices & packing slips, online invoices,
+    //       AI assistant with full control (write keys, orders and invoices)
     canUseOrders:       atLeast('pro'),
     canUsePickLists:    atLeast('pro'),
     canUsePacking:      atLeast('pro'),
+    canUseTriwall:      atLeast('pro'),
     canUseInvoices:     atLeast('pro'),
-    canUseReports:      atLeast('pro'),
+    canUseAIWrite:      atLeast('pro'),
 
-    // Business+: shipping, UPS OAuth, triwall, contracts,
-    //            international, batch labels, auto-shipping
+    // Business+: reports (dead stock, turnover), voice receiving, shipping (live rates, carrier accounts,
+    //            labels & batch printing, international, auto-shipping, blind drop-ship, bill-to-customer
+    //            UPS account, dual insurance), vendor contracts
+    canUseReports:      atLeast('business'),
+    canUseVoice:        atLeast('business'),
     canUseShipping:     atLeast('business'),
     canUseUPSAccount:   atLeast('business'),
-    canUseTriwall:      atLeast('business'),
     canUseContracts:    atLeast('business'),
     canUseInternational:atLeast('business'),
     canUseBatchLabels:  atLeast('business'),
     canUseAutoShipping: atLeast('business'),
-
-    // Business+: voice-assisted receiving/picking
-    canUseVoice:        atLeast('business'),
-
-    // Enterprise+: 3rd party billing, dual insurance
-    canUseThirdPartyBilling:   atLeast('enterprise'),
-    canUseDualInsurance:       atLeast('enterprise'),
+    canUseThirdPartyBilling:   atLeast('business'),
+    canUseDualInsurance:       atLeast('business'),
 
     // ── Upgrade prompt helpers ─────────────────────────────
     upgradeRequired: (feature) => ({
@@ -89,16 +89,16 @@ export function useTier() {
 }
 
 // Maps feature name → minimum plan name for upgrade prompts
-function featurePlan(feature) {
+export function featurePlan(feature) {
   const map = {
-    orders: 'Pro', pickLists: 'Pro', packing: 'Pro',
-    invoices: 'Pro', reports: 'Pro',
+    orders: 'Pro', pickLists: 'Pro', packing: 'Pro', triwall: 'Pro',
+    invoices: 'Pro', aiWrite: 'Pro',
+    reports: 'Business', voice: 'Business',
     shipping: 'Business', upsAccount: 'Business',
-    triwall: 'Business', contracts: 'Business',
+    contracts: 'Business',
     international: 'Business', batchLabels: 'Business',
     autoShipping: 'Business',
-    voice: 'Business',
-    thirdPartyBilling: 'Enterprise', dualInsurance: 'Enterprise',
+    thirdPartyBilling: 'Business', dualInsurance: 'Business',
   };
   return map[feature] || 'Pro';
 }

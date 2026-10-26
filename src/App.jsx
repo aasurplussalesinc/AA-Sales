@@ -354,7 +354,7 @@ function AppRoutes() {
       } />
       <Route path="/reports" element={
         <ProtectedRoute>
-          <AppLayout><TierGate feature="reports" requiredPlan="Pro"><Reports /></TierGate></AppLayout>
+          <AppLayout><TierGate feature="reports" requiredPlan="Business"><Reports /></TierGate></AppLayout>
         </ProtectedRoute>
       } />
       <Route path="/settings" element={

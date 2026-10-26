@@ -5,7 +5,7 @@ import { OrgDB as DB } from '../orgDb';
 import { useTier } from '../useTier';
 
 export default function ActivityLog() {
-  const { canUseOrders } = useTier(); // Pro+ gate — reuse canUseOrders (Pro tier)
+  const { canUseActivityLog } = useTier(); // roles & audit log are on every plan (plan matrix 2026-10-26)
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [live, setLive] = useState(true);
@@ -36,8 +36,7 @@ export default function ActivityLog() {
     }
   };
 
-  // Pro+ gate
-  if (!canUseOrders) {
+  if (!canUseActivityLog) {
     return (
       <div className="page-content">
         <div style={{

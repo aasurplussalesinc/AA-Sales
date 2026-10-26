@@ -4,6 +4,7 @@ import { BrowserMultiFormatReader } from '@zxing/library';
 import { resolvePickLocation, shouldFlagStockDeducted, withStagingOption, needsLocationChoice, resolveStagingAwarePick, STAGING } from '../pickDeduction';
 import { OrgDB as DB, OWNER_ORG_ID } from '../orgDb';
 import { useAuth } from '../OrgAuthContext';
+import { useTier } from '../useTier';
 import { boxPresetsFor, matchesPreset, presetLabel } from '../boxPresets';
 
 // Two-step confirm: window.confirm() can be suppressed by the browser, which
@@ -23,6 +24,7 @@ function useTwoStep(ms = 4000) {
 
 export default function PickLists() {
   const { organization } = useAuth();
+  const tier = useTier();
   // AA Surplus Sales only: every line can also be picked from STAGING, and a line
   // with nothing on any shelf picks from staging by itself.
   const stagingPicks = organization?.id === OWNER_ORG_ID;
@@ -2292,7 +2294,8 @@ export default function PickLists() {
                 >
                   📦 Regular Boxes
                 </button>
-                <button
+                {/* Triwall packing is a Pro feature (plan matrix 2026-10-26); an order already packed in triwalls still opens in that mode */}
+                {(tier.canUseTriwall || packingMode === 'triwalls') && <button
                   onClick={() => {
                     setPackingMode('triwalls');
                     if (triwalls.length === 0) addTriwall();
@@ -2305,7 +2308,7 @@ export default function PickLists() {
                   }}
                 >
                   🏗️ Triwalls / Gaylords
-                </button>
+                </button>}
               </div>
 
               <div style={{ background: 'var(--bg-badge-blue)', padding: 12, borderRadius: 8, marginBottom: 20, fontSize: 13 }}>

@@ -37,8 +37,22 @@ export default function LandingPage() {
     <div style={{ minHeight: '100vh', background: '#0a0a0a', color: 'white', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet" />
 
+      {/* Phones: compact nav (logo + Sign In + trial button), hero clears the fixed bar */}
+      <style>{`
+        @media (max-width: 640px) {
+          .ss-nav { padding: 0 16px !important; height: 60px !important; background: rgba(10,10,10,0.95) !important; }
+          .ss-nav-word, .ss-scroll { display: none !important; }
+          .ss-nav-links { gap: 14px !important; }
+          .ss-nav-hide { display: none !important; }
+          .ss-nav-cta { padding: 8px 12px !important; font-size: 12px !important; white-space: nowrap; }
+          .ss-hero { padding-top: 92px !important; padding-bottom: 48px !important; align-items: flex-start !important; }
+          .ss-hero-word { font-size: 36px !important; }
+          .ss-hero-mark { width: 48px !important; height: 40px !important; }
+        }
+      `}</style>
+
       {/* ── NAV ── */}
-      <nav style={{
+      <nav className="ss-nav" style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
         display: 'flex', justifyContent: 'space-between', alignItems: 'center',
         padding: '0 48px', height: 68,
@@ -48,18 +62,18 @@ export default function LandingPage() {
         transition: 'all 0.3s ease'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <img src="/logo.png" alt="SkidSling" style={{ width: 36, height: 36, mixBlendMode: 'screen' }} />
-          <span style={{
+          <img src="/logo-mark.png" alt="" style={{ width: 36, height: 30, objectFit: 'contain' }} />
+          <span className="ss-nav-word" style={{
             fontFamily: "'Barlow Condensed', sans-serif",
             fontSize: 22, fontWeight: 800, letterSpacing: 1,
             color: 'white', textTransform: 'uppercase'
           }}>SkidSling</span>
         </div>
-        <div style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
-          <a href="#features" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14, fontWeight: 500, letterSpacing: 0.3 }}>Features</a>
-          <a href="#pricing" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14, fontWeight: 500, letterSpacing: 0.3 }}>Pricing</a>
+        <div className="ss-nav-links" style={{ display: 'flex', gap: 32, alignItems: 'center' }}>
+          <a href="#features" className="ss-nav-hide" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14, fontWeight: 500, letterSpacing: 0.3 }}>Features</a>
+          <a href="#pricing" className="ss-nav-hide" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14, fontWeight: 500, letterSpacing: 0.3 }}>Pricing</a>
           <Link to="/login" style={{ color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: 14, fontWeight: 500 }}>Sign In</Link>
-          <Link to="/login?mode=signup" style={{
+          <Link to="/login?mode=signup" className="ss-nav-cta" style={{
             background: 'white', color: '#0a0a0a',
             padding: '9px 22px', borderRadius: 6,
             textDecoration: 'none', fontWeight: 700, fontSize: 13, letterSpacing: 0.3
@@ -68,8 +82,8 @@ export default function LandingPage() {
       </nav>
 
       {/* ── HERO ── */}
-      <section style={{
-        position: 'relative', minHeight: '100vh',
+      <section className="ss-hero" style={{
+        position: 'relative', minHeight: '100vh', paddingTop: 100, paddingBottom: 80,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         overflow: 'hidden'
       }}>
@@ -100,8 +114,8 @@ export default function LandingPage() {
         <div style={{ position: 'relative', textAlign: 'center', padding: '0 24px', maxWidth: 900 }}>
           {/* Logo + wordmark lockup */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 24 }}>
-            <img src="/logo.png" alt="SkidSling" style={{ width: 64, height: 64, mixBlendMode: 'screen' }} />
-            <span style={{
+            <img src="/logo-mark.png" alt="" className="ss-hero-mark" style={{ width: 64, height: 54, objectFit: 'contain' }} />
+            <span className="ss-hero-word" style={{
               fontFamily: "'Barlow Condensed', sans-serif",
               fontSize: 48, fontWeight: 800, letterSpacing: 2,
               color: 'white', textTransform: 'uppercase', lineHeight: 1
@@ -160,7 +174,7 @@ export default function LandingPage() {
         </div>
 
         {/* Scroll indicator */}
-        <div style={{
+        <div className="ss-scroll" style={{
           position: 'absolute', bottom: 36, left: '50%', transform: 'translateX(-50%)',
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, opacity: 0.4
         }}>
